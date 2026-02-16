@@ -73,7 +73,7 @@
 > **Build order matters:** Onboarding first (preferences stored), then Chat (reads preferences), then Auth (wraps everything). Visual reels pipeline starts in parallel.
 
 ### Sakshi — Pipeline Hardening + Visual Reels Pipeline (F9)
-- [ ] Wire embedding trigger after all reel batches complete (hand off to RAG pipeline)
+- [x] Wire embedding trigger after all reel batches complete (hand off to RAG pipeline) — done by Esha
 - [ ] Handle edge cases: empty PDFs, scanned PDFs (< 50 chars detection), oversized files
 - [ ] Add timeout handling for Ollama calls (120–600s per call)
 - [ ] Tune LLM prompts for consistent JSON across doc types (textbook, research paper, business)
@@ -87,10 +87,14 @@
 - [x] **F2:** Implement onboarding backend — `/onboarding/preferences` CRUD (save + retrieve user preferences)
 - [x] **F2:** Onboarding stores: learning_style, content_depth, use_case, flashcard_difficulty
 - [x] **F2:** Build Onboarding quiz UI — 5-step quiz (name, learning style, content depth, use case, flashcard difficulty) + confirmation screen
-- [ ] **F6:** Implement `/chat/ask` — embed question → RAG retrieval → preference-aware LLM answer
-- [ ] **F6:** Implement `/chat/history/{upload_id}`, `/chat/status/{upload_id}`, `/chat/summary/{upload_id}`
-- [ ] **F6:** Exchange limit per document, `qa_ready` gating (409 if still processing)
-- [ ] Chat disabled state in UI when `qa_ready = false`
+- [x] **F6:** Implement `/chat/ask` — embed question → RAG retrieval → preference-aware LLM answer
+- [x] **F6:** Implement `/chat/history/{upload_id}`, `/chat/status/{upload_id}`
+- [x] **F6:** Exchange limit per document (10/doc), `qa_ready` gating (409 if still processing)
+- [x] Chat disabled state in UI when `qa_ready = false`
+- [x] Wire feed to real API — remove mock data fallback, map API response fields
+- [x] Fix feed scroll — one reel per swipe (Swiper mousewheel thresholds)
+- [x] Wire `qa_ready` flag — pipeline sets `qa_ready = 1` after embedding completes
+- [x] Switch frontend Dockerfile from `node:20-alpine` to `node:20-slim`
 - [ ] Audio playback on reel cards — play/pause button, GET `/audio/{reel_id}`
 - [ ] Build download button/flow in UI (wire to `/download` API)
 - [ ] Loading states, error states, empty states across all pages

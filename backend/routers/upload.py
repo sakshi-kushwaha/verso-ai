@@ -42,6 +42,16 @@ async def upload_document(file: UploadFile = File(...)):
     return {"id": upload_id, "filename": file.filename, "status": "processing"}
 
 
+@router.get("/uploads")
+def list_uploads():
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT id, filename, status, qa_ready FROM uploads ORDER BY created_at DESC"
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 @router.get("/upload/status/{upload_id}")
 def get_upload_status(upload_id: int):
     conn = get_db()

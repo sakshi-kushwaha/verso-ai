@@ -59,4 +59,30 @@ export async function getPreferences(userId = 1) {
   return data
 }
 
+// List uploads
+export async function getUploads() {
+  const { data } = await api.get('/uploads')
+  return data // [{ id, filename, status, qa_ready }]
+}
+
+// Chat Q&A
+export async function askChat(uploadId, question, userId = 1) {
+  const { data } = await api.post('/chat/ask', {
+    upload_id: uploadId,
+    question,
+    user_id: userId,
+  }, { timeout: 120000 })
+  return data // { answer, sources, exchange_count, limit }
+}
+
+export async function getChatHistory(uploadId) {
+  const { data } = await api.get(`/chat/history/${uploadId}`)
+  return data // [{ id, user_message, ai_response, sources, created_at }]
+}
+
+export async function getChatStatus(uploadId) {
+  const { data } = await api.get(`/chat/status/${uploadId}`)
+  return data // { qa_ready, exchange_count, limit, remaining }
+}
+
 export default api

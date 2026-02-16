@@ -27,5 +27,8 @@ ESPEAK_SPEED: int = 150
 LLM_MODEL: str = "qwen2.5:3b"
 LLM_TIMEOUT: float = 300.0
 
+# Chat
+MAX_EXCHANGES_PER_DOC: int = 10
+
 # Timeouts
 OLLAMA_EMBED_TIMEOUT: float = 30.0
