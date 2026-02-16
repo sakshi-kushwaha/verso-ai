@@ -12,12 +12,10 @@ ALLOWED_EXTENSIONS = {".pdf", ".docx"}
 
 @router.post("/upload")
 async def upload_document(file: UploadFile = File(...)):
-    # Validate extension
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(400, "Only PDF and DOCX files are supported")
 
-    # Save to temp
     os.makedirs(TEMP_DIR, exist_ok=True)
     temp_path = os.path.join(TEMP_DIR, file.filename)
 
@@ -30,7 +28,6 @@ async def upload_document(file: UploadFile = File(...)):
                 raise HTTPException(400, "File exceeds 50 MB limit")
             f.write(chunk)
 
-    # Create upload record
     conn = get_db()
     cursor = conn.execute(
         "INSERT INTO uploads (filename, status) VALUES (?, 'processing')",
@@ -40,7 +37,6 @@ async def upload_document(file: UploadFile = File(...)):
     conn.commit()
     conn.close()
 
-    # Kick off background pipeline
     process_upload(upload_id, temp_path)
 
     return {"id": upload_id, "filename": file.filename, "status": "processing"}

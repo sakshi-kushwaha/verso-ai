@@ -29,29 +29,22 @@ def _run_pipeline(upload_id: int, filepath: str):
         doc_type = detect_doc_type(full_text)
         _update_doc_type(upload_id, doc_type)
 
-        # Step 3: Get sections
         sections = detect_chapters(pages)
-
-        # Cap sections per PRD: total_pages / 4
         max_sections = max(1, len(pages) // 4)
         sections = sections[:max_sections]
 
-        # Step 4: Process in batches
         for i in range(0, len(sections), BATCH_SIZE):
             batch = sections[i:i + BATCH_SIZE]
             batch_text = "\n".join(s["text"] for s in batch)
 
             result = generate_reels(batch_text, doc_type)
 
-            # Save reels
             for reel in result.get("reels", []):
                 _save_reel(upload_id, reel, batch[0].get("start_page", i + 1))
 
-            # Save flashcards
             for fc in result.get("flashcards", []):
                 _save_flashcard(upload_id, fc)
 
-        # Step 5: Mark done
         _update_status(upload_id, "done")
 
     except Exception as e:
@@ -59,7 +52,6 @@ def _run_pipeline(upload_id: int, filepath: str):
         _update_status(upload_id, "error")
 
     finally:
-        # Cleanup temp file
         try:
             os.unlink(filepath)
         except OSError:

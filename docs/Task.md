@@ -64,6 +64,8 @@
 
 **Day 1 Checkpoint:** Upload a PDF on EC2 → reels generated in DB → `/feed` returns them. Feed UI renders reels. RAG returns relevant chunks for test questions. All UI pages built.
 
+**Day 1 Status: COMPLETE** — Full end-to-end backend flow tested: `/upload` → `/upload/status` → `/feed` → `/flashcards` all working. Reels generated from PDF via LLM pipeline.
+
 ---
 
 ## Day 2 — Onboarding → Chat → Auth → Visual Reels

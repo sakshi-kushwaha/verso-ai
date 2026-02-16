@@ -8,6 +8,8 @@ from config import EMBEDDINGS_DIR, AUDIO_CACHE_DIR
 from database import init_db
 from routers.audio import router as audio_router
 from routers.upload import router as upload_router
+from routers.feed import router as feed_router
+from routers.flashcards import router as flashcards_router
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 
@@ -43,6 +45,8 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 app.include_router(audio_router)
 app.include_router(upload_router)
+app.include_router(feed_router)
+app.include_router(flashcards_router)
 
 
 @app.get("/health")
