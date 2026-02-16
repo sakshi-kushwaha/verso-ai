@@ -1,4 +1,5 @@
 import os
+import shutil
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from database import get_db
 from pipeline import process_upload, TEMP_DIR

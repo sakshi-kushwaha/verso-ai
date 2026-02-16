@@ -9,12 +9,14 @@ BATCH_SIZE = 5
 
 
 def process_upload(upload_id: int, filepath: str):
+    """Run the full pipeline in a background thread."""
     thread = threading.Thread(target=_run_pipeline, args=(upload_id, filepath), daemon=True)
     thread.start()
 
 
 def _run_pipeline(upload_id: int, filepath: str):
     try:
+        # Step 1: Parse document
         pages = parse_document(filepath)
         if not pages:
             _update_status(upload_id, "error")
@@ -22,6 +24,7 @@ def _run_pipeline(upload_id: int, filepath: str):
 
         _update_pages(upload_id, len(pages))
 
+        # Step 2: Detect doc type from first page text
         full_text = "\n".join(p["text"] for p in pages)
         doc_type = detect_doc_type(full_text)
         _update_doc_type(upload_id, doc_type)
