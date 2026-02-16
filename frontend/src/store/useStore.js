@@ -30,6 +30,12 @@ const useStore = create((set, get) => ({
   currentUpload: null, // { id, status, progress }
   setUploadStatus: (upload) => set({ currentUpload: upload }),
   clearUpload: () => set({ currentUpload: null }),
+
+  // --- Onboarding Preferences ---
+  preferences: null,
+  onboardingCompleted: false,
+  setPreferences: (prefs) => set({ preferences: prefs, onboardingCompleted: true }),
+  clearPreferences: () => set({ preferences: null, onboardingCompleted: false }),
 }));
 
 export default useStore;

@@ -43,4 +43,20 @@ export async function getFlashcards(uploadId) {
   return data
 }
 
+// Save onboarding preferences (upsert)
+export async function savePreferences(prefs, userId = 1) {
+  const { data } = await api.put('/onboarding/preferences', prefs, {
+    params: { user_id: userId },
+  })
+  return data // { status, user_id }
+}
+
+// Get onboarding preferences
+export async function getPreferences(userId = 1) {
+  const { data } = await api.get('/onboarding/preferences', {
+    params: { user_id: userId },
+  })
+  return data
+}
+
 export default api

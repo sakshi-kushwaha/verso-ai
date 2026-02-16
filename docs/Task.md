@@ -84,8 +84,9 @@
 - [ ] RAM check — verify peak RAM < 6.5 GB during processing (`free -h`)
 
 ### Esha — Onboarding Backend → Chat Backend → Frontend Wiring
-- [ ] **F2:** Implement onboarding backend — `/onboarding/preferences` CRUD (save + retrieve user preferences)
-- [ ] **F2:** Onboarding stores: learning_style, content_depth, use_case, flashcard_difficulty
+- [x] **F2:** Implement onboarding backend — `/onboarding/preferences` CRUD (save + retrieve user preferences)
+- [x] **F2:** Onboarding stores: learning_style, content_depth, use_case, flashcard_difficulty
+- [x] **F2:** Build Onboarding quiz UI — 5-step quiz (name, learning style, content depth, use case, flashcard difficulty) + confirmation screen
 - [ ] **F6:** Implement `/chat/ask` — embed question → RAG retrieval → preference-aware LLM answer
 - [ ] **F6:** Implement `/chat/history/{upload_id}`, `/chat/status/{upload_id}`, `/chat/summary/{upload_id}`
 - [ ] **F6:** Exchange limit per document, `qa_ready` gating (409 if still processing)
@@ -98,7 +99,6 @@
 - [ ] Implement `/auth/signup` and `/auth/login` — bcrypt hashing, token-based session
 - [ ] Implement `/auth/me` for session validation
 - [ ] Build Login/Signup UI pages
-- [ ] Build Onboarding quiz UI — learning style + content depth + use case screens
 - [ ] Wire auth flow: signup → login → onboarding → redirect to upload
 - [ ] Protected routes — redirect to login if unauthenticated
 - [ ] Implement `/feed` endpoint — paginated reel list from SQLite
