@@ -1,20 +1,69 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Swiper, SwiperSlide } from 'swiper/react'
+import { Mousewheel, Keyboard } from 'swiper/modules'
+import 'swiper/css'
+
 import { REELS } from '../data/mockData'
+import { getFeed, getAudio } from '../api'
 import useStore from '../store/useStore'
 import Tag from '../components/Tag'
 import Button from '../components/Button'
-import { Bookmark, BookmarkFill, Play, Share, ChevDown, Upload } from '../components/Icons'
-
-const snapH = 'h-[calc(100dvh-4rem)] md:h-screen snap-start'
+import { Bookmark, BookmarkFill, Play, Pause, Share, Upload } from '../components/Icons'
 
 function ReelCard({ reel, index, total }) {
   const [expanded, setExpanded] = useState(false)
+  const [playing, setPlaying] = useState(false)
+  const [audioLoading, setAudioLoading] = useState(false)
+  const audioRef = useRef(null)
   const { bookmarks, toggleBookmark } = useStore()
   const saved = bookmarks.has(reel.id)
 
+  const handleAudio = async () => {
+    // If already playing, pause
+    if (playing && audioRef.current) {
+      audioRef.current.pause()
+      setPlaying(false)
+      return
+    }
+
+    // If audio element exists and is paused, resume
+    if (audioRef.current && audioRef.current.src) {
+      audioRef.current.play()
+      setPlaying(true)
+      return
+    }
+
+    // Fetch audio from API
+    setAudioLoading(true)
+    try {
+      const blobUrl = await getAudio(reel.id)
+      const audio = new Audio(blobUrl)
+      audioRef.current = audio
+      audio.onended = () => setPlaying(false)
+      audio.play()
+      setPlaying(true)
+    } catch {
+      // Audio not available — silently fail
+    } finally {
+      setAudioLoading(false)
+    }
+  }
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        if (audioRef.current.src?.startsWith('blob:')) {
+          URL.revokeObjectURL(audioRef.current.src)
+        }
+      }
+    }
+  }, [])
+
   return (
-    <div className={`${snapH} flex items-center justify-center p-4 md:p-8`}>
+    <div className="flex items-center justify-center p-4 md:p-8 h-full">
       <div className="w-full max-w-lg h-4/5 fade-up">
         <div className="bg-surface rounded-2xl p-6 md:p-8 border border-border relative overflow-hidden h-full flex flex-col">
           <div
@@ -56,8 +105,15 @@ function ReelCard({ reel, index, total }) {
           </div>
 
           <div className="flex items-center gap-3 mt-auto pt-4 border-t border-border">
-            <button className="flex items-center gap-1.5 text-text-muted hover:text-primary text-sm transition-colors cursor-pointer">
-              <Play /> Listen
+            <button
+              onClick={handleAudio}
+              disabled={audioLoading}
+              className={`flex items-center gap-1.5 text-sm transition-colors cursor-pointer ${
+                playing ? 'text-primary' : 'text-text-muted hover:text-primary'
+              } ${audioLoading ? 'opacity-50' : ''}`}
+            >
+              {playing ? <Pause /> : <Play />}
+              {audioLoading ? 'Loading...' : playing ? 'Pause' : 'Listen'}
             </button>
             <button
               onClick={() => toggleBookmark(reel.id)}
@@ -80,29 +136,78 @@ function ReelCard({ reel, index, total }) {
 
 export default function FeedPage() {
   const navigate = useNavigate()
+  const { reels, setReels, appendReels, feedPage, hasMore } = useStore()
+  const [loading, setLoading] = useState(false)
+
+  // Load reels from API on mount, fallback to mock
+  useEffect(() => {
+    let cancelled = false
+    async function loadReels() {
+      try {
+        const data = await getFeed(1, 10)
+        if (!cancelled && data.reels?.length) {
+          setReels(data.reels)
+        } else if (!cancelled) {
+          setReels(REELS)
+        }
+      } catch {
+        if (!cancelled) setReels(REELS)
+      }
+    }
+    if (reels.length === 0) loadReels()
+    return () => { cancelled = true }
+  }, [])
+
+  const displayReels = reels.length > 0 ? reels : REELS
+
+  // Load more when reaching end
+  const handleReachEnd = async () => {
+    if (!hasMore || loading) return
+    setLoading(true)
+    try {
+      const data = await getFeed(feedPage + 1, 5)
+      if (data.reels?.length) {
+        appendReels(data.reels)
+      }
+    } catch {
+      // No more reels or API unavailable
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
-    <div className="h-[calc(100dvh-4rem)] md:h-screen overflow-y-auto snap-y snap-mandatory">
-      {REELS.map((reel, i) => (
-        <ReelCard key={reel.id} reel={reel} index={i} total={REELS.length} />
-      ))}
+    <div className="h-[calc(100dvh-4rem)] md:h-screen">
+      <Swiper
+        direction="vertical"
+        modules={[Mousewheel, Keyboard]}
+        mousewheel
+        keyboard
+        className="h-full"
+        onReachEnd={handleReachEnd}
+      >
+        {displayReels.map((reel, i) => (
+          <SwiperSlide key={reel.id}>
+            <ReelCard reel={reel} index={i} total={displayReels.length} />
+          </SwiperSlide>
+        ))}
 
-      <div className={`${snapH} flex items-center justify-center p-4 md:p-8`}>
-        <div className="flex flex-col items-center text-center gap-4 fade-up">
-          <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-primary mb-2">
-            <Upload />
+        {/* Upload CTA slide */}
+        <SwiperSlide>
+          <div className="flex items-center justify-center p-4 md:p-8 h-full">
+            <div className="flex flex-col items-center text-center gap-4 fade-up">
+              <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-primary mb-2">
+                <Upload />
+              </div>
+              <h2 className="text-xl md:text-2xl font-bold font-display">Upload a new document</h2>
+              <p className="text-text-secondary text-sm max-w-xs">
+                Turn any PDF or article into bite-sized reels, flashcards, and more.
+              </p>
+              <Button onClick={() => navigate('/upload')}>Upload Document</Button>
+            </div>
           </div>
-          <h2 className="text-xl md:text-2xl font-bold font-display">Upload a new document</h2>
-          <p className="text-text-secondary text-sm max-w-xs">
-            Turn any PDF or article into bite-sized reels, flashcards, and more.
-          </p>
-          <Button onClick={() => navigate('/upload')}>Upload Document</Button>
-        </div>
-      </div>
-
-      <div className="fixed bottom-24 md:bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center text-text-muted float-anim pointer-events-none">
-        <span className="text-[10px] font-bold uppercase tracking-widest mb-1">Swipe Up</span>
-        <ChevDown />
-      </div>
+        </SwiperSlide>
+      </Swiper>
     </div>
   )
 }

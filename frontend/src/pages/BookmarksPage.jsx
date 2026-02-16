@@ -4,8 +4,9 @@ import Tag from '../components/Tag'
 import { Bookmark, BookmarkFill } from '../components/Icons'
 
 export default function BookmarksPage() {
-  const { bookmarks, toggleBookmark } = useStore()
-  const savedReels = REELS.filter((r) => bookmarks.has(r.id))
+  const { bookmarks, toggleBookmark, reels } = useStore()
+  const allReels = reels.length > 0 ? reels : REELS
+  const savedReels = allReels.filter((r) => bookmarks.has(r.id))
 
   return (
     <div className="max-w-xl mx-auto p-6 pt-10 fade-up">

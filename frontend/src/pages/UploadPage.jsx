@@ -1,22 +1,28 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { uploadDocument, getUploadStatus } from '../api'
+import useStore from '../store/useStore'
 import Button from '../components/Button'
 import { Upload, File, X } from '../components/Icons'
 
-const PHASES = ['Analyzing document...', 'Extracting key concepts...', 'Generating reels...', 'Creating flashcards...', 'Finalizing...']
+const PHASES = ['Uploading document...', 'Analyzing content...', 'Extracting key concepts...', 'Generating reels...', 'Finalizing...']
 
 export default function UploadPage() {
   const navigate = useNavigate()
   const fileRef = useRef(null)
+  const pollRef = useRef(null)
   const [file, setFile] = useState(null)
   const [dragOver, setDragOver] = useState(false)
   const [processing, setProcessing] = useState(false)
   const [progress, setProgress] = useState(0)
   const [phase, setPhase] = useState(0)
+  const [error, setError] = useState(null)
+  const { setUploadStatus, clearUpload } = useStore()
 
   const handleFile = (f) => {
     if (f && (f.type === 'application/pdf' || f.name.endsWith('.docx'))) {
       setFile(f)
+      setError(null)
     }
   }
 
@@ -27,11 +33,58 @@ export default function UploadPage() {
     handleFile(f)
   }, [])
 
-  const startProcessing = () => {
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current)
+    }
+  }, [])
+
+  const pollStatus = (uploadId) => {
+    pollRef.current = setInterval(async () => {
+      try {
+        const status = await getUploadStatus(uploadId)
+        const p = status.progress || 0
+        setProgress(p)
+        setPhase(Math.min(Math.floor(p / 20), PHASES.length - 1))
+        setUploadStatus({ id: uploadId, status: status.status, progress: p })
+
+        if (status.status === 'done' || p >= 100) {
+          clearInterval(pollRef.current)
+          setProgress(100)
+          setTimeout(() => {
+            clearUpload()
+            navigate('/')
+          }, 600)
+        } else if (status.status === 'error') {
+          clearInterval(pollRef.current)
+          setError('Processing failed. Please try again.')
+          setProcessing(false)
+        }
+      } catch {
+        // Keep polling on transient errors
+      }
+    }, 3000)
+  }
+
+  const startProcessing = async () => {
     setProcessing(true)
     setProgress(0)
     setPhase(0)
+    setError(null)
 
+    try {
+      const data = await uploadDocument(file)
+      setUploadStatus({ id: data.upload_id, status: 'processing', progress: 0 })
+      pollStatus(data.upload_id)
+    } catch {
+      // API not available — fall back to simulated progress
+      simulateProgress()
+    }
+  }
+
+  // Fallback simulated progress when backend is unavailable
+  const simulateProgress = () => {
     const interval = setInterval(() => {
       setProgress((prev) => {
         const next = prev + 2
@@ -105,6 +158,12 @@ export default function UploadPage() {
     <div className="max-w-xl mx-auto p-6 pt-10 fade-up">
       <h1 className="text-2xl font-bold font-display mb-1">Upload Document</h1>
       <p className="text-text-muted text-sm mb-8">Transform your documents into bite-sized learning reels</p>
+
+      {error && (
+        <div className="mb-4 p-3 rounded-lg bg-danger/10 text-danger text-sm">
+          {error}
+        </div>
+      )}
 
       {/* Drop zone */}
       <div
