@@ -1,9 +1,10 @@
-import { Outlet, NavLink } from 'react-router-dom'
-import { Logo, Home, Cards, Chat, Bookmark, Chart, Logout } from '../components/Icons'
+import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import { Logo, Home, Cards, Chat, Bookmark, Chart, Upload, Logout } from '../components/Icons'
 
 const navItems = [
   { to: '/', icon: Home, label: 'Feed' },
   { to: '/flashcards', icon: Cards, label: 'Cards' },
+  { to: '/upload', icon: Upload, label: 'Upload' },
   { to: '/chat', icon: Chat, label: 'Chat' },
   { to: '/bookmarks', icon: Bookmark, label: 'Saved' },
   { to: '/progress', icon: Chart, label: 'Progress' },
@@ -15,6 +16,8 @@ const linkClass = ({ isActive }) =>
   }`
 
 export default function MainLayout() {
+  const navigate = useNavigate()
+
   return (
     <div className="min-h-screen bg-bg">
       {/* Desktop sidebar */}
@@ -28,7 +31,11 @@ export default function MainLayout() {
           ))}
         </nav>
         <div className="mt-auto">
-          <button className="flex items-center justify-center w-10 h-10 rounded-xl text-text-muted hover:text-danger transition-colors" title="Logout">
+          <button
+            onClick={() => navigate('/login')}
+            className="flex items-center justify-center w-10 h-10 rounded-xl text-text-muted hover:text-danger transition-colors cursor-pointer"
+            title="Logout"
+          >
             <Logout />
           </button>
         </div>
@@ -41,7 +48,7 @@ export default function MainLayout() {
 
       {/* Mobile bottom nav */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 h-16 bg-surface border-t border-border flex items-center justify-around z-30">
-        {navItems.map(({ to, icon: Icon, label }) => (
+        {navItems.slice(0, 5).map(({ to, icon: Icon, label }) => (
           <NavLink key={to} to={to} className={linkClass} title={label} end={to === '/'}>
             <Icon />
           </NavLink>

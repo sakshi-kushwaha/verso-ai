@@ -1,10 +1,11 @@
 const variants = {
   primary: 'bg-primary text-white shadow-lg shadow-primary/25 hover:bg-primary-dark',
-  secondary: 'bg-surface text-text border border-border hover:bg-bg',
+  secondary: 'bg-surface-alt text-text border border-border hover:bg-surface',
   ghost: 'bg-transparent text-text-muted py-2 px-3.5 hover:text-text',
   success: 'bg-success text-white hover:opacity-90',
-  warning: 'bg-accent text-white hover:opacity-90',
+  warning: 'bg-warning text-white hover:opacity-90',
   error: 'bg-danger text-white hover:opacity-90',
+  danger: 'bg-danger/10 text-danger hover:bg-danger/20',
 }
 
 export default function Button({ children, variant = 'primary', onClick, disabled, full, className = '' }) {
