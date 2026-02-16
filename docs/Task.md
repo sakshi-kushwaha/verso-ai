@@ -41,10 +41,10 @@
 - [ ] Temp file cleanup after parsing (`os.unlink` in try/finally)
 
 ### Esha — Frontend Setup + Chat Backend + Flashcards UI
-- [ ] Initialize React + Vite with Tailwind CSS 4.x, React Router 7.x, Zustand 5.x, Axios
-- [ ] Set up frontend project structure: pages, components, stores, API layer
-- [ ] Build main app layout/navigation shell (Feed, Flashcards, Bookmarks, Chat tabs)
-- [ ] Build Flashcards page — flip-card UI for self-testing, grouped by document
+- [x] Initialize React + Vite with Tailwind CSS 4.x, React Router 7.x, Zustand 5.x, Axios
+- [x] Set up frontend project structure: pages, components, stores, API layer
+- [x] Build main app layout/navigation shell (Feed, Flashcards, Bookmarks, Chat tabs)
+- [x] Build Flashcards page — flip-card UI for self-testing, grouped by document
 - [ ] Build chat prompt template — question + retrieved chunks → grounded answer with source refs
 - [ ] Implement `/chat/ask` endpoint — embed question → use Sanika's RAG retrieval → LLM answer
 - [ ] Implement chat history storage in SQLite
@@ -83,14 +83,14 @@
 - [ ] RAM check — verify peak RAM < 6.5 GB during processing (`free -h`)
 
 ### Esha — Chat UI + Bookmarks + Download + Polish
-- [ ] Build Chat Q&A page UI — message input, response display with source references, loading states
+- [x] Build Chat Q&A page UI — message input, response display with source references, loading states
 - [ ] Chat disabled state when `qa_ready = false`, enabled once embeddings done
-- [ ] Implement bookmark toggle on reel cards and flashcards (wire to `/bookmarks` API)
+- [x] Implement bookmark toggle on reel cards and flashcards (wire to `/bookmarks` API)
 - [ ] Build download button/flow (wire to `/download` API)
 - [ ] Audio playback on reel cards — play/pause button, GET `/audio/{reel_id}`
-- [ ] Build Progress tracking UI — viewing progress per upload
+- [x] Build Progress tracking UI — viewing progress per upload
 - [ ] Loading states, error states, empty states across all pages
-- [ ] Mobile responsiveness — swipe on touch, layout adapts
+- [x] Mobile responsiveness — swipe on touch, layout adapts
 
 ### Sanika — Auth + Onboarding + Integration
 - [ ] Implement `/auth/signup` and `/auth/login` — bcrypt hashing, token-based session
