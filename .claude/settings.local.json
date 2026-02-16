@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(git -C /Users/pranavtiwari/verso-ai status)",
+      "Bash(git -C /Users/pranavtiwari/verso-ai diff)",
+      "Bash(git -C /Users/pranavtiwari/verso-ai log --oneline -5)",
+      "Bash(git -C /Users/pranavtiwari/verso-ai add docs/Task.md)",
+      "Bash(git -C:*)"
     ]
   }
 }
