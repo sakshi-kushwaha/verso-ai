@@ -26,7 +26,7 @@
 - [x] Pull `qwen2.5:3b` and `nomic-embed-text` on EC2, verify with test prompts
 - [x] Create `data/` directory structure (`verso.db`, `audio_cache/`, `temp/`)
 - [x] Set up FastAPI project structure, Uvicorn running on port 8000
-- [ ] Set up CORS, Pydantic schemas, error middleware
+- [x] Set up CORS, error middleware (schemas added inline per endpoint)
 - [ ] Design full SQLite schema (`users`, `user_preferences`, `uploads`, `reels`, `flashcards`, `bookmarks`, `progress`, `chat_history`)
 - [ ] Implement document parsing — `pdfplumber` (PDF) + `python-docx` (DOCX), page-by-page
 - [ ] Detect chapter boundaries via regex (fallback: 3,000-char chunks)
