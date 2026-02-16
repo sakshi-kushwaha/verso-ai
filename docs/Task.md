@@ -31,8 +31,8 @@
 - [x] Implement document parsing — `pdfplumber` (PDF) + `python-docx` (DOCX)
 - [x] Detect chapter boundaries via regex (fallback: 3,000-char chunks)
 - [x] Build document type detection (first 2,000 chars → single LLM call)
-- [ ] Build structured prompt templates for reel generation
-- [ ] Implement LLM call → JSON parsing with multi-level fallback (valid JSON → regex → raw text)
+- [x] Build structured prompt templates for reel generation
+- [x] Implement LLM call → JSON parsing with multi-level fallback (valid JSON → regex → raw text)
 - [ ] Build background thread pipeline: batch processing (5 pages/batch, 3,000 char cap, section cap = `total_pages / 4`)
 - [ ] Implement `/upload` endpoint — multipart, 50 MB limit, save to temp, kick off background thread
 - [ ] Implement `/upload/status/{id}` — progress count, batch status
