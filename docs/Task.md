@@ -31,12 +31,12 @@
 - [x] Implement document parsing — `pdfplumber` (PDF) + `python-docx` (DOCX)
 - [x] Detect chapter boundaries via regex (fallback: 3,000-char chunks)
 - [x] Build document type detection (first 2,000 chars → single LLM call)
-- [ ] Build structured prompt templates for reel generation
-- [ ] Implement LLM call → JSON parsing with multi-level fallback (valid JSON → regex → raw text)
-- [ ] Build background thread pipeline: batch processing (5 pages/batch, 3,000 char cap, section cap = `total_pages / 4`)
-- [ ] Implement `/upload` endpoint — multipart, 50 MB limit, save to temp, kick off background thread
-- [ ] Implement `/upload/status/{id}` — progress count, batch status
-- [ ] Temp file cleanup after parsing (`os.unlink` in try/finally)
+- [x] Build structured prompt templates for reel generation
+- [x] Implement LLM call → JSON parsing with multi-level fallback (valid JSON → regex → raw text)
+- [x] Build background thread pipeline: batch processing (5 pages/batch, 3,000 char cap, section cap = `total_pages / 4`)
+- [x] Implement `/upload` endpoint — multipart, 50 MB limit, save to temp, kick off background thread
+- [x] Implement `/upload/status/{id}` — progress count, batch status
+- [x] Temp file cleanup after parsing (`os.unlink` in try/finally)
 
 ### Esha — Frontend Setup + Flashcards UI
 - [x] Initialize React + Vite with Tailwind CSS 4.x, React Router 7.x, Zustand 5.x, Axios
@@ -63,6 +63,8 @@
 - [x] Implement `/audio/{reel_id}` — serve cached audio or generate on-demand
 
 **Day 1 Checkpoint:** Upload a PDF on EC2 → reels generated in DB → `/feed` returns them. Feed UI renders reels. RAG returns relevant chunks for test questions. All UI pages built.
+
+**Day 1 Status: COMPLETE** — Full end-to-end backend flow tested: `/upload` → `/upload/status` → `/feed` → `/flashcards` all working. Reels generated from PDF via LLM pipeline.
 
 ---
 
