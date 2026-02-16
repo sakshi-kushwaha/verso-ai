@@ -27,7 +27,7 @@
 - [x] Create `data/` directory structure (`verso.db`, `audio_cache/`, `temp/`)
 - [x] Set up FastAPI project structure, Uvicorn running on port 8000
 - [x] Set up CORS, error middleware (schemas added inline per endpoint)
-- [ ] Design full SQLite schema (`users`, `user_preferences`, `uploads`, `reels`, `flashcards`, `bookmarks`, `progress`, `chat_history`)
+- [x] Design full SQLite schema (`users`, `user_preferences`, `uploads`, `reels`, `flashcards`, `bookmarks`, `progress`, `chat_history`)
 - [ ] Implement document parsing — `pdfplumber` (PDF) + `python-docx` (DOCX), page-by-page
 - [ ] Detect chapter boundaries via regex (fallback: 3,000-char chunks)
 - [ ] Build document type detection (first 2,000 chars → single LLM call)
@@ -53,18 +53,18 @@
 - [ ] Implement `qa_ready` gating — chat enabled only after embeddings complete
 
 ### Sanika — RAG Engine + Swipeable Feed UI + TTS
-- [ ] Build chunk embedding pipeline — `nomic-embed-text` via Ollama `/api/embed`
-- [ ] Build NumPy cosine similarity search (top-3 chunk retrieval)
-- [ ] Expose retrieval as internal function for Esha's chat endpoint to call
-- [ ] Build Document Upload page — drag & drop + file picker, file type/size validation (50 MB)
-- [ ] Build processing progress indicator — polling `/upload/status/{id}` every 3s
-- [ ] Build Swipeable Reel Feed using Swiper.js — full-screen vertical cards
-- [ ] Reel card component: title, summary, category badge, keywords, page ref, bookmark icon, audio button
-- [ ] Implement infinite scroll with paginated loading (auto-fetch 3 reels from end)
-- [ ] Incremental reel loading — new reels appear as batches complete
-- [ ] Build Bookmarks/Saved page — list of saved reels and flashcards
-- [ ] Implement TTS module — `espeak-ng` subprocess, `.wav` cached by content hash, `threading.Lock()`
-- [ ] Implement `/audio/{reel_id}` — serve cached audio or generate on-demand
+- [x] Build chunk embedding pipeline — `nomic-embed-text` via Ollama `/api/embed`
+- [x] Build NumPy cosine similarity search (top-3 chunk retrieval)
+- [x] Expose retrieval as internal function for Esha's chat endpoint to call
+- [x] Build Document Upload page — drag & drop + file picker, file type/size validation (50 MB)
+- [x] Build processing progress indicator — polling `/upload/status/{id}` every 3s
+- [x] Build Swipeable Reel Feed using Swiper.js — full-screen vertical cards
+- [x] Reel card component: title, summary, category badge, keywords, page ref, bookmark icon, audio button
+- [x] Implement infinite scroll with paginated loading (auto-fetch 3 reels from end)
+- [x] Incremental reel loading — new reels appear as batches complete
+- [x] Build Bookmarks/Saved page — list of saved reels and flashcards
+- [x] Implement TTS module — `espeak-ng` subprocess, `.wav` cached by content hash, `threading.Lock()`
+- [x] Implement `/audio/{reel_id}` — serve cached audio or generate on-demand
 
 **Day 1 Checkpoint:** Upload a PDF on EC2 → reels generated in DB → `/feed` returns them. Feed UI renders reels (can use mock data if API not wired yet). RAG returns relevant chunks for test questions.
 
