@@ -28,9 +28,9 @@
 - [x] Set up FastAPI project structure, Uvicorn running on port 8000
 - [x] Set up CORS, error middleware (schemas added inline per endpoint)
 - [x] Design full SQLite schema (`users`, `user_preferences`, `uploads`, `reels`, `flashcards`, `bookmarks`, `progress`, `chat_history`)
-- [ ] Implement document parsing — `pdfplumber` (PDF) + `python-docx` (DOCX), page-by-page
-- [ ] Detect chapter boundaries via regex (fallback: 3,000-char chunks)
-- [ ] Build document type detection (first 2,000 chars → single LLM call)
+- [x] Implement document parsing — `pdfplumber` (PDF) + `python-docx` (DOCX), page-by-page
+- [x] Detect chapter boundaries via regex (fallback: 3,000-char chunks)
+- [x] Build document type detection (first 2,000 chars → single LLM call)
 - [ ] Build structured prompt templates for reel generation
 - [ ] Implement LLM call → JSON parsing with multi-level fallback (valid JSON → regex → raw text fallback)
 - [ ] Build background thread pipeline: batch processing (5 pages/batch, 3,000 char cap, section cap = `total_pages / 4`)
