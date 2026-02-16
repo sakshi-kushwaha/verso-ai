@@ -21,11 +21,12 @@
 > All engineers SSH into EC2 from Day 1. Develop directly on the target machine so there are zero "works on my machine" surprises. Ollama runs on EC2 throughout.
 
 ### Sakshi — Infra + Document Upload + Reel Generation Pipeline
-- [ ] Provision EC2 `c6i.xlarge`, install Docker, Docker Compose, git
-- [ ] Set up Docker Compose: FastAPI container + Ollama container (`:11434`)
-- [ ] Pull `qwen2.5:3b` and `nomic-embed-text` on EC2, verify with test prompts
-- [ ] Create `data/` directory structure (`verso.db`, `audio_cache/`, `temp/`)
-- [ ] Set up FastAPI project structure, Uvicorn, CORS, Pydantic schemas, error middleware
+- [x] Provision EC2, install Python, espeak-ng, git, curl (native setup, no Docker)
+- [x] Install Ollama natively, configure `NUM_PARALLEL=1` and `HOST=0.0.0.0:11434`
+- [x] Pull `qwen2.5:3b` and `nomic-embed-text` on EC2, verify with test prompts
+- [x] Create `data/` directory structure (`verso.db`, `audio_cache/`, `temp/`)
+- [x] Set up FastAPI project structure, Uvicorn running on port 8000
+- [ ] Set up CORS, Pydantic schemas, error middleware
 - [ ] Design full SQLite schema (`users`, `user_preferences`, `uploads`, `reels`, `flashcards`, `bookmarks`, `progress`, `chat_history`)
 - [ ] Implement document parsing — `pdfplumber` (PDF) + `python-docx` (DOCX), page-by-page
 - [ ] Detect chapter boundaries via regex (fallback: 3,000-char chunks)
@@ -79,7 +80,7 @@
 - [ ] Test graceful degradation: kill Ollama mid-process → verify fallback reels
 - [ ] Implement `/bookmarks` CRUD — add/remove bookmark, list bookmarked items
 - [ ] Implement `/download` — bundle reels + flashcards + audio as zip
-- [ ] `docker stats` check — verify peak RAM < 6.5 GB during processing
+- [ ] RAM check — verify peak RAM < 6.5 GB during processing (`free -h`)
 
 ### Esha — Chat UI + Bookmarks + Download + Polish
 - [ ] Build Chat Q&A page UI — message input, response display with source references, loading states
@@ -110,10 +111,10 @@
 ## Day 3 — Harden, Polish, Deploy, Demo Prep
 
 ### Sakshi — Production Deploy + Monitoring
-- [ ] Docker Compose production config — Ollama `NUM_PARALLEL=1`, restart policies (`unless-stopped`)
-- [ ] Implement `/health` endpoint
+- [x] Ollama production config — `NUM_PARALLEL=1`, systemd restart policies
+- [x] Implement `/health` endpoint
 - [ ] Verify Ollama auto-unload after 5 min idle — idle RAM < 3 GB
-- [ ] Verify peak RAM < 6.5 GB during active processing (`docker stats`)
+- [ ] Verify peak RAM < 6.5 GB during active processing (`free -h`)
 - [ ] Test with 5+ varied documents (textbook, research paper, business doc, fiction, small PDF)
 - [ ] Performance: verify < 90s to first reel, < 3 min for 20-page doc
 - [ ] Degradation chain test: reel+flashcard+audio → no audio → reel skipped → upload error
@@ -142,15 +143,15 @@
 ## EC2 Setup Checklist (Sakshi — first thing Day 1)
 
 ```
-1. Launch c6i.xlarge (4 vCPU, 8 GB RAM), Ubuntu 22.04, 20 GB gp3 EBS
-2. Security group: open ports 3000 (frontend), 8000 (API), 22 (SSH)
-3. Install Docker + Docker Compose
-4. Install espeak-ng (apt install espeak-ng)
-5. Docker Compose up: Ollama container on :11434
-6. Pull models: ollama pull qwen2.5:3b && ollama pull nomic-embed-text
-7. Verify: curl http://localhost:11434/api/tags → both models listed
-8. Set OLLAMA_NUM_PARALLEL=1 in Ollama container env
-9. Git clone repo, set up shared access for all 3 engineers
+1. [x] Launch EC2 (Ubuntu 24.04, 8 GB RAM) — IP: 72.62.231.169
+2. [x] Security group: open ports 8000 (API + Frontend), 22 (SSH)
+3. [x] Install Python, espeak-ng, git, curl (native setup, no Docker)
+4. [x] Install Ollama natively as systemd service
+5. [x] Pull models: ollama pull qwen2.5:3b && ollama pull nomic-embed-text
+6. [x] Verify: curl http://localhost:11434/api/tags → both models listed
+7. [x] Set OLLAMA_NUM_PARALLEL=1 via systemd override
+8. [x] Git clone repo, backend running on port 8000
+9. [x] Set up shared SSH access for all 3 engineers (Sanika + Esha added)
 ```
 
 ---
