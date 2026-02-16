@@ -23,5 +23,9 @@ ESPEAK_CMD: str = "espeak-ng"
 ESPEAK_VOICE: str = "en"
 ESPEAK_SPEED: int = 150
 
+# LLM
+LLM_MODEL: str = "qwen2.5:3b"
+LLM_TIMEOUT: float = 300.0
+
 # Timeouts
 OLLAMA_EMBED_TIMEOUT: float = 30.0
