@@ -1,8 +1,10 @@
 import os
+import asyncio
 import threading
 from database import get_db
 from parser import parse_document, detect_chapters
 from llm import detect_doc_type, generate_reels
+from rag import embed_chunks
 
 TEMP_DIR = os.path.join(os.path.dirname(__file__), "data", "temp")
 BATCH_SIZE = 5
@@ -45,6 +47,10 @@ def _run_pipeline(upload_id: int, filepath: str):
             for fc in result.get("flashcards", []):
                 _save_flashcard(upload_id, fc)
 
+        # Step 4: Embed chunks for RAG / Chat Q&A
+        asyncio.run(embed_chunks(upload_id, full_text))
+        _set_qa_ready(upload_id)
+
         _update_status(upload_id, "done")
 
     except Exception as e:
@@ -68,6 +74,13 @@ def _update_status(upload_id: int, status: str):
 def _update_pages(upload_id: int, total_pages: int):
     conn = get_db()
     conn.execute("UPDATE uploads SET total_pages = ? WHERE id = ?", (total_pages, upload_id))
+    conn.commit()
+    conn.close()
+
+
+def _set_qa_ready(upload_id: int):
+    conn = get_db()
+    conn.execute("UPDATE uploads SET qa_ready = 1 WHERE id = ?", (upload_id,))
     conn.commit()
     conn.close()
 

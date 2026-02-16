@@ -4,7 +4,6 @@ import { Swiper, SwiperSlide } from 'swiper/react'
 import { Mousewheel, Keyboard } from 'swiper/modules'
 import 'swiper/css'
 
-import { REELS } from '../data/mockData'
 import { getFeed, getAudio } from '../api'
 import useStore from '../store/useStore'
 import Tag from '../components/Tag'
@@ -139,26 +138,36 @@ export default function FeedPage() {
   const { reels, setReels, appendReels, feedPage, hasMore } = useStore()
   const [loading, setLoading] = useState(false)
 
-  // Load reels from API on mount, fallback to mock
+  const ACCENTS = ['#6366F1', '#8B5CF6', '#EC4899', '#F59E0B', '#10B981', '#3B82F6']
+
+  const mapReel = (r, i) => ({
+    id: r.id,
+    title: r.title,
+    category: r.category || 'General',
+    pages: r.page_ref || '—',
+    body: r.summary || '',
+    keywords: r.keywords ? r.keywords.split(',').map((k) => k.trim()).filter(Boolean) : [],
+    accent: ACCENTS[i % ACCENTS.length],
+  })
+
+  // Load reels from API on mount
   useEffect(() => {
     let cancelled = false
     async function loadReels() {
       try {
         const data = await getFeed(1, 10)
         if (!cancelled && data.reels?.length) {
-          setReels(data.reels)
-        } else if (!cancelled) {
-          setReels(REELS)
+          setReels(data.reels.map(mapReel))
         }
       } catch {
-        if (!cancelled) setReels(REELS)
+        // API unavailable
       }
     }
     if (reels.length === 0) loadReels()
     return () => { cancelled = true }
   }, [])
 
-  const displayReels = reels.length > 0 ? reels : REELS
+  const displayReels = reels
 
   // Load more when reaching end
   const handleReachEnd = async () => {
@@ -167,7 +176,7 @@ export default function FeedPage() {
     try {
       const data = await getFeed(feedPage + 1, 5)
       if (data.reels?.length) {
-        appendReels(data.reels)
+        appendReels(data.reels.map(mapReel))
       }
     } catch {
       // No more reels or API unavailable
@@ -181,8 +190,10 @@ export default function FeedPage() {
       <Swiper
         direction="vertical"
         modules={[Mousewheel, Keyboard]}
-        mousewheel
+        mousewheel={{ forceToAxis: true, thresholdDelta: 30, thresholdTime: 300 }}
         keyboard
+        slidesPerView={1}
+        speed={400}
         className="h-full"
         onReachEnd={handleReachEnd}
       >

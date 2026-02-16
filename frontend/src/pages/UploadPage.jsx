@@ -75,8 +75,9 @@ export default function UploadPage() {
 
     try {
       const data = await uploadDocument(file)
-      setUploadStatus({ id: data.upload_id, status: 'processing', progress: 0 })
-      pollStatus(data.upload_id)
+      const id = data.id || data.upload_id
+      setUploadStatus({ id, status: 'processing', progress: 0 })
+      pollStatus(id)
     } catch {
       // API not available — fall back to simulated progress
       simulateProgress()
