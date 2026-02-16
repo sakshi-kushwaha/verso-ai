@@ -1,0 +1,27 @@
+import os
+from pathlib import Path
+
+# Ollama
+OLLAMA_HOST: str = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+EMBED_MODEL: str = "nomic-embed-text"
+EMBED_DIM: int = 768
+
+# Chunking
+CHUNK_MAX_CHARS: int = 500
+CHUNK_OVERLAP_CHARS: int = 50
+
+# RAG retrieval
+TOP_K: int = 3
+
+# Paths
+DATA_DIR: Path = Path("data")
+EMBEDDINGS_DIR: Path = DATA_DIR / "embeddings"
+AUDIO_CACHE_DIR: Path = DATA_DIR / "audio_cache"
+
+# TTS
+ESPEAK_CMD: str = "espeak-ng"
+ESPEAK_VOICE: str = "en"
+ESPEAK_SPEED: int = 150
+
+# Timeouts
+OLLAMA_EMBED_TIMEOUT: float = 30.0
