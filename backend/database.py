@@ -15,6 +15,16 @@ def get_db():
 
 def init_db():
     conn = get_db()
+
+    # Migration: if old user_preferences schema is missing display_name, drop and recreate
+    try:
+        cols = [row[1] for row in conn.execute("PRAGMA table_info(user_preferences)").fetchall()]
+        if cols and "display_name" not in cols:
+            conn.execute("DROP TABLE user_preferences")
+            conn.commit()
+    except Exception:
+        pass
+
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -25,7 +35,13 @@ def init_db():
 
         CREATE TABLE IF NOT EXISTS user_preferences (
             user_id INTEGER PRIMARY KEY REFERENCES users(id),
-            learning_style TEXT DEFAULT 'reading'
+            display_name TEXT NOT NULL DEFAULT '',
+            learning_style TEXT DEFAULT 'reading' CHECK(learning_style IN ('visual','auditory','reading','mixed')),
+            content_depth TEXT DEFAULT 'balanced' CHECK(content_depth IN ('brief','balanced','detailed')),
+            use_case TEXT DEFAULT 'learning' CHECK(use_case IN ('exam','work','learning','research')),
+            flashcard_difficulty TEXT DEFAULT 'medium' CHECK(flashcard_difficulty IN ('easy','medium','hard')),
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now'))
         );
 
         CREATE TABLE IF NOT EXISTS uploads (
@@ -84,5 +100,11 @@ def init_db():
             created_at TEXT DEFAULT (datetime('now'))
         );
     """)
+
+    # Seed a default user (placeholder until auth is implemented)
+    conn.execute(
+        "INSERT OR IGNORE INTO users (id, name, password_hash) VALUES (1, 'default', 'placeholder')"
+    )
+
     conn.commit()
     conn.close()

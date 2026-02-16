@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from config import EMBEDDINGS_DIR, AUDIO_CACHE_DIR
 from database import init_db
 from routers.audio import router as audio_router
+from routers.onboarding import router as onboarding_router
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 
@@ -41,6 +42,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 app.include_router(audio_router)
+app.include_router(onboarding_router)
 
 
 @app.get("/health")
