@@ -8,54 +8,50 @@
 
 ## Engineer Assignments (by Feature)
 
-| Engineer | Features | Scope |
-|----------|----------|-------|
-| **Sakshi** | F3 (Upload & Parsing) + F4 (Reel Generation) + Infra/Docker | AI pipeline + EC2 infra |
-| **Esha** | F6 (Chat Q&A) + F5 (Flashcards) + All UI | Chat (uses RAG), flashcards, all UI |
-| **Sanika** | RAG engine + F7 (Swipeable Feed) + F1 (Auth) + F2 (Onboarding) + TTS | RAG, feed, auth, onboarding |
+| Engineer | Owns | Scope |
+|----------|------|-------|
+| **Sakshi** | F3 (Upload & Parsing), F4 (Reel Generation), F9 (Visual Reels), Infra | AI pipeline, image/video extraction, EC2 infra |
+| **Esha** | F2 (Onboarding), F6 (Chat Q&A), F5 (Flashcards), All Frontend | Onboarding backend + all UI across every feature |
+| **Sanika** | RAG engine, F1 (Auth), F7 (Feed), F8 (Bookmarks/Download), TTS | RAG, auth, feed API, bookmarks/download API, TTS |
 
 ---
 
-## Day 1 — Core Pipeline + Feed UI + RAG Engine (all dev on EC2)
+## Day 1 — Core Pipeline + UI Shell + RAG Engine
 
-> All engineers SSH into EC2 from Day 1. Develop directly on the target machine so there are zero "works on my machine" surprises. Ollama runs on EC2 throughout.
+> All engineers SSH into EC2 from Day 1. Develop directly on the target machine. Ollama runs on EC2 throughout.
 
 ### Sakshi — Infra + Document Upload + Reel Generation Pipeline
-- [x] Provision EC2, install Python, espeak-ng, git, curl (native setup, no Docker)
-- [x] Install Ollama natively, configure `NUM_PARALLEL=1` and `HOST=0.0.0.0:11434`
-- [x] Pull `qwen2.5:3b` and `nomic-embed-text` on EC2, verify with test prompts
+- [x] Provision EC2, install Python, espeak-ng, git, curl
+- [x] Install Ollama, configure `NUM_PARALLEL=1` and `HOST=0.0.0.0:11434`
+- [x] Pull `qwen2.5:3b` and `nomic-embed-text`, verify with test prompts
 - [x] Create `data/` directory structure (`verso.db`, `audio_cache/`, `temp/`)
-- [x] Set up FastAPI project structure, Uvicorn running on port 8000
-- [x] Set up CORS, error middleware (schemas added inline per endpoint)
-- [x] Design full SQLite schema (`users`, `user_preferences`, `uploads`, `reels`, `flashcards`, `bookmarks`, `progress`, `chat_history`)
-- [x] Implement document parsing — `pdfplumber` (PDF) + `python-docx` (DOCX), page-by-page
+- [x] Set up FastAPI project structure, Uvicorn on port 8000
+- [x] Set up CORS, error middleware
+- [x] Design full SQLite schema (all tables)
+- [x] Implement document parsing — `pdfplumber` (PDF) + `python-docx` (DOCX)
 - [x] Detect chapter boundaries via regex (fallback: 3,000-char chunks)
 - [x] Build document type detection (first 2,000 chars → single LLM call)
 - [ ] Build structured prompt templates for reel generation
-- [ ] Implement LLM call → JSON parsing with multi-level fallback (valid JSON → regex → raw text fallback)
+- [ ] Implement LLM call → JSON parsing with multi-level fallback (valid JSON → regex → raw text)
 - [ ] Build background thread pipeline: batch processing (5 pages/batch, 3,000 char cap, section cap = `total_pages / 4`)
 - [ ] Implement `/upload` endpoint — multipart, 50 MB limit, save to temp, kick off background thread
 - [ ] Implement `/upload/status/{id}` — progress count, batch status
-- [ ] Implement `/feed` endpoint — paginated reel list from SQLite
-- [ ] Implement `/flashcards` endpoint — list by upload
 - [ ] Temp file cleanup after parsing (`os.unlink` in try/finally)
 
-### Esha — Frontend Setup + Chat Backend + Flashcards UI
+### Esha — Frontend Setup + Flashcards UI
 - [x] Initialize React + Vite with Tailwind CSS 4.x, React Router 7.x, Zustand 5.x, Axios
 - [x] Set up frontend project structure: pages, components, stores, API layer
 - [x] Build main app layout/navigation shell (Feed, Flashcards, Bookmarks, Chat tabs)
 - [x] Build Flashcards page — flip-card UI for self-testing, grouped by document
-- [ ] Build chat prompt template — question + retrieved chunks → grounded answer with source refs
-- [ ] Implement `/chat/ask` endpoint — embed question → use Sanika's RAG retrieval → LLM answer
-- [ ] Implement chat history storage in SQLite
-- [ ] Implement conversation summary generation (on-demand LLM call)
-- [ ] Implement exchange limit per document (N exchanges cap)
-- [ ] Implement `qa_ready` gating — chat enabled only after embeddings complete
+- [x] Build Chat Q&A page UI — message input, response display with source references, loading states
+- [x] Build Progress tracking UI — viewing progress per upload
+- [x] Implement bookmark toggle on reel cards and flashcards
+- [x] Mobile responsiveness — swipe on touch, layout adapts
 
-### Sanika — RAG Engine + Swipeable Feed UI + TTS
+### Sanika — RAG Engine + Feed UI + TTS
 - [x] Build chunk embedding pipeline — `nomic-embed-text` via Ollama `/api/embed`
 - [x] Build NumPy cosine similarity search (top-3 chunk retrieval)
-- [x] Expose retrieval as internal function for Esha's chat endpoint to call
+- [x] Expose retrieval as internal function for chat endpoint to call
 - [x] Build Document Upload page — drag & drop + file picker, file type/size validation (50 MB)
 - [x] Build processing progress indicator — polling `/upload/status/{id}` every 3s
 - [x] Build Swipeable Reel Feed using Swiper.js — full-screen vertical cards
@@ -66,61 +62,71 @@
 - [x] Implement TTS module — `espeak-ng` subprocess, `.wav` cached by content hash, `threading.Lock()`
 - [x] Implement `/audio/{reel_id}` — serve cached audio or generate on-demand
 
-**Day 1 Checkpoint:** Upload a PDF on EC2 → reels generated in DB → `/feed` returns them. Feed UI renders reels (can use mock data if API not wired yet). RAG returns relevant chunks for test questions.
+**Day 1 Checkpoint:** Upload a PDF on EC2 → reels generated in DB → `/feed` returns them. Feed UI renders reels. RAG returns relevant chunks for test questions. All UI pages built.
 
 ---
 
-## Day 2 — Full Integration + Auth + Remaining Features
+## Day 2 — Onboarding → Chat → Auth → Visual Reels
 
-### Sakshi — Pipeline Hardening + Edge Cases
-- [ ] Wire embedding trigger after all reel batches complete (hand off to Sanika's RAG pipeline)
+> **Build order matters:** Onboarding first (preferences stored), then Chat (reads preferences), then Auth (wraps everything). Visual reels pipeline starts in parallel.
+
+### Sakshi — Pipeline Hardening + Visual Reels Pipeline (F9)
+- [ ] Wire embedding trigger after all reel batches complete (hand off to RAG pipeline)
 - [ ] Handle edge cases: empty PDFs, scanned PDFs (< 50 chars detection), oversized files
 - [ ] Add timeout handling for Ollama calls (120–600s per call)
 - [ ] Tune LLM prompts for consistent JSON across doc types (textbook, research paper, business)
 - [ ] Test graceful degradation: kill Ollama mid-process → verify fallback reels
-- [ ] Implement `/bookmarks` CRUD — add/remove bookmark, list bookmarked items
-- [ ] Implement `/download` — bundle reels + flashcards + audio as zip
+- [ ] **F9-A:** Extract images from uploaded PDFs using `pdfplumber` image extraction, save per-upload
+- [ ] **F9-B:** Curate pre-bundled category illustrations (science, business, literature, tech, general) as fallback when PDF has no extractable images
+- [ ] **F9-C:** Curate pre-bundled short looping video clips (~5-10s each) per category for visual learners
 - [ ] RAM check — verify peak RAM < 6.5 GB during processing (`free -h`)
 
-### Esha — Chat UI + Bookmarks + Download + Polish
-- [x] Build Chat Q&A page UI — message input, response display with source references, loading states
-- [ ] Chat disabled state when `qa_ready = false`, enabled once embeddings done
-- [x] Implement bookmark toggle on reel cards and flashcards (wire to `/bookmarks` API)
-- [ ] Build download button/flow (wire to `/download` API)
+### Esha — Onboarding Backend → Chat Backend → Frontend Wiring
+- [ ] **F2:** Implement onboarding backend — `/onboarding/preferences` CRUD (save + retrieve user preferences)
+- [ ] **F2:** Onboarding stores: learning_style, content_depth, use_case, flashcard_difficulty
+- [ ] **F6:** Implement `/chat/ask` — embed question → RAG retrieval → preference-aware LLM answer
+- [ ] **F6:** Implement `/chat/history/{upload_id}`, `/chat/status/{upload_id}`, `/chat/summary/{upload_id}`
+- [ ] **F6:** Exchange limit per document, `qa_ready` gating (409 if still processing)
+- [ ] Chat disabled state in UI when `qa_ready = false`
 - [ ] Audio playback on reel cards — play/pause button, GET `/audio/{reel_id}`
-- [x] Build Progress tracking UI — viewing progress per upload
+- [ ] Build download button/flow in UI (wire to `/download` API)
 - [ ] Loading states, error states, empty states across all pages
-- [x] Mobile responsiveness — swipe on touch, layout adapts
 
-### Sanika — Auth + Onboarding + Integration
+### Sanika — Auth + Feed/Bookmarks/Download APIs
 - [ ] Implement `/auth/signup` and `/auth/login` — bcrypt hashing, token-based session
 - [ ] Implement `/auth/me` for session validation
 - [ ] Build Login/Signup UI pages
-- [ ] Build Onboarding quiz UI — learning style (visual/auditory/reading) + preferences
-- [ ] Implement `/preferences` CRUD — save/retrieve onboarding data
+- [ ] Build Onboarding quiz UI — learning style + content depth + use case screens
 - [ ] Wire auth flow: signup → login → onboarding → redirect to upload
-- [ ] Connect learning style to reel generation prompts (visual → bullets, auditory → conversational, reading → detailed)
 - [ ] Protected routes — redirect to login if unauthenticated
+- [ ] Implement `/feed` endpoint — paginated reel list from SQLite
+- [ ] Implement `/flashcards` endpoint — list by upload
+- [ ] Implement `/bookmarks` CRUD — add/remove bookmark, list bookmarked items
 - [ ] Implement `/progress/view` — track viewed reels on swipe
-- [ ] End-to-end test on EC2: signup → onboard → upload → reels → chat → bookmark → download
+- [ ] Implement `/download` — bundle reels + flashcards + audio as zip
 
-**Day 2 Checkpoint:** Full flow works end-to-end on EC2 — signup → onboard → upload → reels in feed → flashcards → chat → bookmarks → download. All features functional.
+**Day 2 Checkpoint:** Full flow works end-to-end — signup → onboard → upload → reels in feed → flashcards → chat → bookmarks → download. Preferences personalize chat answers.
 
 ---
 
-## Day 3 — Harden, Polish, Deploy, Demo Prep
+## Day 3 — Visual Reels Integration + Polish + Demo Prep
 
-### Sakshi — Production Deploy + Monitoring
+### Sakshi — Visual Reels Wiring + Production Hardening
 - [x] Ollama production config — `NUM_PARALLEL=1`, systemd restart policies
 - [x] Implement `/health` endpoint
+- [ ] **F9:** Wire image/video selection into reel generation: attach `media_url` + `media_type` to each reel
+- [ ] **F9:** Fallback chain: PDF image → category illustration → no media (text-only)
+- [ ] **F9:** Video clips only served when user `learning_style = 'visual'` (read from preferences)
 - [ ] Verify Ollama auto-unload after 5 min idle — idle RAM < 3 GB
-- [ ] Verify peak RAM < 6.5 GB during active processing (`free -h`)
+- [ ] Verify peak RAM < 6.5 GB during active processing
 - [ ] Test with 5+ varied documents (textbook, research paper, business doc, fiction, small PDF)
 - [ ] Performance: verify < 90s to first reel, < 3 min for 20-page doc
-- [ ] Degradation chain test: reel+flashcard+audio → no audio → reel skipped → upload error
-- [ ] Security pass: ensure no command injection in file handling, sanitize filenames
+- [ ] Security pass: no command injection in file handling, sanitize filenames
 
-### Esha — Final UI Polish
+### Esha — Visual Reels UI + Final Polish
+- [ ] **F9:** Update reel card to display background image or looping video behind text
+- [ ] **F9:** Fallback rendering: video → image → gradient background (graceful degradation)
+- [ ] **F9:** Visual learner experience — auto-play muted video loops on reel cards
 - [ ] Feed smoothness — no jank on swipe (Chrome DevTools profiling)
 - [ ] Feed load < 500ms, onboarding < 30s
 - [ ] Consistent styling, transitions, feedback indicators across all pages
@@ -132,15 +138,32 @@
 - [ ] Verify scanned PDF handling (no crash, user feedback message)
 - [ ] Verify all error states display correctly to user
 - [ ] Verify chat source references are accurate
+- [ ] Verify visual reels render correctly (image + video + fallback)
 - [ ] Prepare demo document (pick a good 15–20 page PDF that produces quality reels)
 - [ ] Write demo walkthrough script for Feb 23
 - [ ] Final bug sweep and fix
 
-**Day 3 Checkpoint:** App is production-ready on EC2. All 8 features work. Metrics within target. Demo document and script ready.
+**Day 3 Checkpoint:** App is production-ready on EC2. All features work including visual reels. Demo document and script ready.
 
 ---
 
-## EC2 Setup Checklist (Sakshi — first thing Day 1)
+## F9 — Visual Reels (Image & Video Backgrounds)
+
+> Making reels visually engaging instead of plain text cards.
+
+| Source | What | When used |
+|--------|------|-----------|
+| **Option A** — PDF image extraction | Extract images directly from the uploaded PDF using `pdfplumber` | When the PDF contains extractable images |
+| **Option B** — Category illustrations | Pre-bundled static illustrations per topic (science, business, literature, tech, general) | Fallback when PDF has no images |
+| **Option C** — Looping video clips | Pre-bundled short (~5-10s) looping background videos per category | **Visual learners only** (gated by `learning_style = 'visual'` from onboarding) |
+
+**Fallback chain:** Option A (PDF image) → Option B (category illustration) → plain gradient background
+
+**Schema addition needed:** `reels` table gets `media_url TEXT` and `media_type TEXT` (`'image'`, `'video'`, `NULL`) columns.
+
+---
+
+## EC2 Setup Checklist (Sakshi — completed)
 
 ```
 1. [x] Launch EC2 (Ubuntu 24.04, 8 GB RAM) — IP: 72.62.231.169
@@ -159,6 +182,6 @@
 ## Priority Order (if behind schedule)
 
 1. **Must ship:** Upload/Parse → Reel Generation → Feed (F3, F4, F7)
-2. **High:** Flashcards → Chat Q&A (F5, F6)
-3. **Medium:** Bookmarks → Download (F8)
-4. **Lower:** Auth (F1), Onboarding personalization (F2), TTS audio, progress tracking
+2. **High:** Onboarding → Chat Q&A → Flashcards (F2, F6, F5)
+3. **Medium:** Auth → Bookmarks → Download (F1, F8)
+4. **Nice to have:** Visual Reels (F9), TTS audio, progress tracking
