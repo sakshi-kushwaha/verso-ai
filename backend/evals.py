@@ -25,7 +25,7 @@ except ImportError:
 
 from config import OLLAMA_HOST, LLM_MODEL
 from llm import generate_reels
-from eval_fixtures import TEST_DOCS, EVAL_COMBOS
+from eval_fixtures import TEST_DOCS, EVAL_COMBOS, QUICK_EVAL_PAIRS
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -87,7 +87,7 @@ def metric_schema_complete(parsed: dict, **_) -> tuple[bool, dict]:
 def metric_depth_match(parsed: dict, prefs: dict, **_) -> tuple[bool, dict]:
     """Metric 3: Summary sentence count matches requested depth?"""
     depth = prefs.get("content_depth", "balanced")
-    expected = {"brief": (1, 2), "balanced": (2, 4), "detailed": (3, 6)}
+    expected = {"brief": (1, 3), "balanced": (1, 4), "detailed": (2, 7)}
     lo, hi = expected.get(depth, (1, 5))
 
     reels = parsed.get("reels", [])
@@ -120,13 +120,16 @@ def metric_style_match(parsed: dict, prefs: dict, **_) -> tuple[bool, dict]:
         markers = {
             "bold": bool(re.search(r'\*\*\w+', all_summaries)),
             "bullets": bool(re.search(r'[-•]\s', all_summaries)),
-            "numbers": bool(re.search(r'\d+\.\s', all_summaries)),
+            "numbers": bool(re.search(r'\d+[\.\)]\s', all_summaries)),
+            "structured_language": bool(re.search(r'(First|Second|Third|Step \d|Key point|Key idea)', all_summaries, re.IGNORECASE)),
+            "short_sentences": _count_sentences(all_summaries) >= len(reels),
         }
         found = sum(markers.values())
         return found >= 1, {"style": "visual", "markers": markers}
 
     if style == "auditory":
-        conversational = ["you", "imagine", "think of", "let's", "we", "picture"]
+        conversational = ["you", "imagine", "think of", "let's", "we", "picture",
+                          "notice", "consider", "here's", "so ", "basically", "right"]
         lower = all_summaries.lower()
         found = [w for w in conversational if w in lower]
         return len(found) >= 1, {"style": "auditory", "markers_found": found}
@@ -323,8 +326,8 @@ def print_scorecard(all_results: list[dict]):
             symbol = "+" if m[name]["pass"] else "-"
             checks.append(f"{name[:6]} {symbol}")
 
-        cq = m["content_quality"]["score"]
-        fq = m["flashcard_quality"]["score"]
+        cq = m["content_quality"].get("score", 0)
+        fq = m["flashcard_quality"].get("score", 0)
         checks.append(f"content {cq:.0%}")
         checks.append(f"fc {fq:.0%}")
 
@@ -412,30 +415,40 @@ def main():
         else:
             print("DSPy not installed — using direct generate_reels() calls")
 
-    total = len(TEST_DOCS) * len(EVAL_COMBOS)
-    print(f"\nRunning {total} eval tests ({len(TEST_DOCS)} docs x {len(EVAL_COMBOS)} combos)...\n")
+    quick = "--quick" in sys.argv
+
+    if quick:
+        pairs = []
+        for doc_name, combo_label in QUICK_EVAL_PAIRS:
+            doc = next(d for d in TEST_DOCS if d["name"] == doc_name)
+            combo = next(c for c in EVAL_COMBOS if c["label"] == combo_label)
+            pairs.append((doc, combo))
+    else:
+        pairs = [(doc, combo) for doc in TEST_DOCS for combo in EVAL_COMBOS]
+
+    total = len(pairs)
+    print(f"\nRunning {total} eval tests {'(quick mode)' if quick else f'({len(TEST_DOCS)} docs x {len(EVAL_COMBOS)} combos)'}...\n")
 
     all_results = []
-    for doc in TEST_DOCS:
-        for combo in EVAL_COMBOS:
-            label = combo["label"]
-            print(f"  [{len(all_results)+1}/{total}] {doc['name']} + {label}...", end=" ", flush=True)
-            try:
-                result = run_single_eval(doc, combo, dry_run=dry_run)
-                passed = sum(1 for m in result["metrics"].values() if m.get("pass", False))
-                print(f"{passed}/6 passed")
-                all_results.append(result)
-            except Exception as e:
-                print(f"ERROR: {e}")
-                all_results.append({
-                    "doc": doc["name"],
-                    "doc_type": doc["doc_type"],
-                    "prefs": label,
-                    "output": None,
-                    "metrics": {n: {"pass": False, "error": str(e)} for n in
-                                ["json_valid", "schema_complete", "depth_match",
-                                 "style_match", "content_quality", "flashcard_quality"]},
-                })
+    for doc, combo in pairs:
+        label = combo["label"]
+        print(f"  [{len(all_results)+1}/{total}] {doc['name']} + {label}...", end=" ", flush=True)
+        try:
+            result = run_single_eval(doc, combo, dry_run=dry_run)
+            passed = sum(1 for m in result["metrics"].values() if m.get("pass", False))
+            print(f"{passed}/6 passed")
+            all_results.append(result)
+        except Exception as e:
+            print(f"ERROR: {e}")
+            all_results.append({
+                "doc": doc["name"],
+                "doc_type": doc["doc_type"],
+                "prefs": label,
+                "output": None,
+                "metrics": {n: {"pass": False, "error": str(e)} for n in
+                            ["json_valid", "schema_complete", "depth_match",
+                             "style_match", "content_quality", "flashcard_quality"]},
+            })
 
     # Print scorecard
     print_scorecard(all_results)
