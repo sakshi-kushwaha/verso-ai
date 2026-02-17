@@ -11,9 +11,9 @@ def get_reel_text(reel_id: int) -> str | None:
     conn = get_db()
     try:
         row = conn.execute(
-            "SELECT summary FROM reels WHERE id = ?", (reel_id,)
+            "SELECT COALESCE(narration, summary) AS text FROM reels WHERE id = ?", (reel_id,)
         ).fetchone()
-        return row["summary"] if row else None
+        return row["text"] if row else None
     finally:
         conn.close()
 

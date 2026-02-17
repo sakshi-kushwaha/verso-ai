@@ -93,10 +93,10 @@ export default function UploadPage() {
             clearUpload()
             navigate('/')
           }, 600)
-        } else if (status.status === 'error') {
+        } else if (status.status === 'error' || status.status === 'partial') {
           clearInterval(pollRef.current)
           clearInterval(tickRef.current)
-          setError('Processing failed. Please try again.')
+          setError(status.error_message || 'Processing failed. Please try again.')
           setProcessing(false)
         }
       } catch {

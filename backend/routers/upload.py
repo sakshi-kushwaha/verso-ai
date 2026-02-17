@@ -78,4 +78,5 @@ def get_upload_status(upload_id: int, user: dict = Depends(get_current_user)):
         "stage": row["stage"] if "stage" in row.keys() else "uploading",
         "reels_generated": reels_count,
         "qa_ready": bool(row["qa_ready"]),
+        "error_message": row["error_message"] if "error_message" in row.keys() else None,
     }

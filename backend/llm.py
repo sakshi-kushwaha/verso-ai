@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 import httpx
 from config import OLLAMA_HOST, LLM_MODEL, LLM_TIMEOUT
@@ -13,9 +14,24 @@ from prompts import (
     REEL_FEW_SHOT,
 )
 
+log = logging.getLogger(__name__)
 
-def llm_call(prompt: str, json_mode: bool = False) -> str:
-    """Single LLM call to Ollama. Returns response text."""
+MAX_RETRIES = 1
+
+
+class OllamaUnavailableError(Exception):
+    """Raised when Ollama cannot be reached after retries."""
+
+
+def llm_call(prompt: str, json_mode: bool = False, timeout: float = None) -> str:
+    """Single LLM call to Ollama with retry. Returns response text.
+
+    Raises OllamaUnavailableError if Ollama is unreachable after retries.
+    Raises httpx.TimeoutException if the call times out after retries.
+    """
+    if timeout is None:
+        timeout = LLM_TIMEOUT
+
     payload = {
         "model": LLM_MODEL,
         "prompt": prompt,
@@ -29,19 +45,36 @@ def llm_call(prompt: str, json_mode: bool = False) -> str:
     if json_mode:
         payload["format"] = "json"
 
-    resp = httpx.post(
-        f"{OLLAMA_HOST}/api/generate",
-        json=payload,
-        timeout=LLM_TIMEOUT,
-    )
-    resp.raise_for_status()
-    return resp.json()["response"]
+    last_error = None
+    for attempt in range(1 + MAX_RETRIES):
+        try:
+            resp = httpx.post(
+                f"{OLLAMA_HOST}/api/generate",
+                json=payload,
+                timeout=timeout,
+            )
+            resp.raise_for_status()
+            return resp.json()["response"]
+        except httpx.ConnectError as e:
+            last_error = e
+            log.warning("Ollama connection failed (attempt %d/%d): %s", attempt + 1, 1 + MAX_RETRIES, e)
+        except httpx.TimeoutException as e:
+            last_error = e
+            log.warning("Ollama call timed out after %ss (attempt %d/%d)", timeout, attempt + 1, 1 + MAX_RETRIES)
+
+    if isinstance(last_error, httpx.ConnectError):
+        raise OllamaUnavailableError(f"Cannot reach Ollama at {OLLAMA_HOST}") from last_error
+    raise last_error
 
 
 def detect_doc_type(text: str) -> str:
     """Detect document type from first 2000 chars."""
-    prompt = DOC_TYPE_PROMPT.format(text=text[:2000])
-    result = llm_call(prompt).strip().lower()
+    try:
+        prompt = DOC_TYPE_PROMPT.format(text=text[:2000])
+        result = llm_call(prompt, timeout=120.0).strip().lower()
+    except (OllamaUnavailableError, httpx.TimeoutException):
+        log.warning("Doc type detection failed, defaulting to 'general'")
+        return "general"
 
     valid = {"textbook", "research_paper", "business", "fiction", "technical", "general"}
     for v in valid:
@@ -51,7 +84,10 @@ def detect_doc_type(text: str) -> str:
 
 
 def generate_reels(text: str, doc_type: str, prefs: dict = None) -> dict:
-    """Generate reels and flashcards from text with personalization."""
+    """Generate reels and flashcards from text with personalization.
+
+    Raises OllamaUnavailableError if Ollama is down.
+    """
     if prefs is None:
         prefs = {
             "learning_style": "mixed",
@@ -70,7 +106,7 @@ def generate_reels(text: str, doc_type: str, prefs: dict = None) -> dict:
         difficulty_instruction=FLASHCARD_DIFFICULTY_INSTRUCTIONS.get(prefs.get("flashcard_difficulty", "medium"), FLASHCARD_DIFFICULTY_INSTRUCTIONS["medium"]),
         few_shot=REEL_FEW_SHOT,
     )
-    result = llm_call(prompt, json_mode=True)
+    result = llm_call(prompt, json_mode=True, timeout=600.0)
     return parse_llm_json(result)
 
 
@@ -110,6 +146,7 @@ def parse_llm_json(text: str) -> dict:
     validated_reels = []
     for reel in parsed["reels"]:
         if isinstance(reel, dict) and "title" in reel and "summary" in reel:
+            reel.setdefault("narration", reel["summary"])
             reel.setdefault("category", "general")
             reel.setdefault("keywords", "")
             validated_reels.append(reel)

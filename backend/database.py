@@ -54,6 +54,7 @@ def init_db():
             progress INTEGER DEFAULT 0,
             stage TEXT DEFAULT 'uploading',
             qa_ready INTEGER DEFAULT 0,
+            error_message TEXT,
             created_at TEXT DEFAULT (datetime('now'))
         );
 
@@ -62,6 +63,7 @@ def init_db():
             upload_id INTEGER REFERENCES uploads(id),
             title TEXT NOT NULL,
             summary TEXT NOT NULL,
+            narration TEXT,
             category TEXT,
             keywords TEXT,
             page_ref INTEGER,
@@ -103,12 +105,19 @@ def init_db():
         );
     """)
 
-    # Migration: add progress/stage columns to uploads if missing
+    # Migration: add progress/stage/error_message columns to uploads if missing
     upload_cols = [row[1] for row in conn.execute("PRAGMA table_info(uploads)").fetchall()]
     if "progress" not in upload_cols:
         conn.execute("ALTER TABLE uploads ADD COLUMN progress INTEGER DEFAULT 0")
     if "stage" not in upload_cols:
         conn.execute("ALTER TABLE uploads ADD COLUMN stage TEXT DEFAULT 'uploading'")
+    if "error_message" not in upload_cols:
+        conn.execute("ALTER TABLE uploads ADD COLUMN error_message TEXT")
+
+    # Migration: add narration column to reels if missing
+    reel_cols = [row[1] for row in conn.execute("PRAGMA table_info(reels)").fetchall()]
+    if "narration" not in reel_cols:
+        conn.execute("ALTER TABLE reels ADD COLUMN narration TEXT")
 
     # Seed a default user (placeholder until auth is implemented)
     conn.execute(
