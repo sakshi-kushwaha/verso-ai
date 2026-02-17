@@ -131,7 +131,7 @@ These flow changes apply across Day 3 tasks:
 
 > Roles reshuffled for Day 3. All Day 2 leftovers reassigned to new owners with clean ownership.
 
-### Sakshi — Backend APIs + Pipeline Fixes
+### Sakshi — Backend APIs + Pipeline Fixes ← **#97**
 - [ ] Bookmarks CRUD: `POST /bookmarks`, `DELETE /bookmarks/{id}`, `GET /bookmarks` (DB table exists, no API yet)
 - [ ] Progress tracking: `POST /progress/view`, `GET /progress/{upload_id}` (DB table exists, no API yet)
 - [ ] Download: `GET /download/{upload_id}` — reels only, bundled as zip
@@ -142,7 +142,7 @@ These flow changes apply across Day 3 tasks:
 - [ ] Add emoji field to reel DB schema + generation (update `prompts.py` and `llm.py` for emoji in reel output)
 - [ ] Carry from Day 2: edge cases (empty/scanned PDFs), timeout handling, RAM check
 
-### Sanika — All Frontend + Bug Fixes
+### Sanika — All Frontend + Bug Fixes ← **#98**
 - [ ] Wire bookmarks to real backend API (replace Zustand-only client-side bookmarks)
 - [ ] Build "My Books" page — new nav item, list of uploads with reel/flashcard counts, tap into book detail (reels + flashcards + chat for that book)
 - [ ] Update feed to render interleaved flashcards (every 3 reels → 1 flashcard card)
@@ -154,7 +154,7 @@ These flow changes apply across Day 3 tasks:
 - [ ] Final responsive pass (mobile + desktop)
 - [ ] Carry from Day 2: download UI wiring
 
-### Esha — Prompts & AI Model Tuning
+### Esha — Prompts & AI Model Tuning ← **#99**
 - [ ] Add emoji field to reel generation prompts (topic-relevant emoji per reel)
 - [ ] Tune prompts for consistent JSON output across all doc types (textbook, research, business, fiction, technical)
 - [ ] Handle edge cases in pipeline: empty PDFs, scanned PDFs (<50 chars), oversized files
@@ -170,12 +170,12 @@ These flow changes apply across Day 3 tasks:
 
 ## Priority Order (updated Feb 18)
 
-1. **Backend APIs for bookmarks/progress/download** (Sakshi) — unblocks frontend
-2. **Feed interleaving + My Books** (Sakshi backend + Sanika frontend) — new user flow
-3. **Prompt tuning + emoji** (Esha + Sakshi) — quality improvement
-4. **User profile** (Sakshi backend + Sanika frontend) — lightweight, skip if time-tight
-5. **Pipeline hardening + edge cases** (Esha) — robustness
-6. **Bug fixes + polish** (Sanika) — demo readiness
+1. **Backend APIs for bookmarks/progress/download** (Sakshi #97) — unblocks frontend
+2. **Feed interleaving + My Books** (Sakshi #97 backend + Sanika #98 frontend) — new user flow
+3. **Prompt tuning + emoji** (Esha #99 + Sakshi #97) — quality improvement
+4. **User profile** (Sakshi #97 backend + Sanika #98 frontend) — lightweight, skip if time-tight
+5. **Pipeline hardening + edge cases** (Esha #99) — robustness
+6. **Bug fixes + polish** (Sanika #98) — demo readiness
 
 ---
 
@@ -183,16 +183,13 @@ These flow changes apply across Day 3 tasks:
 
 | # | Issue | Owner | Label | Status |
 |---|-------|-------|-------|--------|
-| **#94** | Pipeline hardening — edge cases, timeouts, prompt tuning, degradation | **Esha** | Day 3 | **Reassigned** |
-| **#64** | F9: Visual Reels — images & video backgrounds (deprioritized) | — | Backlog | Deprioritized |
-| **#65** | Production hardening & performance benchmarks | **Esha** | Day 3 | Open |
-| **#70** | Bookmarks, Download, Progress APIs (end-to-end) | **Sakshi** | Day 3 | **Reassigned** |
-| **#71** | Regression testing & demo prep | **All** | Day 3 | Open |
-| **#68** | Frontend polish + all UI wiring | **Sanika** | Day 3 | **Reassigned** |
+| **#97** | Day 3: Backend APIs + Pipeline Fixes | **Sakshi** | Day 3, To Do | Ready |
+| **#98** | Day 3: All Frontend + Bug Fixes | **Sanika** | Day 3, To Do | Ready |
+| **#99** | Day 3: Prompts & AI Model Tuning | **Esha** | Day 3, To Do | Ready |
 
 ---
 
-## Audio Narration Improvements (Esha — Day 3)
+## Audio Narration Improvements (Esha — Day 3, tracked in #99)
 
 - [ ] Improve narration text quality for TTS (speech-optimized output via prompt changes)
 - [ ] Handle edge cases — very long text truncation (>500 chars), special characters breaking espeak-ng
