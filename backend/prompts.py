@@ -1,3 +1,27 @@
+SUBJECT_CATEGORY_PROMPT = """Classify this document's subject into exactly one category.
+
+Categories: science, math, history, literature, business, technology, medicine, law, arts, engineering, general
+
+Rules:
+- science: Biology, Chemistry, Physics, Environmental Science
+- math: Mathematics, Statistics, Calculus, Algebra
+- history: History, Political Science, Sociology, Anthropology
+- literature: Fiction, Poetry, Philosophy, Language Arts, Linguistics
+- business: Finance, Economics, Marketing, Management, Accounting
+- technology: Computer Science, Programming, AI/ML, Software, Data Science
+- medicine: Health, Anatomy, Psychology, Pharmacology, Nursing
+- law: Legal Studies, Criminal Justice, Constitutional Law
+- arts: Music, Visual Arts, Design, Architecture, Film
+- engineering: Mechanical, Electrical, Civil, Chemical Engineering
+- general: Anything that doesn't fit above
+
+Respond with ONLY the single category word, nothing else.
+
+Text:
+{text}
+
+Category:"""
+
 DOC_TYPE_PROMPT = """Classify this document into exactly one category.
 
 Categories: textbook, research_paper, business, fiction, technical, general

@@ -62,6 +62,10 @@ def health():
 
 # Serve frontend static files (built React app)
 if os.path.exists(STATIC_DIR):
+    bg_images_dir = os.path.join(STATIC_DIR, "bg-images")
+    if os.path.exists(bg_images_dir):
+        app.mount("/bg-images", StaticFiles(directory=bg_images_dir), name="bg-images")
+
     app.mount("/assets", StaticFiles(directory=os.path.join(STATIC_DIR, "assets")), name="assets")
 
     @app.get("/{full_path:path}")

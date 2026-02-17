@@ -5,7 +5,8 @@ import threading
 from database import get_db
 import httpx
 from parser import parse_document, detect_chapters, EmptyDocumentError, ScannedPDFError
-from llm import detect_doc_type, generate_reels, OllamaUnavailableError
+from llm import detect_doc_type, detect_subject_category, generate_reels, OllamaUnavailableError
+from bg_images import assign_images
 from rag import embed_chunks
 
 log = logging.getLogger(__name__)
@@ -72,6 +73,10 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
         doc_type = detect_doc_type(full_text)
         _update_doc_type(upload_id, doc_type)
 
+        # Step 2b: Detect subject category for background images
+        subject_category = detect_subject_category(full_text)
+        _update_subject_category(upload_id, subject_category)
+
         # Step 3: Detect chapters and generate reels
         _update_progress(upload_id, 20, "extracting")
         sections = detect_chapters(pages)
@@ -101,8 +106,10 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
                 ollama_failed = True
                 break
 
-            for reel in result.get("reels", []):
-                _save_reel(upload_id, reel, batch[0].get("start_page", i + 1))
+            batch_reels = result.get("reels", [])
+            bg_paths = assign_images(batch_reels, subject_category)
+            for reel, bg_image in zip(batch_reels, bg_paths):
+                _save_reel(upload_id, reel, batch[0].get("start_page", i + 1), bg_image)
 
             for fc in result.get("flashcards", []):
                 _save_flashcard(upload_id, fc)
@@ -190,11 +197,18 @@ def _update_doc_type(upload_id: int, doc_type: str):
     conn.close()
 
 
-def _save_reel(upload_id: int, reel: dict, page_ref: int):
+def _update_subject_category(upload_id: int, subject_category: str):
+    conn = get_db()
+    conn.execute("UPDATE uploads SET subject_category = ? WHERE id = ?", (subject_category, upload_id))
+    conn.commit()
+    conn.close()
+
+
+def _save_reel(upload_id: int, reel: dict, page_ref: int, bg_image: str = None):
     conn = get_db()
     conn.execute(
-        "INSERT INTO reels (upload_id, title, summary, narration, category, keywords, page_ref) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (upload_id, reel.get("title", ""), reel.get("summary", ""), reel.get("narration", ""), reel.get("category", ""), reel.get("keywords", ""), page_ref),
+        "INSERT INTO reels (upload_id, title, summary, narration, category, keywords, page_ref, bg_image) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (upload_id, reel.get("title", ""), reel.get("summary", ""), reel.get("narration", ""), reel.get("category", ""), reel.get("keywords", ""), page_ref, bg_image),
     )
     conn.commit()
     conn.close()
