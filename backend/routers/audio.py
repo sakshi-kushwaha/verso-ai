@@ -2,15 +2,20 @@ import asyncio
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from tts.engine import generate_audio
+from database import get_db
 
 router = APIRouter(tags=["audio"])
 
-# Stub: maps reel_id -> text. Sakshi will replace with SQLite lookup.
-_reel_text_stub: dict[int, str] = {}
-
 
 def get_reel_text(reel_id: int) -> str | None:
-    return _reel_text_stub.get(reel_id)
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT summary FROM reels WHERE id = ?", (reel_id,)
+        ).fetchone()
+        return row["summary"] if row else None
+    finally:
+        conn.close()
 
 
 @router.get("/audio/{reel_id}")

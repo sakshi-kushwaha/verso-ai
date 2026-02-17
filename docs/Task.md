@@ -6,6 +6,9 @@
 
 ---
 
+
+---
+
 ## Engineer Assignments (by Feature)
 
 | Engineer | Owns | Scope |
@@ -38,7 +41,7 @@
 - [x] Implement `/upload/status/{id}` — progress count, batch status
 - [x] Temp file cleanup after parsing (`os.unlink` in try/finally)
 
-### Esha — Frontend Setup + Flashcards UI
+### Esha — Frontend Setup + All UI Pages
 - [x] Initialize React + Vite with Tailwind CSS 4.x, React Router 7.x, Zustand 5.x, Axios
 - [x] Set up frontend project structure: pages, components, stores, API layer
 - [x] Build main app layout/navigation shell (Feed, Flashcards, Bookmarks, Chat tabs)
@@ -47,11 +50,6 @@
 - [x] Build Progress tracking UI — viewing progress per upload
 - [x] Implement bookmark toggle on reel cards and flashcards
 - [x] Mobile responsiveness — swipe on touch, layout adapts
-
-### Sanika — RAG Engine + Feed UI + TTS
-- [x] Build chunk embedding pipeline — `nomic-embed-text` via Ollama `/api/embed`
-- [x] Build NumPy cosine similarity search (top-3 chunk retrieval)
-- [x] Expose retrieval as internal function for chat endpoint to call
 - [x] Build Document Upload page — drag & drop + file picker, file type/size validation (50 MB)
 - [x] Build processing progress indicator — polling `/upload/status/{id}` every 3s
 - [x] Build Swipeable Reel Feed using Swiper.js — full-screen vertical cards
@@ -59,6 +57,11 @@
 - [x] Implement infinite scroll with paginated loading (auto-fetch 3 reels from end)
 - [x] Incremental reel loading — new reels appear as batches complete
 - [x] Build Bookmarks/Saved page — list of saved reels and flashcards
+
+### Sanika — RAG Engine + TTS
+- [x] Build chunk embedding pipeline — `nomic-embed-text` via Ollama `/api/embed`
+- [x] Build NumPy cosine similarity search (top-3 chunk retrieval)
+- [x] Expose retrieval as internal function for chat endpoint to call
 - [x] Implement TTS module — `espeak-ng` subprocess, `.wav` cached by content hash, `threading.Lock()`
 - [x] Implement `/audio/{reel_id}` — serve cached audio or generate on-demand
 
@@ -95,9 +98,12 @@
 - [x] Fix feed scroll — one reel per swipe (Swiper mousewheel thresholds)
 - [x] Wire `qa_ready` flag — pipeline sets `qa_ready = 1` after embedding completes
 - [x] Switch frontend Dockerfile from `node:20-alpine` to `node:20-slim`
-- [ ] Audio playback on reel cards — play/pause button, GET `/audio/{reel_id}`
+- [x] Audio playback on reel cards — play/pause button, GET `/audio/{reel_id}`
+- [x] Loading states, error states, empty states across all pages — `StateScreens.jsx` component with `Spinner`, `ErrorState`, `EmptyState`
+- [x] Wire Flashcards page to real `/flashcards` API (remove mock data)
+- [x] Bookmarks page uses real store data (mock fallback removed)
+- [x] Audio router fixed — real DB lookup, improved TTS voice + pitch/gap params
 - [ ] Build download button/flow in UI (wire to `/download` API)
-- [ ] Loading states, error states, empty states across all pages
 
 ### Sanika — Auth + Feed/Bookmarks/Download APIs
 - [ ] Implement `/auth/signup` and `/auth/login` — bcrypt hashing, token-based session
@@ -105,8 +111,8 @@
 - [ ] Build Login/Signup UI pages
 - [ ] Wire auth flow: signup → login → onboarding → redirect to upload
 - [ ] Protected routes — redirect to login if unauthenticated
-- [ ] Implement `/feed` endpoint — paginated reel list from SQLite
-- [ ] Implement `/flashcards` endpoint — list by upload
+- [x] Implement `/feed` endpoint — paginated reel list from SQLite
+- [x] Implement `/flashcards` endpoint — list by upload
 - [ ] Implement `/bookmarks` CRUD — add/remove bookmark, list bookmarked items
 - [ ] Implement `/progress/view` — track viewed reels on swipe
 - [ ] Implement `/download` — bundle reels + flashcards + audio as zip
@@ -187,7 +193,37 @@
 
 ## Priority Order (if behind schedule)
 
-1. **Must ship:** Upload/Parse → Reel Generation → Feed (F3, F4, F7)
-2. **High:** Onboarding → Chat Q&A → Flashcards (F2, F6, F5)
-3. **Medium:** Auth → Bookmarks → Download (F1, F8)
-4. **Nice to have:** Visual Reels (F9), TTS audio, progress tracking
+1. **Must ship:** Upload/Parse → Reel Generation → Feed (F3, F4, F7) ✅ Done
+2. **High:** Onboarding → Chat Q&A → Flashcards (F2, F6, F5) ✅ Done (all wired end-to-end)
+3. **Medium:** Auth → Bookmarks → Download (F1, F8) — Auth NOT started, Bookmarks/Download backend NOT started
+4. **Nice to have:** Visual Reels (F9), Audio improvements, Progress tracking — Audio partially done (basic TTS working), rest NOT started
+
+---
+
+## Remaining Work (Day 2–3)
+
+### Sanika — Blocking items
+- [ ] F1 Auth: `/auth/signup`, `/auth/login`, `/auth/me` + bcrypt + token session
+- [ ] Login/Signup UI wiring + protected routes
+- [ ] F8 Bookmarks: `/bookmarks` CRUD backend endpoints
+- [ ] F8 Download: `/download` bundle endpoint
+- [ ] Progress: `/progress/view` tracking endpoint
+
+### Esha — Frontend wiring
+- [x] Wire Flashcards page to real `/flashcards` API (remove mock data)
+- [x] Audio playback on reel cards (play/pause, GET `/audio/{reel_id}`)
+- [x] Loading states, error states, empty states across all pages
+- [x] Bookmarks page — removed mock data fallback
+- [x] Audio router — real DB lookup + TTS voice/pitch/gap improvements
+- [ ] Download button/flow in UI
+
+### Sakshi — Pipeline hardening + F9 + Audio improvements
+- [ ] Edge cases: empty PDFs, scanned PDFs, oversized files
+- [ ] Ollama timeout handling
+- [ ] LLM prompt tuning for consistent JSON
+- [ ] F9: Image extraction, category illustrations, video clips
+- [ ] RAM/performance benchmarks
+- [ ] **Audio: Pre-generate audio during reel batch pipeline** (generate `.wav` for each reel as it's created, not just on-demand)
+- [ ] **Audio: Handle edge cases** — very long text truncation (>500 chars), special characters breaking espeak-ng
+- [ ] **Audio: Test espeak-ng on EC2** — verify it's installed and working, test with real reels
+- [ ] **Audio: Explore SSML or voice improvement** — current `en-us+f3` voice is basic; consider Piper TTS or better espeak params if time allows

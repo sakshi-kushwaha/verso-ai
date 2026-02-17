@@ -2,7 +2,7 @@ import hashlib
 import subprocess
 import threading
 from pathlib import Path
-from config import AUDIO_CACHE_DIR, ESPEAK_CMD, ESPEAK_VOICE, ESPEAK_SPEED
+from config import AUDIO_CACHE_DIR, ESPEAK_CMD, ESPEAK_VOICE, ESPEAK_SPEED, ESPEAK_PITCH, ESPEAK_GAP
 
 _tts_lock = threading.Lock()
 
@@ -38,6 +38,8 @@ def generate_audio(text: str) -> Path:
                 ESPEAK_CMD,
                 "-v", ESPEAK_VOICE,
                 "-s", str(ESPEAK_SPEED),
+                "-p", str(ESPEAK_PITCH),
+                "-g", str(ESPEAK_GAP),
                 "-w", str(path),
                 text,
             ],
