@@ -15,12 +15,12 @@
 
 ## Core Content Terms
 
-| Term | Replaces | Meaning |
-|------|----------|---------|
-| **Bite** | Reel | A small bite of knowledge. One swipeable card generated from a section of a document — contains a title, summary, category, keywords, page reference, and emoji. The atomic unit of learning in Verso. |
-| **Flashcard** | — | A question-answer pair for active recall and self-testing. Displayed as a flip card. Generated alongside Bites during document processing. |
-| **Feed** | — | The main learning interface — a vertical, swipeable carousel of Bites with flashcards interleaved (1 flashcard after every 3 Bites). |
-| **Bookmark / Saved** | — | A user-saved Bite or flashcard for later review. Accessible from book detail and from the main nav. |
+| Term | Meaning |
+|------|---------|
+| **Reel** | A short, swipeable knowledge card generated from a section of a document — contains a title, summary, category, keywords, page reference, and emoji. The atomic unit of learning in Verso. Inspired by social media reels but for education. |
+| **Flashcard** | A question-answer pair for active recall and self-testing. Displayed as a flip card. Generated alongside reels during document processing. |
+| **Feed** | The main learning interface — a vertical, swipeable carousel of reels with flashcards interleaved (1 flashcard after every 3 reels). |
+| **Bookmark / Saved** | A user-saved reel or flashcard for later review. Accessible from book detail and from the main nav. |
 
 ---
 
@@ -29,12 +29,12 @@
 | Term | Meaning |
 |------|---------|
 | **Upload** | Submitting a PDF or DOCX document (max 50 MB, max 50 pages) that triggers the AI processing pipeline. |
-| **My Books** | A dedicated section showing all uploaded documents. Each book shows its Bite count, flashcard count, and links to its Bites, flashcards, and chat. |
+| **My Books** | A dedicated section showing all uploaded documents. Each book shows its Reel count, flashcard count, and links to its Reels, flashcards, and chat. |
 | **Chat (Q&A)** | A document-specific conversational AI interface. Users ask questions and get answers grounded in the actual document content, with source references. Limited to 10 exchanges per document. |
 | **Onboarding** | A 5-step preference quiz on first login that personalizes all content generation (learning style, content depth, use case, flashcard difficulty). |
-| **Progress** | Tracks which Bites a user has viewed per upload. Enables resume-from-where-you-left-off. |
-| **Download** | Bundles all Bites for a document as a downloadable zip file. Bites only (no flashcards). |
-| **Audio Narration** | A spoken version of a Bite's summary, generated via TTS. Optimized for listening — warm, conversational tone without bullet points or special characters. |
+| **Progress** | Tracks which Reels a user has viewed per upload. Enables resume-from-where-you-left-off. |
+| **Download** | Bundles all Reels for a document as a downloadable zip file. Reels only (no flashcards). |
+| **Audio Narration** | A spoken version of a Reel's summary, generated via TTS. Optimized for listening — warm, conversational tone without bullet points or special characters. |
 | **User Profile** | Lightweight section with user preferences tab and logout. |
 
 ---
@@ -44,7 +44,7 @@
 | Term | Options | Meaning |
 |------|---------|---------|
 | **Learning Style** | visual, auditory, reading, mixed | How content is formatted. Visual = bullet points. Auditory = narrated. Reading = prose. Mixed = balanced. |
-| **Content Depth** | brief, balanced, detailed | How long Bite summaries are. Brief = 1-2 sentences. Balanced = 2-3. Detailed = 3-4. |
+| **Content Depth** | brief, balanced, detailed | How long Reel summaries are. Brief = 1-2 sentences. Balanced = 2-3. Detailed = 3-4. |
 | **Use Case** | exam, work, learning, research | Why the user is learning. Drives flashcard focus — exam = recall, work = practical, research = analytical. |
 | **Flashcard Difficulty** | easy, medium, hard | Cognitive level of questions. Easy = recall (who/what). Medium = understanding (explain/compare). Hard = analysis (why/how). |
 | **Display Name** | free text | User's chosen name, shown in greetings and profile. |
@@ -55,18 +55,18 @@
 
 | Term | Meaning |
 |------|---------|
-| **Pipeline** | The end-to-end background processing flow: parse document → detect type → split into sections → batch-generate Bites + flashcards → embed chunks → mark chat-ready. |
-| **Section** | A logical grouping of document pages (by chapter headings, or 3,000-char chunks as fallback). Input unit for Bite generation. |
+| **Pipeline** | The end-to-end background processing flow: parse document → detect type → split into sections → batch-generate Reels + flashcards → embed chunks → mark chat-ready. |
+| **Section** | A logical grouping of document pages (by chapter headings, or 3,000-char chunks as fallback). Input unit for Reel generation. |
 | **Batch** | A group of 5 sections processed together by the LLM in one call. Enables progress reporting. |
 | **Doc Type** | Auto-detected classification of the uploaded document: textbook, research_paper, business, fiction, technical, general. Drives generation strategy. |
 | **QA Ready** | A flag set after embeddings complete. Chat is disabled until this is true (returns 409). |
-| **LLM** | Large Language Model — Qwen 2.5 3B, served locally via Ollama. Used for doc type detection, Bite generation, and chat responses. |
+| **LLM** | Large Language Model — Qwen 2.5 3B, served locally via Ollama. Used for doc type detection, Reel generation, and chat responses. |
 | **Ollama** | Local ML inference server running on port 11434. Hosts the LLM and embedding models. |
 | **RAG** | Retrieval-Augmented Generation. Embeds document chunks as vectors, retrieves the most relevant chunks for a user's question, then passes them to the LLM for a grounded answer. |
 | **Embedding** | A 768-dimension vector representation of a text chunk, generated by `nomic-embed-text`. Used for similarity search in RAG. |
 | **Chunk** | A 500-character segment of document text (with 50-char overlap) used for embedding and retrieval. |
 | **Cosine Similarity** | The distance metric used to rank how relevant a chunk is to a user's question. Higher = more similar. Top 3 chunks are retrieved. |
-| **TTS** | Text-to-Speech. Generates audio narration for Bites. Primary engine: Piper (neural). Fallback: espeak-ng (formant). |
+| **TTS** | Text-to-Speech. Generates audio narration for Reels. Primary engine: Piper (neural). Fallback: espeak-ng (formant). |
 | **Piper TTS** | Neural TTS model (~60 MB) that produces natural-sounding speech. Lazy-loaded on first audio request. |
 | **espeak-ng** | Open-source formant TTS. Robotic but functional. Used as fallback when Piper is unavailable. |
 | **Content Hash** | SHA-256 hash of normalized text. Used to cache audio files — same text always maps to the same audio file. |
@@ -79,10 +79,10 @@
 | Term | Meaning |
 |------|---------|
 | **Upload** (DB) | Record in `uploads` table — tracks filename, status, doc_type, total_pages, progress, stage, qa_ready. |
-| **Bite** (DB) | Record in `reels` table — id, upload_id, title, summary, narration, category, keywords, page_ref, emoji, audio_path. *(Table still named `reels` in DB; UI uses "Bite".)* |
+| **Reel** (DB) | Record in `reels` table — id, upload_id, title, summary, narration, category, keywords, page_ref, emoji, audio_path. |
 | **Flashcard** (DB) | Record in `flashcards` table — id, upload_id, question, answer. |
-| **Bookmark** (DB) | Record in `bookmarks` table — links a user to a saved Bite or flashcard. |
-| **Progress** (DB) | Record in `progress` table — tracks viewed Bite IDs per upload per user. |
+| **Bookmark** (DB) | Record in `bookmarks` table — links a user to a saved Reel or flashcard. |
+| **Progress** (DB) | Record in `progress` table — tracks viewed Reel IDs per upload per user. |
 | **Chat History** (DB) | Record in `chat_history` table — stores each Q&A exchange with sources. |
 | **User Preferences** (DB) | Record in `user_preferences` table — all onboarding quiz answers. |
 | **Embedding Store** | NumPy array files + JSON chunk files stored per upload in `data/embeddings/`. |
@@ -106,4 +106,4 @@
 
 ## Naming Convention Note
 
-The term **"Bite"** is the user-facing name. The database table and some backend code still reference `reels` for backward compatibility. The rename from "reel" → "Bite" applies to all UI copy, component names, and documentation going forward.
+**"Reel"** is the consistent term used across the product — backend, frontend, database, and documentation. Inspired by social media reels, but repurposed for bite-sized educational content from documents.
