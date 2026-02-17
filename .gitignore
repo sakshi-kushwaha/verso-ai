@@ -11,6 +11,7 @@ build/
 # Node
 frontend/node_modules/
 frontend/dist/
+node_modules/
 
 # IDE
 .vscode/
@@ -28,6 +29,15 @@ frontend/dist/
 *.db
 audio_cache/
 data/temp/
+
+# TTS models (large binaries, downloaded at build time)
+backend/tts/models/*.onnx
+backend/tts/models/*.onnx.json
+
+# Test artifacts
+tests/
+playwright.config.js
+test-results/
 
 # Logs
 *.log

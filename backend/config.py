@@ -18,12 +18,20 @@ DATA_DIR: Path = Path("data")
 EMBEDDINGS_DIR: Path = DATA_DIR / "embeddings"
 AUDIO_CACHE_DIR: Path = DATA_DIR / "audio_cache"
 
-# TTS
+# TTS — "piper" (neural, high quality) or "espeak" (formant, robotic fallback)
+TTS_ENGINE: str = os.getenv("TTS_ENGINE", "piper")
+
+# Piper TTS (neural voice)
+PIPER_MODEL_DIR: Path = Path(os.path.dirname(__file__)) / "tts" / "models"
+PIPER_MODEL: str = "en_US-lessac-medium.onnx"
+PIPER_SPEAKER_ID = None  # int or None
+
+# espeak-ng fallback
 ESPEAK_CMD: str = "espeak-ng"
-ESPEAK_VOICE: str = "en-us+f3"
-ESPEAK_SPEED: int = 140
-ESPEAK_PITCH: int = 45
-ESPEAK_GAP: int = 8
+ESPEAK_VOICE: str = "en"
+ESPEAK_SPEED: int = 130
+ESPEAK_PITCH: int = 50
+ESPEAK_GAP: int = 4
 
 # LLM
 LLM_MODEL: str = "qwen2.5:3b"
