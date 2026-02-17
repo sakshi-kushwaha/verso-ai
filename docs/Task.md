@@ -6,13 +6,13 @@
 
 ---
 
-## Engineer Assignments (by Feature)
+## Engineer Assignments (Day 3 — Reshuffled)
 
-| Engineer | Owns | Scope |
-|----------|------|-------|
-| **Sakshi** | F3 (Upload & Parsing), F4 (Reel Generation), F9 (Visual Reels), Infra | AI pipeline, image/video extraction, EC2 infra |
-| **Esha** | F2 (Onboarding), F6 (Chat Q&A), F5 (Flashcards), All Frontend | Onboarding backend + all UI across every feature |
-| **Sanika** | RAG engine, F1 (Auth), F7 (Feed), F8 (Bookmarks/Download), TTS | RAG, auth, feed API, bookmarks/download API, TTS |
+| Engineer | Day 3 Role | Scope |
+|----------|-----------|-------|
+| **Sanika** | All Frontend + Bug Fixes | UI for My Books, feed interleaving, bookmarks wiring, download, profile, emoji display, reel rename, responsive polish |
+| **Esha** | Prompts & AI Model Tuning | Prompt quality, emoji in prompts, pipeline edge cases, timeout handling, graceful degradation, TTS narration, RAM checks |
+| **Sakshi** | Backend APIs + Pipeline Fixes | Bookmarks/progress/download APIs, feed interleaving, My Books data, profile API, 50-page limit, emoji schema, carry-over edge cases |
 
 ---
 
@@ -66,20 +66,17 @@
 
 ---
 
-## Day 2 — Onboarding → Chat → Auth → Visual Reels (IN PROGRESS)
+## Day 2 — Onboarding → Chat → Auth → Wiring ✅ COMPLETE (behind target)
 
-> **Build order matters:** Onboarding first (preferences stored), then Chat (reads preferences), then Auth (wraps everything). Visual reels pipeline starts in parallel.
+> **Build order matters:** Onboarding first (preferences stored), then Chat (reads preferences), then Auth (wraps everything).
 
-### Sakshi — Pipeline Hardening + Audio + Visual Reels Pipeline (F9) 🔴 8 remaining
+### Sakshi — Pipeline Hardening + Audio (8 tasks incomplete — carried to Day 3)
 - [x] Wire embedding trigger after all reel batches complete (hand off to RAG pipeline) — done by Esha
-- [ ] Handle edge cases: empty PDFs, scanned PDFs (< 50 chars detection), oversized files ← **#94**
-- [ ] Add timeout handling for Ollama calls (120–600s per call) ← **#94**
-- [ ] Tune LLM prompts for consistent JSON across doc types (textbook, research paper, business) ← **#94**
-- [ ] Test graceful degradation: kill Ollama mid-process → verify fallback reels ← **#94**
-- [ ] **F9-A:** Extract images from uploaded PDFs using `pdfplumber` image extraction, save per-upload ← **#64**
-- [ ] **F9-B:** Curate pre-bundled category illustrations (science, business, literature, tech, general) ← **#64**
-- [ ] **F9-C:** Curate pre-bundled short looping video clips (~5-10s each) per category ← **#64**
-- [ ] RAM check — verify peak RAM < 6.5 GB during processing (`free -h`) ← **#94**
+- [ ] ~~Handle edge cases: empty PDFs, scanned PDFs (< 50 chars detection), oversized files~~ → Day 3 (Sakshi + Esha)
+- [ ] ~~Add timeout handling for Ollama calls (120–600s per call)~~ → Day 3 (Esha)
+- [ ] ~~Tune LLM prompts for consistent JSON across doc types~~ → Day 3 (Esha)
+- [ ] ~~Test graceful degradation: kill Ollama mid-process → verify fallback reels~~ → Day 3 (Esha)
+- [ ] ~~RAM check — verify peak RAM < 6.5 GB during processing~~ → Day 3 (Esha)
 
 ### Esha — Onboarding Backend → Chat Backend → Frontend Wiring ✅ (1 remaining)
 - [x] **F2:** Implement onboarding backend — `/onboarding/preferences` CRUD (save + retrieve user preferences)
@@ -98,9 +95,9 @@
 - [x] Wire Flashcards page to real `/flashcards` API (remove mock data)
 - [x] Bookmarks page uses real store data (mock fallback removed)
 - [x] Audio router fixed — real DB lookup, improved TTS voice + pitch/gap params
-- [ ] Build download button/flow in UI (wire to `/download` API) — blocked on Sanika's `/download` endpoint ← **#68**
+- [ ] ~~Build download button/flow in UI~~ → Day 3 (Sanika)
 
-### Sanika — Auth + Feed/Bookmarks/Download APIs ✅ Auth done (3 remaining)
+### Sanika — Auth + Feed/Bookmarks/Download APIs (3 tasks incomplete — carried to Day 3)
 - [x] Implement `/auth/signup` and `/auth/login` — bcrypt hashing, token-based session
 - [x] Implement `/auth/me` for session validation
 - [x] Build Login/Signup UI pages
@@ -108,74 +105,101 @@
 - [x] Protected routes — redirect to login if unauthenticated
 - [x] Implement `/feed` endpoint — paginated reel list from SQLite
 - [x] Implement `/flashcards` endpoint — list by upload
-- [ ] Implement `/bookmarks` CRUD — add/remove bookmark, list bookmarked items ← **#70**
-- [ ] Implement `/progress/view` — track viewed reels on swipe ← **#70**
-- [ ] Implement `/download` — bundle reels + flashcards + audio as zip ← **#70**
+- [ ] ~~Implement `/bookmarks` CRUD~~ → Day 3 (Sakshi)
+- [ ] ~~Implement `/progress/view`~~ → Day 3 (Sakshi)
+- [ ] ~~Implement `/download`~~ → Day 3 (Sakshi)
 
-**Day 2 Status: 23/35 done (66%)** — Auth, onboarding, chat, feed, flashcards all wired. Remaining: Sakshi pipeline hardening (#94) + F9 (#64), Sanika bookmarks/download/progress (#70), Esha download UI (#68).
-
----
-
-## Day 3 — Visual Reels Integration + Polish + Demo Prep
-
-### Sakshi — Visual Reels Wiring + Production Hardening
-- [x] Ollama production config — `NUM_PARALLEL=1`, systemd restart policies
-- [x] Implement `/health` endpoint
-- [ ] **F9:** Wire image/video selection into reel generation: attach `media_url` + `media_type` to each reel ← **#64**
-- [ ] **F9:** Fallback chain: PDF image → category illustration → no media (text-only) ← **#64**
-- [ ] **F9:** Video clips only served when user `learning_style = 'visual'` ← **#64**
-- [ ] Verify Ollama auto-unload after 5 min idle — idle RAM < 3 GB ← **#65**
-- [ ] Verify peak RAM < 6.5 GB during active processing ← **#65**
-- [ ] Test with 5+ varied documents (textbook, research paper, business doc, fiction, small PDF) ← **#65**
-- [ ] Performance: verify < 90s to first reel, < 3 min for 20-page doc ← **#65**
-- [ ] Security pass: no command injection in file handling, sanitize filenames ← **#65**
-
-### Esha — Visual Reels UI + Final Polish
-- [ ] **F9:** Update reel card to display background image or looping video behind text ← **#68**
-- [ ] **F9:** Fallback rendering: video → image → gradient background ← **#68**
-- [ ] **F9:** Visual learner experience — auto-play muted video loops on reel cards ← **#68**
-- [ ] Feed smoothness — no jank on swipe (Chrome DevTools profiling) ← **#68**
-- [ ] Feed load < 500ms, onboarding < 30s ← **#68**
-- [ ] Consistent styling, transitions, feedback indicators across all pages ← **#68**
-- [ ] Final responsive pass — mobile + desktop ← **#68**
-- [ ] Fix remaining bugs from integration testing ← **#68**
-
-### Sanika — Regression Testing + Demo Prep
-- [ ] Full regression on EC2: 5 different documents, every feature exercised ← **#71**
-- [ ] Verify scanned PDF handling (no crash, user feedback message) ← **#71**
-- [ ] Verify all error states display correctly to user ← **#71**
-- [ ] Verify chat source references are accurate ← **#71**
-- [ ] Verify visual reels render correctly (image + video + fallback) ← **#71**
-- [ ] Prepare demo document (pick a good 15–20 page PDF that produces quality reels) ← **#71**
-- [ ] Write demo walkthrough script for Feb 23 ← **#71**
-- [ ] Final bug sweep and fix ← **#71**
-
-**Day 3 Checkpoint:** App is production-ready on EC2. All features work including visual reels. Demo document and script ready.
+**Day 2 Status: 23/35 done (66%) — behind target.** Auth, onboarding, chat, feed, flashcards wired. Bookmarks/download/progress APIs, pipeline hardening, and download UI incomplete — carried to Day 3.
 
 ---
 
-## Audio Narration Improvements (Sakshi)
+## User Flow Updates (Day 3)
 
-- [ ] Pre-generate audio during reel batch pipeline (generate `.wav` for each reel as it's created, not just on-demand)
+These flow changes apply across Day 3 tasks:
+
+1. **Feed interleaving:** After every 3 reels → 1 flashcard appears in the feed
+2. **My Books:** New separate nav item showing uploaded books with reels/flashcards/chat per book
+3. **Saved section:** Accessible from book detail and from main nav
+4. **Download:** Reels only (no flashcards in download bundle)
+5. **PDF upload limit:** 50 MB file size + 50 page cap (8 GB CPU constraint)
+6. **User profile:** Lightweight — preferences tab + logout
+7. **Rename "reels":** Find a different term across all UI (TBD by team)
+8. **Emoji per reel:** Add topic-relevant emoji to each reel card
+
+---
+
+## Day 3 — New Features + Polish + Demo Prep (Feb 18)
+
+> Roles reshuffled for Day 3. All Day 2 leftovers reassigned to new owners with clean ownership.
+
+### Sakshi — Backend APIs + Pipeline Fixes
+- [ ] Bookmarks CRUD: `POST /bookmarks`, `DELETE /bookmarks/{id}`, `GET /bookmarks` (DB table exists, no API yet)
+- [ ] Progress tracking: `POST /progress/view`, `GET /progress/{upload_id}` (DB table exists, no API yet)
+- [ ] Download: `GET /download/{upload_id}` — reels only, bundled as zip
+- [ ] Update `/feed` to interleave flashcards (every 3 reels → 1 flashcard in response)
+- [ ] Update `/uploads` response to include `reel_count` + `flashcard_count` per upload (for My Books page)
+- [ ] User profile: `GET /profile`, `PUT /profile` (return preferences + user info)
+- [ ] Enforce 50-page limit on upload (in addition to 50 MB file size)
+- [ ] Add emoji field to reel DB schema + generation (update `prompts.py` and `llm.py` for emoji in reel output)
+- [ ] Carry from Day 2: edge cases (empty/scanned PDFs), timeout handling, RAM check
+
+### Sanika — All Frontend + Bug Fixes
+- [ ] Wire bookmarks to real backend API (replace Zustand-only client-side bookmarks)
+- [ ] Build "My Books" page — new nav item, list of uploads with reel/flashcard counts, tap into book detail (reels + flashcards + chat for that book)
+- [ ] Update feed to render interleaved flashcards (every 3 reels → 1 flashcard card)
+- [ ] Build download button on reel cards (reels only, hit backend `/download`)
+- [ ] Build user profile page (view/edit preferences + logout) — lightweight, skip if heavy
+- [ ] Display emoji on reel cards (from backend response)
+- [ ] Rename "reels" to new term across all UI components and pages
+- [ ] Wire progress page to real API (replace mock data)
+- [ ] Bug fixes across all pages
+- [ ] Final responsive pass (mobile + desktop)
+- [ ] Carry from Day 2: download UI wiring
+
+### Esha — Prompts & AI Model Tuning
+- [ ] Add emoji field to reel generation prompts (topic-relevant emoji per reel)
+- [ ] Tune prompts for consistent JSON output across all doc types (textbook, research, business, fiction, technical)
+- [ ] Handle edge cases in pipeline: empty PDFs, scanned PDFs (<50 chars), oversized files
+- [ ] Add/verify timeout handling for Ollama calls (120–600s)
+- [ ] Test graceful degradation: kill Ollama mid-process → verify fallback reels
+- [ ] Improve narration text quality for TTS (better speech-optimized output)
+- [ ] Test with 5+ varied documents end-to-end
+- [ ] RAM check: verify peak < 6.5 GB during processing
+
+**Day 3 Checkpoint:** App is production-ready on EC2. All features work including new user flows. Demo document and script ready.
+
+---
+
+## Priority Order (updated Feb 18)
+
+1. **Backend APIs for bookmarks/progress/download** (Sakshi) — unblocks frontend
+2. **Feed interleaving + My Books** (Sakshi backend + Sanika frontend) — new user flow
+3. **Prompt tuning + emoji** (Esha + Sakshi) — quality improvement
+4. **User profile** (Sakshi backend + Sanika frontend) — lightweight, skip if time-tight
+5. **Pipeline hardening + edge cases** (Esha) — robustness
+6. **Bug fixes + polish** (Sanika) — demo readiness
+7. **Rename reel term** (Sanika) — branding, do last
+
+---
+
+## GitHub Board — Open Issues (updated Feb 18)
+
+| # | Issue | Owner | Label | Status |
+|---|-------|-------|-------|--------|
+| **#94** | Pipeline hardening — edge cases, timeouts, prompt tuning, degradation | **Esha** | Day 3 | **Reassigned** |
+| **#64** | F9: Visual Reels — images & video backgrounds (deprioritized) | — | Backlog | Deprioritized |
+| **#65** | Production hardening & performance benchmarks | **Esha** | Day 3 | Open |
+| **#70** | Bookmarks, Download, Progress APIs (end-to-end) | **Sakshi** | Day 3 | **Reassigned** |
+| **#71** | Regression testing & demo prep | **All** | Day 3 | Open |
+| **#68** | Frontend polish + all UI wiring | **Sanika** | Day 3 | **Reassigned** |
+
+---
+
+## Audio Narration Improvements (Esha — Day 3)
+
+- [ ] Improve narration text quality for TTS (speech-optimized output via prompt changes)
 - [ ] Handle edge cases — very long text truncation (>500 chars), special characters breaking espeak-ng
 - [ ] Test espeak-ng on EC2 — verify it's installed and working, test with real reels
-- [ ] Explore SSML or voice improvement — current `en-us+f3` voice is basic; consider Piper TTS or better espeak params if time allows
-
----
-
-## F9 — Visual Reels (Image & Video Backgrounds)
-
-> Making reels visually engaging instead of plain text cards.
-
-| Source | What | When used |
-|--------|------|-----------|
-| **Option A** — PDF image extraction | Extract images directly from the uploaded PDF using `pdfplumber` | When the PDF contains extractable images |
-| **Option B** — Category illustrations | Pre-bundled static illustrations per topic (science, business, literature, tech, general) | Fallback when PDF has no images |
-| **Option C** — Looping video clips | Pre-bundled short (~5-10s) looping background videos per category | **Visual learners only** (gated by `learning_style = 'visual'` from onboarding) |
-
-**Fallback chain:** Option A (PDF image) → Option B (category illustration) → plain gradient background
-
-**Schema addition needed:** `reels` table gets `media_url TEXT` and `media_type TEXT` (`'image'`, `'video'`, `NULL`) columns.
 
 ---
 
@@ -192,27 +216,3 @@
 8. [x] Git clone repo, backend running on port 8000
 9. [x] Set up shared SSH access for all 3 engineers (Sanika + Esha added)
 ```
-
----
-
-## Priority Order (updated Feb 17)
-
-1. **Must ship:** Upload/Parse → Reel Generation → Feed (F3, F4, F7) ✅ Done
-2. **High:** Onboarding → Chat Q&A → Flashcards (F2, F6, F5) ✅ Done
-3. **High:** Auth (F1) ✅ Done
-4. **Medium:** Bookmarks → Download → Progress (F8) — Sanika in progress (#70)
-5. **Medium:** Pipeline hardening + Audio fixes — Sakshi in progress (#94)
-6. **Nice to have:** Visual Reels (F9) — not started (#64), Day 2-3
-
----
-
-## GitHub Board — Open Issues (updated Feb 17)
-
-| # | Issue | Owner | Label | Status |
-|---|-------|-------|-------|--------|
-| **#94** | Pipeline hardening — edge cases, timeouts, prompt tuning, degradation | **Sakshi** | Day 2 | **In progress** |
-| **#64** | F9: Visual Reels — images & video backgrounds (end-to-end) | **Sakshi** | Day 2-3 | Open |
-| **#65** | Production hardening & performance benchmarks | **Sakshi** | Day 3 | Open |
-| **#70** | F7+F8: Bookmarks, Download, Progress (end-to-end) | **Sanika** | Day 2 | **In progress** |
-| **#71** | Regression testing & demo prep | **Sanika** | Day 3 | Open |
-| **#68** | Frontend polish + download UI | **Esha** | Day 2-3 | Open |
