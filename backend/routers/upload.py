@@ -1,8 +1,9 @@
 import os
 import shutil
-from fastapi import APIRouter, UploadFile, File, HTTPException, Query
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from database import get_db
 from pipeline import process_upload, TEMP_DIR
+from auth import get_current_user
 
 router = APIRouter()
 
@@ -11,7 +12,7 @@ ALLOWED_EXTENSIONS = {".pdf", ".docx"}
 
 
 @router.post("/upload")
-async def upload_document(file: UploadFile = File(...), user_id: int = Query(default=1)):
+async def upload_document(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(400, "Only PDF and DOCX files are supported")
@@ -31,31 +32,32 @@ async def upload_document(file: UploadFile = File(...), user_id: int = Query(def
     conn = get_db()
     cursor = conn.execute(
         "INSERT INTO uploads (user_id, filename, status) VALUES (?, ?, 'processing')",
-        (user_id, file.filename),
+        (user["id"], file.filename),
     )
     upload_id = cursor.lastrowid
     conn.commit()
     conn.close()
 
-    process_upload(upload_id, temp_path, user_id)
+    process_upload(upload_id, temp_path, user["id"])
 
     return {"id": upload_id, "filename": file.filename, "status": "processing"}
 
 
 @router.get("/uploads")
-def list_uploads():
+def list_uploads(user: dict = Depends(get_current_user)):
     conn = get_db()
     rows = conn.execute(
-        "SELECT id, filename, status, qa_ready FROM uploads ORDER BY created_at DESC"
+        "SELECT id, filename, status, qa_ready FROM uploads WHERE user_id = ? ORDER BY created_at DESC",
+        (user["id"],),
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
 
 @router.get("/upload/status/{upload_id}")
-def get_upload_status(upload_id: int):
+def get_upload_status(upload_id: int, user: dict = Depends(get_current_user)):
     conn = get_db()
-    row = conn.execute("SELECT * FROM uploads WHERE id = ?", (upload_id,)).fetchone()
+    row = conn.execute("SELECT * FROM uploads WHERE id = ? AND user_id = ?", (upload_id, user["id"])).fetchone()
     if not row:
         conn.close()
         raise HTTPException(404, "Upload not found")

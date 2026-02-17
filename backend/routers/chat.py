@@ -1,8 +1,9 @@
 import json
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from database import get_db
+from auth import get_current_user
 from rag import retrieve_chunks
 from config import OLLAMA_HOST, LLM_MODEL, LLM_TIMEOUT, MAX_EXCHANGES_PER_DOC
 
@@ -39,7 +40,6 @@ USE_CASE_INSTRUCTIONS = {
 class AskRequest(BaseModel):
     upload_id: int
     question: str
-    user_id: int = 1
 
 class AskResponse(BaseModel):
     answer: str
@@ -88,6 +88,19 @@ def _check_exchange_limit(upload_id: int) -> int:
                 detail=f"Exchange limit reached ({MAX_EXCHANGES_PER_DOC} questions per document).",
             )
         return count
+    finally:
+        db.close()
+
+
+def _verify_upload_ownership(upload_id: int, user_id: int) -> None:
+    db = get_db()
+    try:
+        row = db.execute(
+            "SELECT id FROM uploads WHERE id = ? AND user_id = ?",
+            (upload_id, user_id),
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Upload not found")
     finally:
         db.close()
 
@@ -181,11 +194,12 @@ def _save_exchange(
 # ---------------------------------------------------------------------------
 
 @router.post("/chat/ask", response_model=AskResponse)
-async def ask(req: AskRequest):
+async def ask(req: AskRequest, user: dict = Depends(get_current_user)):
+    _verify_upload_ownership(req.upload_id, user["id"])
     _check_qa_ready(req.upload_id)
     current_count = _check_exchange_limit(req.upload_id)
 
-    prefs = _get_user_preferences(req.user_id)
+    prefs = _get_user_preferences(user["id"])
 
     try:
         chunks = await retrieve_chunks(req.question, req.upload_id)
@@ -216,7 +230,8 @@ async def ask(req: AskRequest):
 
 
 @router.get("/chat/history/{upload_id}")
-async def get_history(upload_id: int):
+async def get_history(upload_id: int, user: dict = Depends(get_current_user)):
+    _verify_upload_ownership(upload_id, user["id"])
     db = get_db()
     try:
         rows = db.execute(
@@ -239,7 +254,8 @@ async def get_history(upload_id: int):
 
 
 @router.get("/chat/status/{upload_id}")
-async def chat_status(upload_id: int):
+async def chat_status(upload_id: int, user: dict = Depends(get_current_user)):
+    _verify_upload_ownership(upload_id, user["id"])
     db = get_db()
     try:
         upload = db.execute(

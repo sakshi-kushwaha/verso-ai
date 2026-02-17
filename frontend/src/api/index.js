@@ -16,6 +16,19 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+// Auto-redirect to login on 401 (expired/invalid token)
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('verso_token')
+      localStorage.removeItem('verso_user')
+      window.location.href = '/login'
+    }
+    return Promise.reject(error)
+  }
+)
+
 // --- Auth ---
 export async function signup(name, password) {
   const { data } = await api.post('/auth/signup', { name, password })
@@ -71,18 +84,14 @@ export async function getFlashcards(uploadId) {
 }
 
 // Save onboarding preferences (upsert)
-export async function savePreferences(prefs, userId = 1) {
-  const { data } = await api.put('/onboarding/preferences', prefs, {
-    params: { user_id: userId },
-  })
+export async function savePreferences(prefs) {
+  const { data } = await api.put('/onboarding/preferences', prefs)
   return data // { status, user_id }
 }
 
 // Get onboarding preferences
-export async function getPreferences(userId = 1) {
-  const { data } = await api.get('/onboarding/preferences', {
-    params: { user_id: userId },
-  })
+export async function getPreferences() {
+  const { data } = await api.get('/onboarding/preferences')
   return data
 }
 
@@ -93,11 +102,10 @@ export async function getUploads() {
 }
 
 // Chat Q&A
-export async function askChat(uploadId, question, userId = 1) {
+export async function askChat(uploadId, question) {
   const { data } = await api.post('/chat/ask', {
     upload_id: uploadId,
     question,
-    user_id: userId,
   }, { timeout: 120000 })
   return data // { answer, sources, exchange_count, limit }
 }
