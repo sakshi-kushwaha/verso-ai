@@ -10,14 +10,39 @@ TEMP_DIR = os.path.join(os.path.dirname(__file__), "data", "temp")
 BATCH_SIZE = 5
 
 
-def process_upload(upload_id: int, filepath: str):
+def process_upload(upload_id: int, filepath: str, user_id: int = 1):
     """Run the full pipeline in a background thread."""
-    thread = threading.Thread(target=_run_pipeline, args=(upload_id, filepath), daemon=True)
+    thread = threading.Thread(target=_run_pipeline, args=(upload_id, filepath, user_id), daemon=True)
     thread.start()
 
 
-def _run_pipeline(upload_id: int, filepath: str):
+def _get_user_prefs(user_id: int) -> dict:
+    """Fetch user preferences for personalized reel generation."""
+    conn = get_db()
     try:
+        row = conn.execute(
+            "SELECT learning_style, content_depth, use_case, flashcard_difficulty "
+            "FROM user_preferences WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+
+    if not row:
+        return {
+            "learning_style": "mixed",
+            "content_depth": "balanced",
+            "use_case": "learning",
+            "flashcard_difficulty": "medium",
+        }
+    return dict(row)
+
+
+def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
+    try:
+        # Step 0: Fetch user preferences for personalized generation
+        prefs = _get_user_prefs(user_id)
+
         # Step 1: Parse document
         _update_progress(upload_id, 5, "parsing")
         pages = parse_document(filepath)
@@ -48,7 +73,7 @@ def _run_pipeline(upload_id: int, filepath: str):
             batch = sections[i:i + BATCH_SIZE]
             batch_text = "\n".join(s["text"] for s in batch)
 
-            result = generate_reels(batch_text, doc_type)
+            result = generate_reels(batch_text, doc_type, prefs)
 
             for reel in result.get("reels", []):
                 _save_reel(upload_id, reel, batch[0].get("start_page", i + 1))

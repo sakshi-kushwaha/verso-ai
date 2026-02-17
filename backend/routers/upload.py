@@ -1,6 +1,6 @@
 import os
 import shutil
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Query
 from database import get_db
 from pipeline import process_upload, TEMP_DIR
 
@@ -11,7 +11,7 @@ ALLOWED_EXTENSIONS = {".pdf", ".docx"}
 
 
 @router.post("/upload")
-async def upload_document(file: UploadFile = File(...)):
+async def upload_document(file: UploadFile = File(...), user_id: int = Query(default=1)):
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(400, "Only PDF and DOCX files are supported")
@@ -30,14 +30,14 @@ async def upload_document(file: UploadFile = File(...)):
 
     conn = get_db()
     cursor = conn.execute(
-        "INSERT INTO uploads (filename, status) VALUES (?, 'processing')",
-        (file.filename,),
+        "INSERT INTO uploads (user_id, filename, status) VALUES (?, ?, 'processing')",
+        (user_id, file.filename),
     )
     upload_id = cursor.lastrowid
     conn.commit()
     conn.close()
 
-    process_upload(upload_id, temp_path)
+    process_upload(upload_id, temp_path, user_id)
 
     return {"id": upload_id, "filename": file.filename, "status": "processing"}
 

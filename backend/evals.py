@@ -1,0 +1,469 @@
+"""
+Verso Prompt Evaluation & Benchmarking (DSPy-based)
+
+Runs 5 test documents x 8 preference combos = 40 eval tests.
+Scores each output on 6 metrics. Prints scorecard + saves JSON.
+
+Usage:
+    cd backend
+    python evals.py              # full eval (needs Ollama running)
+    python evals.py --dry-run    # test metrics only (no LLM calls)
+"""
+
+import json
+import re
+import sys
+import os
+from datetime import datetime
+from difflib import SequenceMatcher
+
+try:
+    import dspy
+    HAS_DSPY = True
+except ImportError:
+    HAS_DSPY = False
+
+from config import OLLAMA_HOST, LLM_MODEL
+from llm import generate_reels
+from eval_fixtures import TEST_DOCS, EVAL_COMBOS
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# DSPy Setup (optional — eval metrics work without it)
+# ═══════════════════════════════════════════════════════════════════════════
+
+if HAS_DSPY:
+    class ReelGenerationSignature(dspy.Signature):
+        """Generate learning reels and flashcards from document text."""
+        text: str = dspy.InputField(desc="Document text")
+        doc_type: str = dspy.InputField(desc="Document classification")
+        learning_style: str = dspy.InputField(desc="visual/auditory/reading/mixed")
+        content_depth: str = dspy.InputField(desc="brief/balanced/detailed")
+        use_case: str = dspy.InputField(desc="exam/work/learning/research")
+        flashcard_difficulty: str = dspy.InputField(desc="easy/medium/hard")
+        reels_json: str = dspy.OutputField(desc='JSON with "reels" and "flashcards" arrays')
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Metrics — each returns (pass: bool, details: dict)
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _count_sentences(text: str) -> int:
+    """Count sentences by splitting on sentence-ending punctuation."""
+    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+    return len([s for s in sentences if len(s.strip()) > 3])
+
+
+def metric_json_valid(raw_output: str, **_) -> tuple[bool, dict]:
+    """Metric 1: Does the output parse as valid JSON with reels + flashcards?"""
+    try:
+        data = json.loads(raw_output) if isinstance(raw_output, str) else raw_output
+        has_reels = "reels" in data and isinstance(data["reels"], list)
+        has_fcs = "flashcards" in data and isinstance(data["flashcards"], list)
+        return has_reels and has_fcs, {"parsed": True, "has_reels": has_reels, "has_flashcards": has_fcs}
+    except (json.JSONDecodeError, TypeError):
+        return False, {"parsed": False}
+
+
+def metric_schema_complete(parsed: dict, **_) -> tuple[bool, dict]:
+    """Metric 2: All required fields present in every reel and flashcard?"""
+    reel_fields = {"title", "summary", "category", "keywords"}
+    fc_fields = {"question", "answer"}
+    missing = []
+
+    for i, reel in enumerate(parsed.get("reels", [])):
+        for f in reel_fields:
+            if f not in reel or not reel[f]:
+                missing.append(f"reel[{i}].{f}")
+
+    for i, fc in enumerate(parsed.get("flashcards", [])):
+        for f in fc_fields:
+            if f not in fc or not fc[f]:
+                missing.append(f"flashcard[{i}].{f}")
+
+    return len(missing) == 0, {"missing_fields": missing}
+
+
+def metric_depth_match(parsed: dict, prefs: dict, **_) -> tuple[bool, dict]:
+    """Metric 3: Summary sentence count matches requested depth?"""
+    depth = prefs.get("content_depth", "balanced")
+    expected = {"brief": (1, 2), "balanced": (2, 4), "detailed": (3, 6)}
+    lo, hi = expected.get(depth, (1, 5))
+
+    reels = parsed.get("reels", [])
+    if not reels:
+        return False, {"reason": "no reels", "expected": f"{lo}-{hi} sentences"}
+
+    counts = []
+    for reel in reels:
+        count = _count_sentences(reel.get("summary", ""))
+        counts.append(count)
+
+    avg = sum(counts) / len(counts) if counts else 0
+    passed = lo <= avg <= hi
+    return passed, {"sentence_counts": counts, "avg": round(avg, 1), "expected_range": f"{lo}-{hi}"}
+
+
+def metric_style_match(parsed: dict, prefs: dict, **_) -> tuple[bool, dict]:
+    """Metric 4: Output follows the requested learning style?"""
+    style = prefs.get("learning_style", "mixed")
+    reels = parsed.get("reels", [])
+    if not reels:
+        return False, {"reason": "no reels"}
+
+    all_summaries = " ".join(r.get("summary", "") for r in reels)
+
+    if style == "mixed":
+        return True, {"reason": "mixed always passes"}
+
+    if style == "visual":
+        markers = {
+            "bold": bool(re.search(r'\*\*\w+', all_summaries)),
+            "bullets": bool(re.search(r'[-•]\s', all_summaries)),
+            "numbers": bool(re.search(r'\d+\.\s', all_summaries)),
+        }
+        found = sum(markers.values())
+        return found >= 1, {"style": "visual", "markers": markers}
+
+    if style == "auditory":
+        conversational = ["you", "imagine", "think of", "let's", "we", "picture"]
+        lower = all_summaries.lower()
+        found = [w for w in conversational if w in lower]
+        return len(found) >= 1, {"style": "auditory", "markers_found": found}
+
+    if style == "reading":
+        has_bullets = bool(re.search(r'[-•]\s', all_summaries))
+        words = all_summaries.split()
+        avg_sentence_len = len(words) / max(1, _count_sentences(all_summaries))
+        return not has_bullets and avg_sentence_len > 10, {
+            "style": "reading", "has_bullets": has_bullets, "avg_sentence_words": round(avg_sentence_len, 1)
+        }
+
+    return True, {"reason": f"unknown style: {style}"}
+
+
+def metric_content_quality(parsed: dict, source_text: str, **_) -> tuple[float, dict]:
+    """Metric 5: Content quality score (0-1). Checks title, keywords, originality."""
+    reels = parsed.get("reels", [])
+    if not reels:
+        return 0.0, {"reason": "no reels"}
+
+    checks = {}
+    total = 0
+    passed = 0
+
+    # Check 1: At least 1 reel
+    total += 1
+    checks["has_reels"] = len(reels) > 0
+    passed += int(checks["has_reels"])
+
+    # Check 2: Titles under 60 chars
+    total += 1
+    title_ok = all(len(r.get("title", "")) <= 60 for r in reels)
+    checks["titles_short"] = title_ok
+    passed += int(title_ok)
+
+    # Check 3: Summary is not a verbatim copy (< 80% overlap with source)
+    total += 1
+    all_summaries = " ".join(r.get("summary", "") for r in reels)
+    overlap = SequenceMatcher(None, source_text[:500].lower(), all_summaries[:500].lower()).ratio()
+    checks["not_verbatim"] = overlap < 0.80
+    checks["overlap_ratio"] = round(overlap, 3)
+    passed += int(checks["not_verbatim"])
+
+    # Check 4: Keywords contain at least 1 word from source
+    total += 1
+    source_words = set(re.findall(r'\b\w{4,}\b', source_text.lower()))
+    all_kw = " ".join(r.get("keywords", "") for r in reels).lower()
+    kw_words = set(re.findall(r'\b\w{4,}\b', all_kw))
+    common = source_words & kw_words
+    checks["keywords_relevant"] = len(common) > 0
+    checks["common_keywords"] = list(common)[:5]
+    passed += int(checks["keywords_relevant"])
+
+    return passed / total, checks
+
+
+def metric_flashcard_quality(parsed: dict, **_) -> tuple[float, dict]:
+    """Metric 6: Flashcard quality score (0-1)."""
+    fcs = parsed.get("flashcards", [])
+    checks = {}
+    total = 0
+    passed = 0
+
+    # Check 1: At least 1 flashcard
+    total += 1
+    checks["has_flashcards"] = len(fcs) > 0
+    passed += int(checks["has_flashcards"])
+
+    if not fcs:
+        return passed / total, checks
+
+    # Check 2: Questions end with ?
+    total += 1
+    q_marks = all(fc.get("question", "").strip().endswith("?") for fc in fcs)
+    checks["questions_have_qmark"] = q_marks
+    passed += int(q_marks)
+
+    # Check 3: Answers are substantial (>= 10 chars)
+    total += 1
+    answers_ok = all(len(fc.get("answer", "").strip()) >= 10 for fc in fcs)
+    checks["answers_substantial"] = answers_ok
+    passed += int(answers_ok)
+
+    # Check 4: Question and answer are different
+    total += 1
+    different = all(fc.get("question", "").strip() != fc.get("answer", "").strip() for fc in fcs)
+    checks["qa_different"] = different
+    passed += int(different)
+
+    return passed / total, checks
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Eval Runner
+# ═══════════════════════════════════════════════════════════════════════════
+
+ALL_METRICS = [
+    ("json_valid", None),
+    ("schema_complete", None),
+    ("depth_match", None),
+    ("style_match", None),
+    ("content_quality", None),
+    ("flashcard_quality", None),
+]
+
+
+def run_single_eval(doc: dict, prefs: dict, dry_run: bool = False) -> dict:
+    """Run one eval: generate reels + score on all metrics."""
+    text = doc["text"]
+    doc_type = doc["doc_type"]
+
+    # Generate output
+    if dry_run:
+        # Use a dummy output for testing metrics locally
+        raw = {
+            "reels": [{"title": "Test Reel", "summary": "This is a test summary for dry run.", "category": "general", "keywords": "test, dry run"}],
+            "flashcards": [{"question": "What is this?", "answer": "This is a dry run test of the eval system."}],
+        }
+    else:
+        raw = generate_reels(text, doc_type, prefs)
+
+    raw_str = json.dumps(raw) if isinstance(raw, dict) else str(raw)
+
+    # Score all metrics
+    results = {}
+
+    # 1. JSON validity
+    ok, details = metric_json_valid(raw_str)
+    results["json_valid"] = {"pass": ok, **details}
+
+    # Parse for remaining metrics
+    parsed = raw if isinstance(raw, dict) else {}
+    try:
+        parsed = json.loads(raw_str) if isinstance(raw_str, str) else raw
+    except (json.JSONDecodeError, TypeError):
+        parsed = {"reels": [], "flashcards": []}
+
+    # 2. Schema
+    ok, details = metric_schema_complete(parsed)
+    results["schema_complete"] = {"pass": ok, **details}
+
+    # 3. Depth
+    ok, details = metric_depth_match(parsed, prefs)
+    results["depth_match"] = {"pass": ok, **details}
+
+    # 4. Style
+    ok, details = metric_style_match(parsed, prefs)
+    results["style_match"] = {"pass": ok, **details}
+
+    # 5. Content quality
+    score, details = metric_content_quality(parsed, text)
+    results["content_quality"] = {"score": score, "pass": score >= 0.75, **details}
+
+    # 6. Flashcard quality
+    score, details = metric_flashcard_quality(parsed)
+    results["flashcard_quality"] = {"score": score, "pass": score >= 0.75, **details}
+
+    return {
+        "doc": doc["name"],
+        "doc_type": doc_type,
+        "prefs": prefs["label"],
+        "output": raw,
+        "metrics": results,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Scorecard Printer
+# ═══════════════════════════════════════════════════════════════════════════
+
+def print_scorecard(all_results: list[dict]):
+    """Print a formatted scorecard from eval results."""
+    total_tests = len(all_results)
+    metric_names = ["json_valid", "schema_complete", "depth_match", "style_match", "content_quality", "flashcard_quality"]
+
+    print()
+    print("=" * 60)
+    print(f" VERSO PROMPT EVAL")
+    print(f" Model: {LLM_MODEL}  |  Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    print(f" Tests: {total_tests}")
+    print("=" * 60)
+
+    # Per-doc results
+    current_doc = None
+    for r in all_results:
+        if r["doc"] != current_doc:
+            current_doc = r["doc"]
+            print(f"\nDOC: {r['doc']} ({r['doc_type']})")
+
+        m = r["metrics"]
+        checks = []
+        for name in metric_names[:4]:
+            symbol = "+" if m[name]["pass"] else "-"
+            checks.append(f"{name[:6]} {symbol}")
+
+        cq = m["content_quality"]["score"]
+        fq = m["flashcard_quality"]["score"]
+        checks.append(f"content {cq:.0%}")
+        checks.append(f"fc {fq:.0%}")
+
+        print(f"  {r['prefs']:<35s}  {' | '.join(checks)}")
+
+    # Summary by metric
+    print()
+    print("-" * 60)
+    print("RESULTS BY METRIC:")
+    for name in metric_names:
+        passed = sum(1 for r in all_results if r["metrics"][name]["pass"])
+        pct = passed / total_tests * 100 if total_tests else 0
+
+        if name in ("content_quality", "flashcard_quality"):
+            avg_score = sum(r["metrics"][name].get("score", 0) for r in all_results) / total_tests
+            print(f"  {name:<22s}  {passed}/{total_tests}  ({pct:5.1f}%)  [avg: {avg_score:.2f}]")
+        else:
+            print(f"  {name:<22s}  {passed}/{total_tests}  ({pct:5.1f}%)")
+
+    # Summary by style
+    print()
+    print("RESULTS BY STYLE:")
+    styles = ["visual", "auditory", "reading", "mixed"]
+    style_scores = {}
+    for style in styles:
+        style_results = [r for r in all_results if style in r["prefs"]]
+        if style_results:
+            score = sum(
+                sum(1 for name in metric_names if r["metrics"][name]["pass"])
+                for r in style_results
+            ) / (len(style_results) * len(metric_names)) * 100
+            style_scores[style] = score
+    print("  " + "  |  ".join(f"{s}: {v:.0f}%" for s, v in style_scores.items()))
+
+    # Summary by depth
+    print()
+    print("RESULTS BY DEPTH:")
+    depths = ["brief", "balanced", "detailed"]
+    depth_scores = {}
+    for depth in depths:
+        depth_results = [r for r in all_results if depth in r["prefs"]]
+        if depth_results:
+            score = sum(
+                sum(1 for name in metric_names if r["metrics"][name]["pass"])
+                for r in depth_results
+            ) / (len(depth_results) * len(metric_names)) * 100
+            depth_scores[depth] = score
+    print("  " + "  |  ".join(f"{d}: {v:.0f}%" for d, v in depth_scores.items()))
+
+    # Overall
+    all_passed = sum(
+        sum(1 for name in metric_names if r["metrics"][name]["pass"])
+        for r in all_results
+    )
+    all_total = total_tests * len(metric_names)
+    overall = all_passed / all_total * 100 if all_total else 0
+
+    print()
+    print(f"OVERALL SCORE: {overall:.1f}%")
+    print("=" * 60)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Main
+# ═══════════════════════════════════════════════════════════════════════════
+
+def main():
+    dry_run = "--dry-run" in sys.argv
+
+    if dry_run:
+        print("DRY RUN MODE — testing metrics with dummy outputs (no Ollama needed)")
+    else:
+        print(f"Connecting to Ollama at {OLLAMA_HOST} with model {LLM_MODEL}...")
+        if HAS_DSPY:
+            try:
+                lm = dspy.LM(
+                    model=f"ollama_chat/{LLM_MODEL}",
+                    api_base=OLLAMA_HOST,
+                    api_key="",
+                )
+                dspy.configure(lm=lm)
+                print("DSPy configured with Ollama")
+            except Exception as e:
+                print(f"DSPy config warning (non-fatal, using direct calls): {e}")
+        else:
+            print("DSPy not installed — using direct generate_reels() calls")
+
+    total = len(TEST_DOCS) * len(EVAL_COMBOS)
+    print(f"\nRunning {total} eval tests ({len(TEST_DOCS)} docs x {len(EVAL_COMBOS)} combos)...\n")
+
+    all_results = []
+    for doc in TEST_DOCS:
+        for combo in EVAL_COMBOS:
+            label = combo["label"]
+            print(f"  [{len(all_results)+1}/{total}] {doc['name']} + {label}...", end=" ", flush=True)
+            try:
+                result = run_single_eval(doc, combo, dry_run=dry_run)
+                passed = sum(1 for m in result["metrics"].values() if m.get("pass", False))
+                print(f"{passed}/6 passed")
+                all_results.append(result)
+            except Exception as e:
+                print(f"ERROR: {e}")
+                all_results.append({
+                    "doc": doc["name"],
+                    "doc_type": doc["doc_type"],
+                    "prefs": label,
+                    "output": None,
+                    "metrics": {n: {"pass": False, "error": str(e)} for n in
+                                ["json_valid", "schema_complete", "depth_match",
+                                 "style_match", "content_quality", "flashcard_quality"]},
+                })
+
+    # Print scorecard
+    print_scorecard(all_results)
+
+    # Save results
+    output_path = os.path.join(os.path.dirname(__file__), "eval_results.json")
+    save_data = {
+        "model": LLM_MODEL,
+        "date": datetime.now().isoformat(),
+        "dry_run": dry_run,
+        "total_tests": len(all_results),
+        "results": [],
+    }
+    for r in all_results:
+        entry = {
+            "doc": r["doc"],
+            "doc_type": r["doc_type"],
+            "prefs": r["prefs"],
+            "metrics": r["metrics"],
+        }
+        # Don't save full LLM output to keep file small
+        save_data["results"].append(entry)
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(save_data, f, indent=2, ensure_ascii=False, default=str)
+
+    print(f"\nResults saved to: {output_path}")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,34 +1,89 @@
-DOC_TYPE_PROMPT = """Classify this document into exactly one category: textbook, research_paper, business, fiction, technical, or general.
+DOC_TYPE_PROMPT = """Classify this document into exactly one category.
 
-Return ONLY the category name, nothing else.
+Categories: textbook, research_paper, business, fiction, technical, general
+
+Rules:
+- textbook: chapters, exercises, learning objectives
+- research_paper: abstract, methodology, citations, findings
+- business: reports, proposals, memos, financial data
+- fiction: narrative, characters, dialogue, plot
+- technical: API docs, manuals, specifications, code
+- general: anything that doesn't fit above
 
 Text:
-{text}"""
+{text}
 
+Category:"""
 
-REEL_GENERATION_PROMPT = """You are a learning content creator. Given the following text from a {doc_type} document, generate reels and flashcards.
+# ---------------------------------------------------------------------------
+# Personalization dicts (mirrors chat.py pattern)
+# ---------------------------------------------------------------------------
 
-Each reel is a bite-sized learning card. Each flashcard is a question-answer pair for self-testing.
+REEL_STYLE_INSTRUCTIONS = {
+    "visual": "Use bold **key terms**, numbered steps, and bullet-point structure. Summaries should be scannable with clear visual hierarchy.",
+    "auditory": "Write summaries in a warm, conversational tone as if explaining to a friend. Use natural speech patterns.",
+    "reading": "Write summaries as clear, well-structured prose paragraphs. Include full context and nuance.",
+    "mixed": "Balance structure with readability. Use short paragraphs with occasional bold terms.",
+}
 
-Return ONLY valid JSON in this exact format, no other text:
-{{
-  "reels": [
-    {{
-      "title": "short catchy title",
-      "summary": "2-3 sentence summary of the key idea",
-      "category": "topic category",
-      "keywords": "comma separated keywords"
-    }}
-  ],
-  "flashcards": [
-    {{
-      "question": "a question about the content",
-      "answer": "concise answer"
-    }}
-  ]
-}}
+REEL_DEPTH_INSTRUCTIONS = {
+    "brief": "Each reel summary should be 1-2 sentences. Focus only on the single most important idea.",
+    "balanced": "Each reel summary should be 2-3 sentences. Cover the main idea with enough context.",
+    "detailed": "Each reel summary should be 3-4 sentences. Include examples and connections to related concepts.",
+}
+
+REEL_USE_CASE_INSTRUCTIONS = {
+    "exam": "Focus on definitions, formulas, and testable facts. Flashcard questions should target exam-style recall.",
+    "work": "Focus on practical takeaways and actionable insights. Flashcard questions should test application.",
+    "learning": "Focus on understanding and why things work. Flashcard questions should test comprehension.",
+    "research": "Focus on methodology, evidence, and findings. Flashcard questions should test analytical thinking.",
+}
+
+DOC_TYPE_INSTRUCTIONS = {
+    "textbook": "Extract key concepts, definitions, and learning objectives. Each reel should teach one concept.",
+    "research_paper": "Extract findings, methodology insights, and conclusions. Each reel should cover one finding.",
+    "business": "Extract key metrics, decisions, and recommendations. Each reel should highlight one business insight.",
+    "fiction": "Extract themes, character developments, and plot turning points. Each reel should capture one narrative moment.",
+    "technical": "Extract specifications, procedures, and important parameters. Each reel should explain one technical concept.",
+    "general": "Extract the most important ideas and facts. Each reel should present one key point.",
+}
+
+FLASHCARD_DIFFICULTY_INSTRUCTIONS = {
+    "easy": "Flashcard questions should be straightforward recall — who, what, when, where. Answers should be short and direct.",
+    "medium": "Flashcard questions should require understanding — explain, compare, describe. Answers should show comprehension.",
+    "hard": "Flashcard questions should require analysis — why, how, what if, evaluate. Answers should demonstrate deep understanding.",
+}
+
+# ---------------------------------------------------------------------------
+# Few-shot example (one example to show format without bloating prompt)
+# ---------------------------------------------------------------------------
+
+REEL_FEW_SHOT = """Example:
+Input: "Photosynthesis is the process by which plants convert light energy into chemical energy. Chlorophyll in the leaves absorbs sunlight. The plant uses CO2 from air and water from soil to produce glucose and oxygen."
+Output: {"reels":[{"title":"How Plants Make Food","summary":"Photosynthesis converts light energy into chemical energy using chlorophyll. Plants absorb CO2 and water to produce glucose and oxygen, powering life on Earth.","category":"Biology","keywords":"photosynthesis, chlorophyll, glucose, oxygen"}],"flashcards":[{"question":"What are the inputs and outputs of photosynthesis?","answer":"Inputs: light energy, CO2, and water. Outputs: glucose and oxygen."}]}"""
+
+# ---------------------------------------------------------------------------
+# Main reel generation prompt
+# ---------------------------------------------------------------------------
+
+REEL_GENERATION_PROMPT = """You are a learning content creator for Verso. Generate reels and flashcards from the text below.
+
+DOCUMENT TYPE: {doc_type}
+{doc_type_instruction}
+
+STYLE: {style_instruction}
+LENGTH: {depth_instruction}
+FOCUS: {use_case_instruction}
+DIFFICULTY: {difficulty_instruction}
+
+{few_shot}
+
+Return ONLY valid JSON matching this schema:
+{{"reels":[{{"title":"short catchy title","summary":"key idea summary","category":"topic","keywords":"comma separated"}}],"flashcards":[{{"question":"question about content","answer":"concise answer"}}]}}
 
 Generate 1-3 reels and 1-3 flashcards based on content density.
 
 Text:
-{text}"""
+{text}
+
+JSON:"""

@@ -1,0 +1,7 @@
+FROM ./verso-qwen2.5-3b.Q4_K_M.gguf
+
+PARAMETER temperature 0.3
+PARAMETER num_ctx 4096
+PARAMETER repeat_penalty 1.1
+
+SYSTEM """You are Verso, a learning content creator. Given document text and user preferences, you generate structured learning reels and flashcards as JSON. Always output valid JSON with "reels" and "flashcards" arrays."""

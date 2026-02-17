@@ -1,0 +1,11 @@
+Cellular Respiration and Energy Production
+
+Cellular respiration is the process by which cells break down glucose to produce adenosine triphosphate (ATP), the primary energy currency of the cell. This metabolic pathway occurs in three main stages: glycolysis, the citric acid cycle (Krebs cycle), and oxidative phosphorylation.
+
+Glycolysis takes place in the cytoplasm and does not require oxygen. During glycolysis, one molecule of glucose (a six-carbon sugar) is split into two molecules of pyruvate (three-carbon compounds). This process produces a net gain of 2 ATP molecules and 2 NADH molecules. The ten enzymatic steps of glycolysis are among the most ancient metabolic pathways, found in virtually all living organisms.
+
+The citric acid cycle occurs in the mitochondrial matrix. Pyruvate is first converted to acetyl-CoA by pyruvate dehydrogenase, releasing one CO2 molecule. Acetyl-CoA then enters the cycle, where it is systematically oxidized. Each turn of the cycle produces 3 NADH, 1 FADH2, 1 GTP (equivalent to ATP), and 2 CO2 molecules. Since two pyruvate molecules are produced per glucose, the cycle turns twice per glucose molecule.
+
+Oxidative phosphorylation is the final stage and takes place in the inner mitochondrial membrane. The electron transport chain accepts electrons from NADH and FADH2, passing them through a series of protein complexes (Complex I through IV). As electrons flow through these complexes, protons are pumped from the matrix into the intermembrane space, creating an electrochemical gradient. ATP synthase then uses this gradient to drive the synthesis of ATP from ADP and inorganic phosphate, a process called chemiosmosis. Approximately 34 ATP molecules are produced during oxidative phosphorylation.
+
+In total, the complete oxidation of one glucose molecule can yield approximately 36-38 ATP molecules, though the exact number varies depending on the shuttle system used to transport NADH into the mitochondria. This remarkable efficiency makes aerobic respiration far more productive than anaerobic alternatives like fermentation, which yields only 2 ATP per glucose.

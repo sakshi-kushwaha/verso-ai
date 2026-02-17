@@ -1,0 +1,13 @@
+TechVenture Inc. — Q4 2025 Earnings Report
+
+Executive Summary: TechVenture closed Q4 2025 with record revenue of $187.4M, a 22% increase year-over-year and 8% above consensus estimates. This performance was driven by exceptional growth in our Enterprise AI Platform segment, which now accounts for 61% of total revenue, up from 48% in Q4 2024.
+
+Revenue Breakdown: Enterprise AI Platform revenue reached $114.3M (+41% YoY), fueled by 47 new enterprise contracts with average deal sizes exceeding $500K ARR. Our mid-market SaaS segment contributed $52.8M (+12% YoY), with net revenue retention improving to 118% from 112% in the prior quarter. Legacy consulting services declined to $20.3M (-15% YoY) as planned, reflecting our strategic pivot toward product-led growth.
+
+Profitability Metrics: Gross margin expanded to 74.8%, up 320 basis points from Q4 2024, primarily due to improved infrastructure utilization and the shift toward higher-margin AI platform deals. Operating margin reached 18.2%, compared to 12.7% in Q4 2024. Adjusted EBITDA was $42.1M (22.5% margin), exceeding our guidance range of $36-39M. Free cash flow was $31.2M, up 67% YoY, with cash conversion improving to 74% of adjusted EBITDA.
+
+Customer Metrics: Total paying customers grew to 2,847 (+18% YoY). Enterprise customers with ARR exceeding $100K reached 312 (+34% YoY). Net Promoter Score improved to 72 from 65, reflecting investments in customer success and platform reliability. Customer acquisition cost for enterprise decreased to $12,400, down from $15,800, driven by increasingly efficient inbound marketing and partner referrals.
+
+Strategic Initiatives: During Q4, we completed the acquisition of NeuralOps for $45M, adding federated learning capabilities to our platform. We opened our first Asia-Pacific office in Singapore with 35 employees and plan to expand to 80 by mid-2026. R&D spending increased to 28% of revenue as we accelerated development of our next-generation model serving infrastructure.
+
+Guidance for Q1 2026: We expect revenue of $195-202M, representing 20-25% YoY growth. Operating margin is expected to be 16-18% as we absorb NeuralOps integration costs and APAC expansion expenses. We are raising our full-year 2026 revenue guidance to $820-850M from $780-810M previously.

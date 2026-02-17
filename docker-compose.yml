@@ -5,6 +5,8 @@ services:
       - "8000:8000"
     environment:
       - OLLAMA_HOST=http://ollama:11434
+    volumes:
+      - ./scripts:/scripts
     depends_on:
       - ollama
     restart: unless-stopped
@@ -23,6 +25,8 @@ services:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_MAX_LOADED_MODELS=1
     restart: unless-stopped
 
 volumes:
