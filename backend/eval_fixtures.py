@@ -111,3 +111,18 @@ EVAL_COMBOS = [
     {"learning_style": "visual",   "content_depth": "brief",    "use_case": "exam",     "flashcard_difficulty": "easy",   "label": "visual+brief+exam"},
     {"learning_style": "reading",  "content_depth": "detailed", "use_case": "research", "flashcard_difficulty": "hard",   "label": "reading+detailed+research"},
 ]
+
+# ---------------------------------------------------------------------------
+# Quick eval pairs — 8 representative tests for fast iteration
+# ---------------------------------------------------------------------------
+
+QUICK_EVAL_PAIRS = [
+    ("biology_textbook",   "mixed+balanced+learning"),
+    ("biology_textbook",   "visual+balanced+learning"),
+    ("ml_research_paper",  "reading+balanced+learning"),
+    ("ml_research_paper",  "auditory+balanced+exam"),
+    ("quarterly_report",   "mixed+brief+work"),
+    ("short_story",        "mixed+detailed+research"),
+    ("api_documentation",  "visual+brief+exam"),
+    ("api_documentation",  "reading+detailed+research"),
+]

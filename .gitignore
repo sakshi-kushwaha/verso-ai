@@ -41,3 +41,11 @@ test-results/
 
 # Logs
 *.log
+
+# Fine-tuned model (too large for git)
+scripts/verso-qwen2.5-3b_gguf/
+*.gguf
+
+# Generated eval/training data
+scripts/training_data_raw.jsonl
+backend/eval_results.json

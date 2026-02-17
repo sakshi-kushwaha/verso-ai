@@ -16,20 +16,20 @@ Text:
 Category:"""
 
 # ---------------------------------------------------------------------------
-# Personalization dicts (mirrors chat.py pattern)
+# Personalization dicts
 # ---------------------------------------------------------------------------
 
 REEL_STYLE_INSTRUCTIONS = {
-    "visual": "Use bold **key terms**, numbered steps, and bullet-point structure. Summaries should be scannable with clear visual hierarchy.",
-    "auditory": "Write summaries in a warm, conversational tone as if explaining to a friend. Use natural speech patterns.",
-    "reading": "Write summaries as clear, well-structured prose paragraphs. Include full context and nuance.",
+    "visual": "Use short, scannable sentences. Include structured language like 'First', 'Second', 'Key point' to organize ideas.",
+    "auditory": "Write as if talking directly to the reader. You MUST use at least one of these words in every summary: 'you', 'imagine', 'think of', 'let\\'s', 'consider', 'notice', 'here\\'s the thing', 'basically'. Be warm and conversational.",
+    "reading": "Write in flowing prose paragraphs with no bullet points. Every sentence MUST be at least 12 words long. Use complete, detailed sentences with full context — never use short fragments.",
     "mixed": "Balance structure with readability. Use short paragraphs with occasional bold terms.",
 }
 
 REEL_DEPTH_INSTRUCTIONS = {
-    "brief": "Each reel summary should be 1-2 sentences. Focus only on the single most important idea.",
-    "balanced": "Each reel summary should be 2-3 sentences. Cover the main idea with enough context.",
-    "detailed": "Each reel summary should be 3-4 sentences. Include examples and connections to related concepts.",
+    "brief": "Each reel summary should be 1-3 sentences and under 40 words. One core idea only. Be concise. IMPORTANT: You must still generate flashcards even when reels are brief.",
+    "balanced": "Each reel summary should be 2-4 sentences and 40-80 words. Cover the main idea with supporting context.",
+    "detailed": "Each reel summary MUST be at least 3 sentences and 80-120 words. Include examples, explanations, and connections to related concepts. Never write a single-sentence summary for detailed mode.",
 }
 
 REEL_USE_CASE_INSTRUCTIONS = {
@@ -49,18 +49,18 @@ DOC_TYPE_INSTRUCTIONS = {
 }
 
 FLASHCARD_DIFFICULTY_INSTRUCTIONS = {
-    "easy": "Flashcard questions should be straightforward recall — who, what, when, where. Answers should be short and direct.",
-    "medium": "Flashcard questions should require understanding — explain, compare, describe. Answers should show comprehension.",
-    "hard": "Flashcard questions should require analysis — why, how, what if, evaluate. Answers should demonstrate deep understanding.",
+    "easy": "Flashcard questions should be straightforward recall — who, what, when, where. Answers should be short and direct (but at least 10 words).",
+    "medium": "Flashcard questions should require understanding — explain, compare, describe. Answers should show comprehension (at least 10 words).",
+    "hard": "Flashcard questions should require analysis — why, how, what if, evaluate. Answers should demonstrate deep understanding (at least 10 words).",
 }
 
 # ---------------------------------------------------------------------------
-# Few-shot example (one example to show format without bloating prompt)
+# Few-shot example
 # ---------------------------------------------------------------------------
 
 REEL_FEW_SHOT = """Example:
 Input: "Photosynthesis is the process by which plants convert light energy into chemical energy. Chlorophyll in the leaves absorbs sunlight. The plant uses CO2 from air and water from soil to produce glucose and oxygen."
-Output: {"reels":[{"title":"How Plants Make Food","summary":"Photosynthesis converts light energy into chemical energy using chlorophyll. Plants absorb CO2 and water to produce glucose and oxygen, powering life on Earth.","category":"Biology","keywords":"photosynthesis, chlorophyll, glucose, oxygen"}],"flashcards":[{"question":"What are the inputs and outputs of photosynthesis?","answer":"Inputs: light energy, CO2, and water. Outputs: glucose and oxygen."}]}"""
+Output: {{"reels":[{{"title":"How Plants Make Food","summary":"Photosynthesis converts light energy into chemical energy using chlorophyll. Plants absorb CO2 and water to produce glucose and oxygen, powering life on Earth.","category":"Biology","keywords":"photosynthesis, chlorophyll, glucose, oxygen"}}],"flashcards":[{{"question":"What are the inputs and outputs of photosynthesis?","answer":"Inputs: light energy, CO2, and water. Outputs: glucose and oxygen."}}]}}"""
 
 # ---------------------------------------------------------------------------
 # Main reel generation prompt
@@ -78,17 +78,15 @@ DIFFICULTY: {difficulty_instruction}
 
 {few_shot}
 
-STRICT RULES:
-1. Return ONLY valid JSON — no markdown, no explanation, no text before or after.
-2. Every reel MUST have all 5 fields: "title", "summary", "narration", "category", "keywords".
-3. Every flashcard MUST have both "question" and "answer".
-4. "keywords" must be a comma-separated string, not a list.
-5. Generate 1-3 reels and 1-3 flashcards based on content density.
-6. If the text is too short or unclear, still produce at least 1 reel and 1 flashcard.
-7. "narration" is a spoken-audio version of the summary. Write it as if explaining to a friend in a warm, conversational tone. Use natural phrasing, no bullet points, no special symbols, no abbreviations. It should sound great when read aloud by a text-to-speech engine.
+RULES:
+1. Return ONLY valid JSON matching this exact schema — no extra text before or after.
+2. You MUST generate at least 1 reel and at least 1 flashcard. Never omit flashcards.
+3. Every flashcard question MUST end with a question mark (?).
+4. Every flashcard answer MUST be at least 10 words long.
+5. Reel titles must be under 60 characters.
+6. "narration" is a spoken-audio version of the summary. Write it as if explaining to a friend in a warm, conversational tone. Use natural phrasing, no bullet points, no special symbols, no abbreviations. It should sound great when read aloud by a text-to-speech engine.
 
-REQUIRED JSON SCHEMA:
-{{"reels":[{{"title":"string","summary":"string","narration":"string","category":"string","keywords":"string"}}],"flashcards":[{{"question":"string","answer":"string"}}]}}
+Schema: {{"reels":[{{"title":"short catchy title","summary":"key idea summary","narration":"spoken version of summary","category":"topic","keywords":"comma separated"}}],"flashcards":[{{"question":"question about content?","answer":"detailed answer at least 10 words long"}}]}}
 
 Text:
 {text}
