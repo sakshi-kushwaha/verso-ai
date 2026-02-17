@@ -55,7 +55,7 @@ export default function LoginPage() {
                 : 'text-text-muted hover:text-text'
             }`}
           >
-            {t === 'signin' ? 'Sign In' : 'Sign Up'}
+            {t === 'signin' ? 'Login' : 'Sign Up'}
           </button>
         ))}
       </div>
@@ -91,12 +91,9 @@ export default function LoginPage() {
         disabled={!username.trim() || !password.trim() || loading}
         className="mt-2"
       >
-        {loading ? 'Please wait...' : tab === 'signin' ? 'Sign In' : 'Create Account'}
+        {loading ? 'Please wait...' : tab === 'signin' ? 'Login' : 'Create Account'}
       </Button>
 
-      <p className="text-center text-text-muted text-xs mt-5">
-        All data stays on your device
-      </p>
     </div>
   )
 }
