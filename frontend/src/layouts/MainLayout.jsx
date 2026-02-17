@@ -1,4 +1,5 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import useStore from '../store/useStore'
 import { Logo, Home, Cards, Chat, Bookmark, Chart, Upload, Logout } from '../components/Icons'
 
 const navItems = [
@@ -17,6 +18,12 @@ const linkClass = ({ isActive }) =>
 
 export default function MainLayout() {
   const navigate = useNavigate()
+  const logout = useStore((s) => s.logout)
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login')
+  }
 
   return (
     <div className="min-h-screen bg-bg">
@@ -32,7 +39,7 @@ export default function MainLayout() {
         </nav>
         <div className="mt-auto">
           <button
-            onClick={() => navigate('/login')}
+            onClick={handleLogout}
             className="flex items-center justify-center w-10 h-10 rounded-xl text-text-muted hover:text-danger transition-colors cursor-pointer"
             title="Logout"
           >

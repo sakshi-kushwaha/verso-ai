@@ -1,6 +1,7 @@
 import { Routes, Route } from 'react-router-dom'
 import MainLayout from './layouts/MainLayout'
 import AuthLayout from './layouts/AuthLayout'
+import ProtectedRoute from './components/ProtectedRoute'
 import FeedPage from './pages/FeedPage'
 import BookmarksPage from './pages/BookmarksPage'
 import UploadPage from './pages/UploadPage'
@@ -14,13 +15,15 @@ import OnboardingPage from './pages/OnboardingPage'
 function App() {
   return (
     <Routes>
-      <Route element={<MainLayout />}>
-        <Route path="/" element={<FeedPage />} />
-        <Route path="/bookmarks" element={<BookmarksPage />} />
-        <Route path="/upload" element={<UploadPage />} />
-        <Route path="/progress" element={<ProgressPage />} />
-        <Route path="/flashcards" element={<FlashcardsPage />} />
-        <Route path="/chat" element={<ChatPage />} />
+      <Route element={<ProtectedRoute />}>
+        <Route element={<MainLayout />}>
+          <Route path="/" element={<FeedPage />} />
+          <Route path="/bookmarks" element={<BookmarksPage />} />
+          <Route path="/upload" element={<UploadPage />} />
+          <Route path="/progress" element={<ProgressPage />} />
+          <Route path="/flashcards" element={<FlashcardsPage />} />
+          <Route path="/chat" element={<ChatPage />} />
+        </Route>
       </Route>
       <Route element={<AuthLayout />}>
         <Route path="/login" element={<LoginPage />} />
