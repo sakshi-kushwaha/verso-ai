@@ -1,7 +1,10 @@
+import logging
 import os
 import asyncio
 import threading
 from database import get_db
+
+log = logging.getLogger(__name__)
 from parser import parse_document, detect_chapters
 from llm import detect_doc_type, generate_reels
 from rag import embed_chunks
@@ -90,7 +93,7 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
         _update_status(upload_id, "done")
 
     except Exception as e:
-        print(f"Pipeline error for upload {upload_id}: {e}")
+        log.exception("Pipeline error for upload %s", upload_id)
         _update_status(upload_id, "error")
 
     finally:
