@@ -50,14 +50,15 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           command_timeout: 5m
           script: |
+            set -e
             cd /root/verso-ai
             git pull origin main
             cd backend
             source venv/bin/activate
             pip install -r requirements.txt --quiet
-            # Restart uvicorn
             pkill -f "uvicorn main:app" || true
             sleep 2
-            nohup uvicorn main:app --host 0.0.0.0 --port 8000 > /root/verso-ai/server.log 2>&1 &
+            nohup bash -c 'cd /root/verso-ai/backend && source venv/bin/activate && uvicorn main:app --host 0.0.0.0 --port 8000' > /root/verso-ai/server.log 2>&1 &
+            disown
             sleep 3
-            curl -s http://localhost:8000/health && echo " => Server is healthy" || echo " => Health check failed"
+            curl -sf http://localhost:8000/health && echo " => Server is healthy" || echo " => Health check failed"
