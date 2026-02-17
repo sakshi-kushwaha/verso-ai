@@ -5,17 +5,30 @@ import useStore from '../store/useStore'
 import Button from '../components/Button'
 import { Upload, File, X } from '../components/Icons'
 
-const PHASES = ['Uploading document...', 'Analyzing content...', 'Extracting key concepts...', 'Generating reels...', 'Finalizing...']
+const STAGE_LABELS = {
+  uploading: 'Uploading document...',
+  parsing: 'Parsing document...',
+  analyzing: 'Analyzing content...',
+  extracting: 'Extracting key concepts...',
+  generating: 'Generating reels...',
+  embedding: 'Building knowledge base...',
+  done: 'Finalizing...',
+}
+
+// Max display progress per stage (creep ceiling before next server update)
+const STAGE_CEIL = { uploading: 4, parsing: 14, analyzing: 19, extracting: 24, generating: 69, embedding: 95, done: 100 }
 
 export default function UploadPage() {
   const navigate = useNavigate()
   const fileRef = useRef(null)
   const pollRef = useRef(null)
+  const tickRef = useRef(null)
+  const serverRef = useRef({ progress: 0, stage: 'uploading' })
   const [file, setFile] = useState(null)
   const [dragOver, setDragOver] = useState(false)
   const [processing, setProcessing] = useState(false)
-  const [progress, setProgress] = useState(0)
-  const [phase, setPhase] = useState(0)
+  const [displayProgress, setDisplayProgress] = useState(0)
+  const [stage, setStage] = useState('uploading')
   const [error, setError] = useState(null)
   const { setUploadStatus, clearUpload } = useStore()
 
@@ -33,50 +46,72 @@ export default function UploadPage() {
     handleFile(f)
   }, [])
 
-  // Cleanup polling on unmount
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current)
+      if (tickRef.current) clearInterval(tickRef.current)
     }
   }, [])
+
+  // Smooth progress ticker — runs every 200ms, creeps display toward ceiling
+  const startTicker = () => {
+    tickRef.current = setInterval(() => {
+      setDisplayProgress((prev) => {
+        const { progress: server, stage: curStage } = serverRef.current
+        const ceil = STAGE_CEIL[curStage] ?? 99
+        if (prev >= 100) return 100
+        // If server is ahead, catch up quickly
+        if (prev < server) return Math.min(prev + 2, server)
+        // Otherwise creep slowly toward stage ceiling
+        if (prev < ceil) return Math.round((prev + 0.4) * 10) / 10
+        return prev
+      })
+    }, 200)
+  }
 
   const pollStatus = (uploadId) => {
     pollRef.current = setInterval(async () => {
       try {
         const status = await getUploadStatus(uploadId)
-        const p = status.progress || 0
-        setProgress(p)
-        setPhase(Math.min(Math.floor(p / 20), PHASES.length - 1))
+        const p = status.progress ?? 0
+        const s = status.stage || 'uploading'
+        serverRef.current = { progress: p, stage: s }
+        setStage(s)
         setUploadStatus({ id: uploadId, status: status.status, progress: p })
 
-        if (status.status === 'done' || p >= 100) {
+        if (status.status === 'done') {
           clearInterval(pollRef.current)
-          setProgress(100)
+          clearInterval(tickRef.current)
+          setDisplayProgress(100)
           setTimeout(() => {
             clearUpload()
             navigate('/')
           }, 600)
         } else if (status.status === 'error') {
           clearInterval(pollRef.current)
+          clearInterval(tickRef.current)
           setError('Processing failed. Please try again.')
           setProcessing(false)
         }
       } catch {
         // Keep polling on transient errors
       }
-    }, 3000)
+    }, 2000)
   }
 
   const startProcessing = async () => {
     setProcessing(true)
-    setProgress(0)
-    setPhase(0)
+    setDisplayProgress(0)
+    setStage('uploading')
+    serverRef.current = { progress: 0, stage: 'uploading' }
     setError(null)
 
     try {
       const data = await uploadDocument(file)
       const id = data.id || data.upload_id
       setUploadStatus({ id, status: 'processing', progress: 0 })
+      startTicker()
       pollStatus(id)
     } catch {
       // API not available — fall back to simulated progress
@@ -86,15 +121,16 @@ export default function UploadPage() {
 
   // Fallback simulated progress when backend is unavailable
   const simulateProgress = () => {
+    const stages = ['parsing', 'analyzing', 'extracting', 'generating', 'embedding', 'done']
     const interval = setInterval(() => {
-      setProgress((prev) => {
+      setDisplayProgress((prev) => {
         const next = prev + 2
         if (next >= 100) {
           clearInterval(interval)
           setTimeout(() => navigate('/'), 600)
           return 100
         }
-        setPhase(Math.min(Math.floor(next / 20), PHASES.length - 1))
+        setStage(stages[Math.min(Math.floor(next / 18), stages.length - 1)])
         return next
       })
     }, 80)
@@ -117,7 +153,7 @@ export default function UploadPage() {
               cx="50" cy="50" r="42" fill="none"
               stroke="url(#progressGrad)" strokeWidth="6"
               strokeLinecap="round"
-              strokeDasharray={`${progress * 2.64} 264`}
+              strokeDasharray={`${displayProgress * 2.64} 264`}
               className="transition-all duration-200"
             />
             <defs>
@@ -128,17 +164,13 @@ export default function UploadPage() {
             </defs>
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-3xl font-bold font-display">{progress}%</span>
+            <span className="text-3xl font-bold font-display">{Math.floor(displayProgress)}%</span>
             <span className="text-text-muted text-xs">Processing</span>
           </div>
         </div>
 
         <p className="text-text-secondary text-sm font-medium mb-2 progress-pulse">
-          {PHASES[phase]}
-        </p>
-
-        <p className="text-text-muted text-xs">
-          Batch {Math.min(Math.floor(progress / 20) + 1, 5)} / 5
+          {STAGE_LABELS[stage] || 'Processing...'}
         </p>
 
         {/* Animated dots */}
