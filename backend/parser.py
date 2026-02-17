@@ -1,18 +1,45 @@
 import re
+import logging
 import pdfplumber
 from docx import Document
 
+log = logging.getLogger(__name__)
+
 CHUNK_SIZE = 3000
+SCANNED_PDF_CHAR_THRESHOLD = 50
+
+
+class EmptyDocumentError(Exception):
+    """Raised when a document has no extractable text."""
+
+
+class ScannedPDFError(Exception):
+    """Raised when a PDF appears to be scanned (image-only, < threshold chars)."""
 
 
 def parse_pdf(filepath: str) -> list[dict]:
     """Extract text page-by-page from PDF."""
     pages = []
     with pdfplumber.open(filepath) as pdf:
+        if len(pdf.pages) == 0:
+            raise EmptyDocumentError("PDF has no pages")
+
         for i, page in enumerate(pdf.pages):
             text = page.extract_text() or ""
             if text.strip():
                 pages.append({"page": i + 1, "text": text.strip()})
+
+    total_chars = sum(len(p["text"]) for p in pages)
+
+    if total_chars == 0:
+        raise EmptyDocumentError("PDF has no extractable text")
+
+    if total_chars < SCANNED_PDF_CHAR_THRESHOLD:
+        raise ScannedPDFError(
+            f"PDF appears to be scanned — only {total_chars} characters extracted. "
+            "Please upload a text-based PDF."
+        )
+
     return pages
 
 
@@ -21,7 +48,7 @@ def parse_docx(filepath: str) -> list[dict]:
     doc = Document(filepath)
     full_text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
     if not full_text.strip():
-        return []
+        raise EmptyDocumentError("DOCX has no extractable text")
     # Split into pseudo-pages of ~3000 chars
     chunks = chunk_text(full_text, CHUNK_SIZE)
     return [{"page": i + 1, "text": c} for i, c in enumerate(chunks)]

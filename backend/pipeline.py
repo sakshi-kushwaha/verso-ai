@@ -3,11 +3,12 @@ import os
 import asyncio
 import threading
 from database import get_db
+import httpx
+from parser import parse_document, detect_chapters, EmptyDocumentError, ScannedPDFError
+from llm import detect_doc_type, generate_reels, OllamaUnavailableError
+from rag import embed_chunks
 
 log = logging.getLogger(__name__)
-from parser import parse_document, detect_chapters
-from llm import detect_doc_type, generate_reels
-from rag import embed_chunks
 
 TEMP_DIR = os.path.join(os.path.dirname(__file__), "data", "temp")
 BATCH_SIZE = 5
@@ -48,9 +49,19 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
 
         # Step 1: Parse document
         _update_progress(upload_id, 5, "parsing")
-        pages = parse_document(filepath)
+        try:
+            pages = parse_document(filepath)
+        except EmptyDocumentError as e:
+            log.warning("Empty document for upload %s: %s", upload_id, e)
+            _update_status(upload_id, "error", str(e))
+            return
+        except ScannedPDFError as e:
+            log.warning("Scanned PDF for upload %s: %s", upload_id, e)
+            _update_status(upload_id, "error", str(e))
+            return
+
         if not pages:
-            _update_status(upload_id, "error")
+            _update_status(upload_id, "error", "Document has no extractable text")
             return
 
         _update_pages(upload_id, len(pages))
@@ -68,6 +79,9 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
         sections = sections[:max_sections]
 
         total_batches = max(1, (len(sections) + BATCH_SIZE - 1) // BATCH_SIZE)
+        batches_completed = 0
+        ollama_failed = False
+
         for i in range(0, len(sections), BATCH_SIZE):
             batch_num = i // BATCH_SIZE
             batch_progress = 20 + int((batch_num / total_batches) * 50)
@@ -76,7 +90,16 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
             batch = sections[i:i + BATCH_SIZE]
             batch_text = "\n".join(s["text"] for s in batch)
 
-            result = generate_reels(batch_text, doc_type, prefs)
+            try:
+                result = generate_reels(batch_text, doc_type, prefs)
+            except OllamaUnavailableError:
+                log.error("Ollama went down during batch %d/%d for upload %s", batch_num + 1, total_batches, upload_id)
+                ollama_failed = True
+                break
+            except httpx.TimeoutException:
+                log.error("Ollama timed out on batch %d/%d for upload %s", batch_num + 1, total_batches, upload_id)
+                ollama_failed = True
+                break
 
             for reel in result.get("reels", []):
                 _save_reel(upload_id, reel, batch[0].get("start_page", i + 1))
@@ -84,17 +107,43 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
             for fc in result.get("flashcards", []):
                 _save_flashcard(upload_id, fc)
 
+            batches_completed += 1
+
+        # If Ollama died mid-batch, save partial results
+        if ollama_failed:
+            if batches_completed > 0:
+                log.info("Saving %d/%d partial batches for upload %s", batches_completed, total_batches, upload_id)
+                _update_status(
+                    upload_id, "partial",
+                    f"Generated {batches_completed}/{total_batches} batches before Ollama became unavailable. "
+                    "Partial reels are available. Re-upload to retry.",
+                )
+                _update_progress(upload_id, 70, "partial")
+            else:
+                _update_status(upload_id, "error", "Ollama is unavailable. Please try again later.")
+            return
+
         # Step 4: Embed chunks for RAG / Chat Q&A
         _update_progress(upload_id, 70, "embedding")
-        asyncio.run(embed_chunks(upload_id, full_text, lambda p: _update_progress(upload_id, 70 + int(p * 25), "embedding")))
-        _set_qa_ready(upload_id)
+        try:
+            asyncio.run(embed_chunks(upload_id, full_text, lambda p: _update_progress(upload_id, 70 + int(p * 25), "embedding")))
+            _set_qa_ready(upload_id)
+        except (httpx.ConnectError, httpx.TimeoutException) as e:
+            log.error("Embedding failed for upload %s: %s", upload_id, e)
+            _update_status(
+                upload_id, "partial",
+                "Reels generated but chat Q&A is unavailable — embedding failed. "
+                "Reels are still viewable.",
+            )
+            _update_progress(upload_id, 95, "partial")
+            return
 
         _update_progress(upload_id, 100, "done")
         _update_status(upload_id, "done")
 
     except Exception as e:
         log.exception("Pipeline error for upload %s", upload_id)
-        _update_status(upload_id, "error")
+        _update_status(upload_id, "error", f"Unexpected error: {type(e).__name__}")
 
     finally:
         try:
@@ -110,9 +159,12 @@ def _update_progress(upload_id: int, progress: int, stage: str):
     conn.close()
 
 
-def _update_status(upload_id: int, status: str):
+def _update_status(upload_id: int, status: str, error_message: str = None):
     conn = get_db()
-    conn.execute("UPDATE uploads SET status = ? WHERE id = ?", (status, upload_id))
+    conn.execute(
+        "UPDATE uploads SET status = ?, error_message = ? WHERE id = ?",
+        (status, error_message, upload_id),
+    )
     conn.commit()
     conn.close()
 

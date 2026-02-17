@@ -78,10 +78,16 @@ DIFFICULTY: {difficulty_instruction}
 
 {few_shot}
 
-Return ONLY valid JSON matching this schema:
-{{"reels":[{{"title":"short catchy title","summary":"key idea summary","category":"topic","keywords":"comma separated"}}],"flashcards":[{{"question":"question about content","answer":"concise answer"}}]}}
+STRICT RULES:
+1. Return ONLY valid JSON — no markdown, no explanation, no text before or after.
+2. Every reel MUST have all 4 fields: "title", "summary", "category", "keywords".
+3. Every flashcard MUST have both "question" and "answer".
+4. "keywords" must be a comma-separated string, not a list.
+5. Generate 1-3 reels and 1-3 flashcards based on content density.
+6. If the text is too short or unclear, still produce at least 1 reel and 1 flashcard.
 
-Generate 1-3 reels and 1-3 flashcards based on content density.
+REQUIRED JSON SCHEMA:
+{{"reels":[{{"title":"string","summary":"string","category":"string","keywords":"string"}}],"flashcards":[{{"question":"string","answer":"string"}}]}}
 
 Text:
 {text}
