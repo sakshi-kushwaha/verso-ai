@@ -19,6 +19,7 @@ def process_upload(upload_id: int, filepath: str):
 def _run_pipeline(upload_id: int, filepath: str):
     try:
         # Step 1: Parse document
+        _update_progress(upload_id, 5, "parsing")
         pages = parse_document(filepath)
         if not pages:
             _update_status(upload_id, "error")
@@ -27,15 +28,23 @@ def _run_pipeline(upload_id: int, filepath: str):
         _update_pages(upload_id, len(pages))
 
         # Step 2: Detect doc type from first page text
+        _update_progress(upload_id, 15, "analyzing")
         full_text = "\n".join(p["text"] for p in pages)
         doc_type = detect_doc_type(full_text)
         _update_doc_type(upload_id, doc_type)
 
+        # Step 3: Detect chapters and generate reels
+        _update_progress(upload_id, 20, "extracting")
         sections = detect_chapters(pages)
         max_sections = max(1, len(pages) // 4)
         sections = sections[:max_sections]
 
+        total_batches = max(1, (len(sections) + BATCH_SIZE - 1) // BATCH_SIZE)
         for i in range(0, len(sections), BATCH_SIZE):
+            batch_num = i // BATCH_SIZE
+            batch_progress = 20 + int((batch_num / total_batches) * 50)
+            _update_progress(upload_id, batch_progress, "generating")
+
             batch = sections[i:i + BATCH_SIZE]
             batch_text = "\n".join(s["text"] for s in batch)
 
@@ -48,9 +57,11 @@ def _run_pipeline(upload_id: int, filepath: str):
                 _save_flashcard(upload_id, fc)
 
         # Step 4: Embed chunks for RAG / Chat Q&A
-        asyncio.run(embed_chunks(upload_id, full_text))
+        _update_progress(upload_id, 70, "embedding")
+        asyncio.run(embed_chunks(upload_id, full_text, lambda p: _update_progress(upload_id, 70 + int(p * 25), "embedding")))
         _set_qa_ready(upload_id)
 
+        _update_progress(upload_id, 100, "done")
         _update_status(upload_id, "done")
 
     except Exception as e:
@@ -62,6 +73,13 @@ def _run_pipeline(upload_id: int, filepath: str):
             os.unlink(filepath)
         except OSError:
             pass
+
+
+def _update_progress(upload_id: int, progress: int, stage: str):
+    conn = get_db()
+    conn.execute("UPDATE uploads SET progress = ?, stage = ? WHERE id = ?", (progress, stage, upload_id))
+    conn.commit()
+    conn.close()
 
 
 def _update_status(upload_id: int, status: str):

@@ -65,15 +65,17 @@ async def embed_text(text: str) -> list[float]:
         return data["embeddings"][0]
 
 
-async def embed_chunks(upload_id: int, full_text: str) -> int:
+async def embed_chunks(upload_id: int, full_text: str, on_progress=None) -> int:
     chunks = chunk_text(full_text)
     if not chunks:
         return 0
 
     vectors = []
-    for chunk in chunks:
+    for i, chunk in enumerate(chunks):
         vec = await embed_text(chunk)
         vectors.append(vec)
+        if on_progress:
+            on_progress((i + 1) / len(chunks))
 
     vectors_np = np.array(vectors, dtype=np.float32)
     save_embeddings(upload_id, chunks, vectors_np)

@@ -72,6 +72,8 @@ def get_upload_status(upload_id: int):
         "status": row["status"],
         "doc_type": row["doc_type"],
         "total_pages": row["total_pages"],
+        "progress": row["progress"] if "progress" in row.keys() else 0,
+        "stage": row["stage"] if "stage" in row.keys() else "uploading",
         "reels_generated": reels_count,
         "qa_ready": bool(row["qa_ready"]),
     }

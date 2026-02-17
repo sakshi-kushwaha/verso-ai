@@ -51,6 +51,8 @@ def init_db():
             status TEXT DEFAULT 'processing',
             doc_type TEXT,
             total_pages INTEGER DEFAULT 0,
+            progress INTEGER DEFAULT 0,
+            stage TEXT DEFAULT 'uploading',
             qa_ready INTEGER DEFAULT 0,
             created_at TEXT DEFAULT (datetime('now'))
         );
@@ -100,6 +102,13 @@ def init_db():
             created_at TEXT DEFAULT (datetime('now'))
         );
     """)
+
+    # Migration: add progress/stage columns to uploads if missing
+    upload_cols = [row[1] for row in conn.execute("PRAGMA table_info(uploads)").fetchall()]
+    if "progress" not in upload_cols:
+        conn.execute("ALTER TABLE uploads ADD COLUMN progress INTEGER DEFAULT 0")
+    if "stage" not in upload_cols:
+        conn.execute("ALTER TABLE uploads ADD COLUMN stage TEXT DEFAULT 'uploading'")
 
     # Seed a default user (placeholder until auth is implemented)
     conn.execute(
