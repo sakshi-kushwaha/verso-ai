@@ -35,8 +35,8 @@ backend/tts/models/*.onnx
 backend/tts/models/*.onnx.json
 
 # Test artifacts
-tests/audio-samples/
-tests/screenshots/
+tests/
+playwright.config.js
 test-results/
 
 # Logs
