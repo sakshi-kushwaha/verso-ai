@@ -72,14 +72,14 @@
 
 ### Sakshi — Pipeline Hardening + Audio + Visual Reels Pipeline (F9) 🔴 8 remaining
 - [x] Wire embedding trigger after all reel batches complete (hand off to RAG pipeline) — done by Esha
-- [ ] Handle edge cases: empty PDFs, scanned PDFs (< 50 chars detection), oversized files
-- [ ] Add timeout handling for Ollama calls (120–600s per call)
-- [ ] Tune LLM prompts for consistent JSON across doc types (textbook, research paper, business)
-- [ ] Test graceful degradation: kill Ollama mid-process → verify fallback reels
-- [ ] **F9-A:** Extract images from uploaded PDFs using `pdfplumber` image extraction, save per-upload
-- [ ] **F9-B:** Curate pre-bundled category illustrations (science, business, literature, tech, general) as fallback when PDF has no extractable images
-- [ ] **F9-C:** Curate pre-bundled short looping video clips (~5-10s each) per category for visual learners
-- [ ] RAM check — verify peak RAM < 6.5 GB during processing (`free -h`)
+- [ ] Handle edge cases: empty PDFs, scanned PDFs (< 50 chars detection), oversized files ← **#94**
+- [ ] Add timeout handling for Ollama calls (120–600s per call) ← **#94**
+- [ ] Tune LLM prompts for consistent JSON across doc types (textbook, research paper, business) ← **#94**
+- [ ] Test graceful degradation: kill Ollama mid-process → verify fallback reels ← **#94**
+- [ ] **F9-A:** Extract images from uploaded PDFs using `pdfplumber` image extraction, save per-upload ← **#64**
+- [ ] **F9-B:** Curate pre-bundled category illustrations (science, business, literature, tech, general) ← **#64**
+- [ ] **F9-C:** Curate pre-bundled short looping video clips (~5-10s each) per category ← **#64**
+- [ ] RAM check — verify peak RAM < 6.5 GB during processing (`free -h`) ← **#94**
 
 ### Esha — Onboarding Backend → Chat Backend → Frontend Wiring ✅ (1 remaining)
 - [x] **F2:** Implement onboarding backend — `/onboarding/preferences` CRUD (save + retrieve user preferences)
@@ -98,7 +98,7 @@
 - [x] Wire Flashcards page to real `/flashcards` API (remove mock data)
 - [x] Bookmarks page uses real store data (mock fallback removed)
 - [x] Audio router fixed — real DB lookup, improved TTS voice + pitch/gap params
-- [ ] Build download button/flow in UI (wire to `/download` API) — blocked on Sanika's `/download` endpoint
+- [ ] Build download button/flow in UI (wire to `/download` API) — blocked on Sanika's `/download` endpoint ← **#68**
 
 ### Sanika — Auth + Feed/Bookmarks/Download APIs ✅ Auth done (3 remaining)
 - [x] Implement `/auth/signup` and `/auth/login` — bcrypt hashing, token-based session
@@ -108,11 +108,11 @@
 - [x] Protected routes — redirect to login if unauthenticated
 - [x] Implement `/feed` endpoint — paginated reel list from SQLite
 - [x] Implement `/flashcards` endpoint — list by upload
-- [ ] Implement `/bookmarks` CRUD — add/remove bookmark, list bookmarked items
-- [ ] Implement `/progress/view` — track viewed reels on swipe
-- [ ] Implement `/download` — bundle reels + flashcards + audio as zip
+- [ ] Implement `/bookmarks` CRUD — add/remove bookmark, list bookmarked items ← **#70**
+- [ ] Implement `/progress/view` — track viewed reels on swipe ← **#70**
+- [ ] Implement `/download` — bundle reels + flashcards + audio as zip ← **#70**
 
-**Day 2 Status: 23/35 done (66%)** — Auth, onboarding, chat, feed, flashcards all wired. Remaining: Sakshi pipeline hardening + F9, Sanika bookmarks/download/progress, Esha download UI.
+**Day 2 Status: 23/35 done (66%)** — Auth, onboarding, chat, feed, flashcards all wired. Remaining: Sakshi pipeline hardening (#94) + F9 (#64), Sanika bookmarks/download/progress (#70), Esha download UI (#68).
 
 ---
 
@@ -121,40 +121,40 @@
 ### Sakshi — Visual Reels Wiring + Production Hardening
 - [x] Ollama production config — `NUM_PARALLEL=1`, systemd restart policies
 - [x] Implement `/health` endpoint
-- [ ] **F9:** Wire image/video selection into reel generation: attach `media_url` + `media_type` to each reel
-- [ ] **F9:** Fallback chain: PDF image → category illustration → no media (text-only)
-- [ ] **F9:** Video clips only served when user `learning_style = 'visual'` (read from preferences)
-- [ ] Verify Ollama auto-unload after 5 min idle — idle RAM < 3 GB
-- [ ] Verify peak RAM < 6.5 GB during active processing
-- [ ] Test with 5+ varied documents (textbook, research paper, business doc, fiction, small PDF)
-- [ ] Performance: verify < 90s to first reel, < 3 min for 20-page doc
-- [ ] Security pass: no command injection in file handling, sanitize filenames
+- [ ] **F9:** Wire image/video selection into reel generation: attach `media_url` + `media_type` to each reel ← **#64**
+- [ ] **F9:** Fallback chain: PDF image → category illustration → no media (text-only) ← **#64**
+- [ ] **F9:** Video clips only served when user `learning_style = 'visual'` ← **#64**
+- [ ] Verify Ollama auto-unload after 5 min idle — idle RAM < 3 GB ← **#65**
+- [ ] Verify peak RAM < 6.5 GB during active processing ← **#65**
+- [ ] Test with 5+ varied documents (textbook, research paper, business doc, fiction, small PDF) ← **#65**
+- [ ] Performance: verify < 90s to first reel, < 3 min for 20-page doc ← **#65**
+- [ ] Security pass: no command injection in file handling, sanitize filenames ← **#65**
 
 ### Esha — Visual Reels UI + Final Polish
-- [ ] **F9:** Update reel card to display background image or looping video behind text
-- [ ] **F9:** Fallback rendering: video → image → gradient background (graceful degradation)
-- [ ] **F9:** Visual learner experience — auto-play muted video loops on reel cards
-- [ ] Feed smoothness — no jank on swipe (Chrome DevTools profiling)
-- [ ] Feed load < 500ms, onboarding < 30s
-- [ ] Consistent styling, transitions, feedback indicators across all pages
-- [ ] Final responsive pass — mobile + desktop
-- [ ] Fix remaining bugs from integration testing
+- [ ] **F9:** Update reel card to display background image or looping video behind text ← **#68**
+- [ ] **F9:** Fallback rendering: video → image → gradient background ← **#68**
+- [ ] **F9:** Visual learner experience — auto-play muted video loops on reel cards ← **#68**
+- [ ] Feed smoothness — no jank on swipe (Chrome DevTools profiling) ← **#68**
+- [ ] Feed load < 500ms, onboarding < 30s ← **#68**
+- [ ] Consistent styling, transitions, feedback indicators across all pages ← **#68**
+- [ ] Final responsive pass — mobile + desktop ← **#68**
+- [ ] Fix remaining bugs from integration testing ← **#68**
 
 ### Sanika — Regression Testing + Demo Prep
-- [ ] Full regression on EC2: 5 different documents, every feature exercised
-- [ ] Verify scanned PDF handling (no crash, user feedback message)
-- [ ] Verify all error states display correctly to user
-- [ ] Verify chat source references are accurate
-- [ ] Verify visual reels render correctly (image + video + fallback)
-- [ ] Prepare demo document (pick a good 15–20 page PDF that produces quality reels)
-- [ ] Write demo walkthrough script for Feb 23
-- [ ] Final bug sweep and fix
+- [ ] Full regression on EC2: 5 different documents, every feature exercised ← **#71**
+- [ ] Verify scanned PDF handling (no crash, user feedback message) ← **#71**
+- [ ] Verify all error states display correctly to user ← **#71**
+- [ ] Verify chat source references are accurate ← **#71**
+- [ ] Verify visual reels render correctly (image + video + fallback) ← **#71**
+- [ ] Prepare demo document (pick a good 15–20 page PDF that produces quality reels) ← **#71**
+- [ ] Write demo walkthrough script for Feb 23 ← **#71**
+- [ ] Final bug sweep and fix ← **#71**
 
 **Day 3 Checkpoint:** App is production-ready on EC2. All features work including visual reels. Demo document and script ready.
 
 ---
 
-## Audio Narration Improvements (Sakshi — in progress)
+## Audio Narration Improvements (Sakshi)
 
 - [ ] Pre-generate audio during reel batch pipeline (generate `.wav` for each reel as it's created, not just on-demand)
 - [ ] Handle edge cases — very long text truncation (>500 chars), special characters breaking espeak-ng
@@ -200,19 +200,19 @@
 1. **Must ship:** Upload/Parse → Reel Generation → Feed (F3, F4, F7) ✅ Done
 2. **High:** Onboarding → Chat Q&A → Flashcards (F2, F6, F5) ✅ Done
 3. **High:** Auth (F1) ✅ Done
-4. **Medium:** Bookmarks → Download → Progress (F8) — Sanika in progress
-5. **Medium:** Pipeline hardening + Audio fixes — Sakshi in progress
-6. **Nice to have:** Visual Reels (F9) — not started, Day 2-3
+4. **Medium:** Bookmarks → Download → Progress (F8) — Sanika in progress (#70)
+5. **Medium:** Pipeline hardening + Audio fixes — Sakshi in progress (#94)
+6. **Nice to have:** Visual Reels (F9) — not started (#64), Day 2-3
 
 ---
 
-## GitHub Board (open issues)
+## GitHub Board — Open Issues (updated Feb 17)
 
-| # | Issue | Owner | Status |
-|---|-------|-------|--------|
-| #88 | Pipeline hardening + Audio fixes | Sakshi | In progress |
-| #64 | F9: Visual Reels | Sakshi | Day 2-3 |
-| #65 | Production hardening & benchmarks | Sakshi | Day 3 |
-| #70 | F7+F8: Bookmarks, Download, Progress | Sanika | In progress |
-| #71 | Regression testing & demo prep | Sanika | Day 3 |
-| #68 | Frontend polish + download UI | Esha | Day 2-3 |
+| # | Issue | Owner | Label | Status |
+|---|-------|-------|-------|--------|
+| **#94** | Pipeline hardening — edge cases, timeouts, prompt tuning, degradation | **Sakshi** | Day 2 | **In progress** |
+| **#64** | F9: Visual Reels — images & video backgrounds (end-to-end) | **Sakshi** | Day 2-3 | Open |
+| **#65** | Production hardening & performance benchmarks | **Sakshi** | Day 3 | Open |
+| **#70** | F7+F8: Bookmarks, Download, Progress (end-to-end) | **Sanika** | Day 2 | **In progress** |
+| **#71** | Regression testing & demo prep | **Sanika** | Day 3 | Open |
+| **#68** | Frontend polish + download UI | **Esha** | Day 2-3 | Open |
