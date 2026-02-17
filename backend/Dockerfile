@@ -11,7 +11,16 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-RUN mkdir -p data/embeddings data/audio_cache
+RUN mkdir -p data/embeddings data/audio_cache tts/models
+
+# Download Piper voice model (en_US-lessac-medium — natural sounding, ~60MB)
+RUN python -c "\
+import urllib.request, os; \
+base = 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium'; \
+os.makedirs('tts/models', exist_ok=True); \
+urllib.request.urlretrieve(f'{base}/en_US-lessac-medium.onnx', 'tts/models/en_US-lessac-medium.onnx'); \
+urllib.request.urlretrieve(f'{base}/en_US-lessac-medium.onnx.json', 'tts/models/en_US-lessac-medium.onnx.json'); \
+print('Piper voice model downloaded')"
 
 EXPOSE 8000
 
