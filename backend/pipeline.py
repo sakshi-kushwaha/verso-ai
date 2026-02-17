@@ -193,8 +193,8 @@ def _update_doc_type(upload_id: int, doc_type: str):
 def _save_reel(upload_id: int, reel: dict, page_ref: int):
     conn = get_db()
     conn.execute(
-        "INSERT INTO reels (upload_id, title, summary, category, keywords, page_ref) VALUES (?, ?, ?, ?, ?, ?)",
-        (upload_id, reel.get("title", ""), reel.get("summary", ""), reel.get("category", ""), reel.get("keywords", ""), page_ref),
+        "INSERT INTO reels (upload_id, title, summary, narration, category, keywords, page_ref) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (upload_id, reel.get("title", ""), reel.get("summary", ""), reel.get("narration", ""), reel.get("category", ""), reel.get("keywords", ""), page_ref),
     )
     conn.commit()
     conn.close()

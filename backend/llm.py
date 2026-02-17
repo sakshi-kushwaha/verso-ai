@@ -146,6 +146,7 @@ def parse_llm_json(text: str) -> dict:
     validated_reels = []
     for reel in parsed["reels"]:
         if isinstance(reel, dict) and "title" in reel and "summary" in reel:
+            reel.setdefault("narration", reel["summary"])
             reel.setdefault("category", "general")
             reel.setdefault("keywords", "")
             validated_reels.append(reel)

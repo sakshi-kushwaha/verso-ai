@@ -63,6 +63,7 @@ def init_db():
             upload_id INTEGER REFERENCES uploads(id),
             title TEXT NOT NULL,
             summary TEXT NOT NULL,
+            narration TEXT,
             category TEXT,
             keywords TEXT,
             page_ref INTEGER,
@@ -112,6 +113,11 @@ def init_db():
         conn.execute("ALTER TABLE uploads ADD COLUMN stage TEXT DEFAULT 'uploading'")
     if "error_message" not in upload_cols:
         conn.execute("ALTER TABLE uploads ADD COLUMN error_message TEXT")
+
+    # Migration: add narration column to reels if missing
+    reel_cols = [row[1] for row in conn.execute("PRAGMA table_info(reels)").fetchall()]
+    if "narration" not in reel_cols:
+        conn.execute("ALTER TABLE reels ADD COLUMN narration TEXT")
 
     # Seed a default user (placeholder until auth is implemented)
     conn.execute(
