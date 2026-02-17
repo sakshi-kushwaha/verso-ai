@@ -1,23 +1,56 @@
-import { useState } from 'react'
-import { FLASHCARDS } from '../data/mockData'
+import { useState, useEffect } from 'react'
+import { getFlashcards } from '../api'
 import Button from '../components/Button'
 import Tag from '../components/Tag'
 import { ArrowL, ArrowR, Flip } from '../components/Icons'
+import { Spinner, ErrorState, EmptyState } from '../components/StateScreens'
 
 export default function FlashcardsPage() {
+  const [cards, setCards] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
   const [index, setIndex] = useState(0)
   const [flipped, setFlipped] = useState(false)
-  const card = FLASHCARDS[index]
 
+  const loadCards = async () => {
+    setLoading(true)
+    setError(false)
+    try {
+      const data = await getFlashcards()
+      setCards(data)
+    } catch {
+      setError(true)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadCards()
+  }, [])
+
+  if (loading) return <Spinner text="Loading flashcards..." />
+  if (error) return <ErrorState onRetry={loadCards} />
+  if (cards.length === 0) {
+    return (
+      <EmptyState
+        icon={<Flip />}
+        title="No flashcards yet"
+        subtitle="Upload a document to generate flashcards"
+      />
+    )
+  }
+
+  const card = cards[index]
   const flip = () => setFlipped(!flipped)
   const prev = () => { setIndex(Math.max(0, index - 1)); setFlipped(false) }
-  const next = () => { setIndex(Math.min(FLASHCARDS.length - 1, index + 1)); setFlipped(false) }
+  const next = () => { setIndex(Math.min(cards.length - 1, index + 1)); setFlipped(false) }
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-6 fade-up">
       {/* Counter */}
       <p className="text-text-muted text-sm font-mono mb-6">
-        {index + 1} / {FLASHCARDS.length}
+        {index + 1} / {cards.length}
       </p>
 
       {/* Flip card */}
@@ -90,7 +123,7 @@ export default function FlashcardsPage() {
           <Button variant="secondary" onClick={flip} className="px-4">
             <Flip />
           </Button>
-          <Button variant="secondary" onClick={next} disabled={index === FLASHCARDS.length - 1} className="px-4">
+          <Button variant="secondary" onClick={next} disabled={index === cards.length - 1} className="px-4">
             <ArrowR />
           </Button>
         </div>
@@ -98,7 +131,7 @@ export default function FlashcardsPage() {
 
       {/* Dot indicators */}
       <div className="flex gap-2 mt-8">
-        {FLASHCARDS.map((_, i) => (
+        {cards.map((_, i) => (
           <div
             key={i}
             className={`w-2 h-2 rounded-full transition-all ${

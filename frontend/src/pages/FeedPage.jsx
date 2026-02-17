@@ -9,6 +9,7 @@ import useStore from '../store/useStore'
 import Tag from '../components/Tag'
 import Button from '../components/Button'
 import { Bookmark, BookmarkFill, Play, Pause, Share, Upload } from '../components/Icons'
+import { Spinner, ErrorState, EmptyState } from '../components/StateScreens'
 
 function ReelCard({ reel, index, total }) {
   const [expanded, setExpanded] = useState(false)
@@ -136,7 +137,9 @@ function ReelCard({ reel, index, total }) {
 export default function FeedPage() {
   const navigate = useNavigate()
   const { reels, setReels, appendReels, feedPage, hasMore } = useStore()
+  const [initialLoading, setInitialLoading] = useState(true)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(false)
 
   const ACCENTS = ['#6366F1', '#8B5CF6', '#EC4899', '#F59E0B', '#10B981', '#3B82F6']
 
@@ -150,24 +153,29 @@ export default function FeedPage() {
     accent: ACCENTS[i % ACCENTS.length],
   })
 
+  const loadReels = async () => {
+    setInitialLoading(true)
+    setError(false)
+    try {
+      const data = await getFeed(1, 10)
+      if (data.reels?.length) {
+        setReels(data.reels.map(mapReel))
+      }
+    } catch {
+      setError(true)
+    } finally {
+      setInitialLoading(false)
+    }
+  }
+
   // Load reels from API on mount
   useEffect(() => {
-    let cancelled = false
-    async function loadReels() {
-      try {
-        const data = await getFeed(1, 10)
-        if (!cancelled && data.reels?.length) {
-          setReels(data.reels.map(mapReel))
-        }
-      } catch {
-        // API unavailable
-      }
+    if (reels.length > 0) {
+      setInitialLoading(false)
+      return
     }
-    if (reels.length === 0) loadReels()
-    return () => { cancelled = true }
+    loadReels()
   }, [])
-
-  const displayReels = reels
 
   // Load more when reaching end
   const handleReachEnd = async () => {
@@ -185,6 +193,36 @@ export default function FeedPage() {
     }
   }
 
+  if (initialLoading) {
+    return (
+      <div className="h-[calc(100dvh-4rem)] md:h-screen">
+        <Spinner text="Loading reels..." />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="h-[calc(100dvh-4rem)] md:h-screen">
+        <ErrorState onRetry={loadReels} />
+      </div>
+    )
+  }
+
+  if (reels.length === 0) {
+    return (
+      <div className="h-[calc(100dvh-4rem)] md:h-screen">
+        <EmptyState
+          icon={<Upload />}
+          title="No reels yet"
+          subtitle="Upload a document to get started"
+        >
+          <Button onClick={() => navigate('/upload')}>Upload Document</Button>
+        </EmptyState>
+      </div>
+    )
+  }
+
   return (
     <div className="h-[calc(100dvh-4rem)] md:h-screen">
       <Swiper
@@ -197,9 +235,9 @@ export default function FeedPage() {
         className="h-full"
         onReachEnd={handleReachEnd}
       >
-        {displayReels.map((reel, i) => (
+        {reels.map((reel, i) => (
           <SwiperSlide key={reel.id}>
-            <ReelCard reel={reel} index={i} total={displayReels.length} />
+            <ReelCard reel={reel} index={i} total={reels.length} />
           </SwiperSlide>
         ))}
 
