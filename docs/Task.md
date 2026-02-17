@@ -6,9 +6,6 @@
 
 ---
 
-
----
-
 ## Engineer Assignments (by Feature)
 
 | Engineer | Owns | Scope |
@@ -19,11 +16,11 @@
 
 ---
 
-## Day 1 — Core Pipeline + UI Shell + RAG Engine
+## Day 1 — Core Pipeline + UI Shell + RAG Engine ✅ COMPLETE
 
 > All engineers SSH into EC2 from Day 1. Develop directly on the target machine. Ollama runs on EC2 throughout.
 
-### Sakshi — Infra + Document Upload + Reel Generation Pipeline
+### Sakshi — Infra + Document Upload + Reel Generation Pipeline ✅
 - [x] Provision EC2, install Python, espeak-ng, git, curl
 - [x] Install Ollama, configure `NUM_PARALLEL=1` and `HOST=0.0.0.0:11434`
 - [x] Pull `qwen2.5:3b` and `nomic-embed-text`, verify with test prompts
@@ -41,7 +38,7 @@
 - [x] Implement `/upload/status/{id}` — progress count, batch status
 - [x] Temp file cleanup after parsing (`os.unlink` in try/finally)
 
-### Esha — Frontend Setup + All UI Pages
+### Esha — Frontend Setup + All UI Pages ✅
 - [x] Initialize React + Vite with Tailwind CSS 4.x, React Router 7.x, Zustand 5.x, Axios
 - [x] Set up frontend project structure: pages, components, stores, API layer
 - [x] Build main app layout/navigation shell (Feed, Flashcards, Bookmarks, Chat tabs)
@@ -58,24 +55,22 @@
 - [x] Incremental reel loading — new reels appear as batches complete
 - [x] Build Bookmarks/Saved page — list of saved reels and flashcards
 
-### Sanika — RAG Engine + TTS
+### Sanika — RAG Engine + TTS ✅
 - [x] Build chunk embedding pipeline — `nomic-embed-text` via Ollama `/api/embed`
 - [x] Build NumPy cosine similarity search (top-3 chunk retrieval)
 - [x] Expose retrieval as internal function for chat endpoint to call
 - [x] Implement TTS module — `espeak-ng` subprocess, `.wav` cached by content hash, `threading.Lock()`
 - [x] Implement `/audio/{reel_id}` — serve cached audio or generate on-demand
 
-**Day 1 Checkpoint:** Upload a PDF on EC2 → reels generated in DB → `/feed` returns them. Feed UI renders reels. RAG returns relevant chunks for test questions. All UI pages built.
-
-**Day 1 Status: COMPLETE** — Full end-to-end backend flow tested: `/upload` → `/upload/status` → `/feed` → `/flashcards` all working. Reels generated from PDF via LLM pipeline.
+**Day 1 Status: COMPLETE** — Full end-to-end backend flow tested: `/upload` → `/upload/status` → `/feed` → `/flashcards` all working.
 
 ---
 
-## Day 2 — Onboarding → Chat → Auth → Visual Reels
+## Day 2 — Onboarding → Chat → Auth → Visual Reels (IN PROGRESS)
 
 > **Build order matters:** Onboarding first (preferences stored), then Chat (reads preferences), then Auth (wraps everything). Visual reels pipeline starts in parallel.
 
-### Sakshi — Pipeline Hardening + Visual Reels Pipeline (F9)
+### Sakshi — Pipeline Hardening + Audio + Visual Reels Pipeline (F9) 🔴 8 remaining
 - [x] Wire embedding trigger after all reel batches complete (hand off to RAG pipeline) — done by Esha
 - [ ] Handle edge cases: empty PDFs, scanned PDFs (< 50 chars detection), oversized files
 - [ ] Add timeout handling for Ollama calls (120–600s per call)
@@ -86,7 +81,7 @@
 - [ ] **F9-C:** Curate pre-bundled short looping video clips (~5-10s each) per category for visual learners
 - [ ] RAM check — verify peak RAM < 6.5 GB during processing (`free -h`)
 
-### Esha — Onboarding Backend → Chat Backend → Frontend Wiring
+### Esha — Onboarding Backend → Chat Backend → Frontend Wiring ✅ (1 remaining)
 - [x] **F2:** Implement onboarding backend — `/onboarding/preferences` CRUD (save + retrieve user preferences)
 - [x] **F2:** Onboarding stores: learning_style, content_depth, use_case, flashcard_difficulty
 - [x] **F2:** Build Onboarding quiz UI — 5-step quiz (name, learning style, content depth, use case, flashcard difficulty) + confirmation screen
@@ -103,9 +98,9 @@
 - [x] Wire Flashcards page to real `/flashcards` API (remove mock data)
 - [x] Bookmarks page uses real store data (mock fallback removed)
 - [x] Audio router fixed — real DB lookup, improved TTS voice + pitch/gap params
-- [ ] Build download button/flow in UI (wire to `/download` API)
+- [ ] Build download button/flow in UI (wire to `/download` API) — blocked on Sanika's `/download` endpoint
 
-### Sanika — Auth + Feed/Bookmarks/Download APIs
+### Sanika — Auth + Feed/Bookmarks/Download APIs ✅ Auth done (3 remaining)
 - [x] Implement `/auth/signup` and `/auth/login` — bcrypt hashing, token-based session
 - [x] Implement `/auth/me` for session validation
 - [x] Build Login/Signup UI pages
@@ -117,7 +112,7 @@
 - [ ] Implement `/progress/view` — track viewed reels on swipe
 - [ ] Implement `/download` — bundle reels + flashcards + audio as zip
 
-**Day 2 Checkpoint:** Full flow works end-to-end — signup → onboard → upload → reels in feed → flashcards → chat → bookmarks → download. Preferences personalize chat answers.
+**Day 2 Status: 23/35 done (66%)** — Auth, onboarding, chat, feed, flashcards all wired. Remaining: Sakshi pipeline hardening + F9, Sanika bookmarks/download/progress, Esha download UI.
 
 ---
 
@@ -159,6 +154,15 @@
 
 ---
 
+## Audio Narration Improvements (Sakshi — in progress)
+
+- [ ] Pre-generate audio during reel batch pipeline (generate `.wav` for each reel as it's created, not just on-demand)
+- [ ] Handle edge cases — very long text truncation (>500 chars), special characters breaking espeak-ng
+- [ ] Test espeak-ng on EC2 — verify it's installed and working, test with real reels
+- [ ] Explore SSML or voice improvement — current `en-us+f3` voice is basic; consider Piper TTS or better espeak params if time allows
+
+---
+
 ## F9 — Visual Reels (Image & Video Backgrounds)
 
 > Making reels visually engaging instead of plain text cards.
@@ -175,7 +179,7 @@
 
 ---
 
-## EC2 Setup Checklist (Sakshi — completed)
+## EC2 Setup Checklist (Sakshi — completed) ✅
 
 ```
 1. [x] Launch EC2 (Ubuntu 24.04, 8 GB RAM) — IP: 72.62.231.169
@@ -191,39 +195,24 @@
 
 ---
 
-## Priority Order (if behind schedule)
+## Priority Order (updated Feb 17)
 
 1. **Must ship:** Upload/Parse → Reel Generation → Feed (F3, F4, F7) ✅ Done
-2. **High:** Onboarding → Chat Q&A → Flashcards (F2, F6, F5) ✅ Done (all wired end-to-end)
-3. **Medium:** Auth → Bookmarks → Download (F1, F8) — Auth NOT started, Bookmarks/Download backend NOT started
-4. **Nice to have:** Visual Reels (F9), Audio improvements, Progress tracking — Audio partially done (basic TTS working), rest NOT started
+2. **High:** Onboarding → Chat Q&A → Flashcards (F2, F6, F5) ✅ Done
+3. **High:** Auth (F1) ✅ Done
+4. **Medium:** Bookmarks → Download → Progress (F8) — Sanika in progress
+5. **Medium:** Pipeline hardening + Audio fixes — Sakshi in progress
+6. **Nice to have:** Visual Reels (F9) — not started, Day 2-3
 
 ---
 
-## Remaining Work (Day 2–3)
+## GitHub Board (open issues)
 
-### Sanika — Blocking items
-- [ ] F1 Auth: `/auth/signup`, `/auth/login`, `/auth/me` + bcrypt + token session
-- [ ] Login/Signup UI wiring + protected routes
-- [ ] F8 Bookmarks: `/bookmarks` CRUD backend endpoints
-- [ ] F8 Download: `/download` bundle endpoint
-- [ ] Progress: `/progress/view` tracking endpoint
-
-### Esha — Frontend wiring
-- [x] Wire Flashcards page to real `/flashcards` API (remove mock data)
-- [x] Audio playback on reel cards (play/pause, GET `/audio/{reel_id}`)
-- [x] Loading states, error states, empty states across all pages
-- [x] Bookmarks page — removed mock data fallback
-- [x] Audio router — real DB lookup + TTS voice/pitch/gap improvements
-- [ ] Download button/flow in UI
-
-### Sakshi — Pipeline hardening + F9 + Audio improvements
-- [ ] Edge cases: empty PDFs, scanned PDFs, oversized files
-- [ ] Ollama timeout handling
-- [ ] LLM prompt tuning for consistent JSON
-- [ ] F9: Image extraction, category illustrations, video clips
-- [ ] RAM/performance benchmarks
-- [ ] **Audio: Pre-generate audio during reel batch pipeline** (generate `.wav` for each reel as it's created, not just on-demand)
-- [ ] **Audio: Handle edge cases** — very long text truncation (>500 chars), special characters breaking espeak-ng
-- [ ] **Audio: Test espeak-ng on EC2** — verify it's installed and working, test with real reels
-- [ ] **Audio: Explore SSML or voice improvement** — current `en-us+f3` voice is basic; consider Piper TTS or better espeak params if time allows
+| # | Issue | Owner | Status |
+|---|-------|-------|--------|
+| #88 | Pipeline hardening + Audio fixes | Sakshi | In progress |
+| #64 | F9: Visual Reels | Sakshi | Day 2-3 |
+| #65 | Production hardening & benchmarks | Sakshi | Day 3 |
+| #70 | F7+F8: Bookmarks, Download, Progress | Sanika | In progress |
+| #71 | Regression testing & demo prep | Sanika | Day 3 |
+| #68 | Frontend polish + download UI | Esha | Day 2-3 |
