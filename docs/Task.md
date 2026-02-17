@@ -106,11 +106,11 @@
 - [ ] Build download button/flow in UI (wire to `/download` API)
 
 ### Sanika — Auth + Feed/Bookmarks/Download APIs
-- [ ] Implement `/auth/signup` and `/auth/login` — bcrypt hashing, token-based session
-- [ ] Implement `/auth/me` for session validation
-- [ ] Build Login/Signup UI pages
-- [ ] Wire auth flow: signup → login → onboarding → redirect to upload
-- [ ] Protected routes — redirect to login if unauthenticated
+- [x] Implement `/auth/signup` and `/auth/login` — bcrypt hashing, token-based session
+- [x] Implement `/auth/me` for session validation
+- [x] Build Login/Signup UI pages
+- [x] Wire auth flow: signup → login → onboarding → redirect to upload
+- [x] Protected routes — redirect to login if unauthenticated
 - [x] Implement `/feed` endpoint — paginated reel list from SQLite
 - [x] Implement `/flashcards` endpoint — list by upload
 - [ ] Implement `/bookmarks` CRUD — add/remove bookmark, list bookmarked items

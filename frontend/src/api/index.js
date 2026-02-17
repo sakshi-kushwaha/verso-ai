@@ -7,6 +7,31 @@ const api = axios.create({
   timeout: 30000,
 })
 
+// Attach auth token to every request
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('verso_token')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+// --- Auth ---
+export async function signup(name, password) {
+  const { data } = await api.post('/auth/signup', { name, password })
+  return data // { token, user: { id, name } }
+}
+
+export async function login(name, password) {
+  const { data } = await api.post('/auth/login', { name, password })
+  return data // { token, user: { id, name } }
+}
+
+export async function getMe() {
+  const { data } = await api.get('/auth/me')
+  return data // { id, name, created_at }
+}
+
 // Upload a document (PDF/DOCX)
 export async function uploadDocument(file) {
   const formData = new FormData()

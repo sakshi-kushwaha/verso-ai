@@ -1,6 +1,20 @@
 import { create } from 'zustand';
 
 const useStore = create((set, get) => ({
+  // --- Auth ---
+  user: JSON.parse(localStorage.getItem('verso_user') || 'null'),
+  token: localStorage.getItem('verso_token') || null,
+  setAuth: (user, token) => {
+    localStorage.setItem('verso_user', JSON.stringify(user));
+    localStorage.setItem('verso_token', token);
+    set({ user, token });
+  },
+  logout: () => {
+    localStorage.removeItem('verso_user');
+    localStorage.removeItem('verso_token');
+    set({ user: null, token: null });
+  },
+
   // --- Bookmarks ---
   bookmarks: new Set(),
   toggleBookmark: (id) =>
