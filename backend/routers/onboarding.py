@@ -1,7 +1,8 @@
-from typing import Literal, Optional
-from fastapi import APIRouter, HTTPException, Query
+from typing import Literal
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from database import get_db
+from auth import get_current_user
 
 router = APIRouter(tags=["onboarding"])
 
@@ -15,7 +16,8 @@ class PreferencesBody(BaseModel):
 
 
 @router.put("/onboarding/preferences")
-def upsert_preferences(body: PreferencesBody, user_id: int = Query(default=1)):
+def upsert_preferences(body: PreferencesBody, user: dict = Depends(get_current_user)):
+    user_id = user["id"]
     conn = get_db()
     try:
         conn.execute(
@@ -39,7 +41,8 @@ def upsert_preferences(body: PreferencesBody, user_id: int = Query(default=1)):
 
 
 @router.get("/onboarding/preferences")
-def get_preferences(user_id: int = Query(default=1)):
+def get_preferences(user: dict = Depends(get_current_user)):
+    user_id = user["id"]
     conn = get_db()
     try:
         row = conn.execute(
@@ -53,7 +56,8 @@ def get_preferences(user_id: int = Query(default=1)):
 
 
 @router.get("/onboarding/status")
-def get_status(user_id: int = Query(default=1)):
+def get_status(user: dict = Depends(get_current_user)):
+    user_id = user["id"]
     conn = get_db()
     try:
         row = conn.execute(

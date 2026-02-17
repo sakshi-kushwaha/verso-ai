@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { uploadDocument, getUploadStatus } from '../api'
+import { uploadDocument, getUploadStatus, getUploads } from '../api'
 import useStore from '../store/useStore'
 import Button from '../components/Button'
 import { Upload, File, X } from '../components/Icons'
@@ -30,7 +30,12 @@ export default function UploadPage() {
   const [displayProgress, setDisplayProgress] = useState(0)
   const [stage, setStage] = useState('uploading')
   const [error, setError] = useState(null)
+  const [recentUploads, setRecentUploads] = useState([])
   const { setUploadStatus, clearUpload } = useStore()
+
+  useEffect(() => {
+    getUploads().then((uploads) => setRecentUploads(uploads.filter(u => u.status === 'done'))).catch(() => {})
+  }, [])
 
   const handleFile = (f) => {
     if (f && (f.type === 'application/pdf' || f.name.endsWith('.docx'))) {
@@ -249,20 +254,22 @@ export default function UploadPage() {
       )}
 
       {/* Recent uploads */}
-      <div className="mt-12">
-        <h3 className="text-sm font-semibold text-text-muted mb-4">Recent Uploads</h3>
-        {['Deep Learning Fundamentals.pdf', 'NLP Research Paper.pdf'].map((name, i) => (
-          <div key={i} className="flex items-center gap-3 p-3 rounded-lg hover:bg-surface-alt/50 transition-colors">
-            <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center text-primary">
-              <File />
+      {recentUploads.length > 0 && (
+        <div className="mt-12">
+          <h3 className="text-sm font-semibold text-text-muted mb-4">Recent Uploads</h3>
+          {recentUploads.map((upload) => (
+            <div key={upload.id} className="flex items-center gap-3 p-3 rounded-lg hover:bg-surface-alt/50 transition-colors">
+              <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center text-primary">
+                <File />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm">{upload.filename}</p>
+                <p className="text-text-muted text-xs">{upload.status === 'done' ? 'Completed' : upload.status}</p>
+              </div>
             </div>
-            <div className="flex-1">
-              <p className="text-sm">{name}</p>
-              <p className="text-text-muted text-xs">{i === 0 ? '5 reels generated' : '3 reels generated'}</p>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

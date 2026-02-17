@@ -115,5 +115,8 @@ def init_db():
         "INSERT OR IGNORE INTO users (id, name, password_hash) VALUES (1, 'default', 'placeholder')"
     )
 
+    # Backfill: assign orphan uploads to the default seed user
+    conn.execute("UPDATE uploads SET user_id = 1 WHERE user_id IS NULL")
+
     conn.commit()
     conn.close()
