@@ -156,12 +156,14 @@ These flow changes apply across Day 3 tasks:
 
 ### Esha — Prompts & AI Model Tuning ← **#99**
 - [ ] Add emoji field to reel generation prompts (topic-relevant emoji per reel)
-- [ ] Tune prompts for consistent JSON output across all doc types (textbook, research, business, fiction, technical)
+- [x] Tune prompts for consistent JSON output across all doc types (textbook, research, business, fiction, technical) — 97.9% eval score
+- [x] Build eval system: 6 metrics, 40 tests (5 docs x 8 combos), --quick flag for 8 tests
+- [x] Fine-tuning pipeline: Colab notebook (Qwen2.5-3B + LoRA), GGUF export, Modelfile
+- [x] Improve narration text quality for TTS (narration field in prompts + schema)
+- [x] Test with 5+ varied documents end-to-end (eval fixtures: textbook, research, business, fiction, technical)
 - [ ] Handle edge cases in pipeline: empty PDFs, scanned PDFs (<50 chars), oversized files
 - [ ] Add/verify timeout handling for Ollama calls (120–600s)
 - [ ] Test graceful degradation: kill Ollama mid-process → verify fallback reels
-- [ ] Improve narration text quality for TTS (better speech-optimized output)
-- [ ] Test with 5+ varied documents end-to-end
 - [ ] RAM check: verify peak < 6.5 GB during processing
 
 **Day 3 Checkpoint:** App is production-ready on EC2. All features work including new user flows. Demo document and script ready.
