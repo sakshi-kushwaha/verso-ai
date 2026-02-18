@@ -122,4 +122,23 @@ export async function getChatStatus(uploadId) {
   return data // { qa_ready, exchange_count, limit, remaining }
 }
 
+// --- Bookmarks ---
+export async function getBookmarks() {
+  const { data } = await api.get('/bookmarks')
+  return data
+}
+
+export async function addBookmark(reelId, flashcardId) {
+  const body = {}
+  if (reelId) body.reel_id = reelId
+  if (flashcardId) body.flashcard_id = flashcardId
+  const { data } = await api.post('/bookmarks', body)
+  return data
+}
+
+export async function removeBookmark(bookmarkId) {
+  const { data } = await api.delete(`/bookmarks/${bookmarkId}`)
+  return data
+}
+
 export default api
