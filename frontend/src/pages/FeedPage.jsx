@@ -12,7 +12,7 @@ import Button from '../components/Button'
 import { Bookmark, BookmarkFill, Play, Pause, Share, Upload } from '../components/Icons'
 import { Spinner, ErrorState, EmptyState } from '../components/StateScreens'
 
-function VideoReelCard({ reel, index, total, isActive }) {
+function VideoReelCard({ reel, index, total, isActive, onVideoError }) {
   const videoRef = useRef(null)
   const [paused, setPaused] = useState(false)
   const [buffering, setBuffering] = useState(true)
@@ -60,6 +60,7 @@ function VideoReelCard({ reel, index, total, isActive }) {
           onWaiting={() => setBuffering(true)}
           onCanPlay={() => setBuffering(false)}
           onPlaying={() => setBuffering(false)}
+          onError={() => onVideoError?.(reel.id)}
         />
 
         {/* Buffering indicator */}
@@ -283,6 +284,7 @@ export default function FeedPage() {
   const [error, setError] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
   const [tab, setTab] = useState('all')
+  const [failedVideos, setFailedVideos] = useState(new Set())
 
   const ACCENTS = ['#6366F1', '#8B5CF6', '#EC4899', '#F59E0B', '#10B981', '#3B82F6']
 
@@ -422,8 +424,8 @@ export default function FeedPage() {
       >
         {reels.map((reel, i) => (
           <SwiperSlide key={reel.id}>
-            {reel.videoUrl ? (
-              <VideoReelCard reel={reel} index={i} total={reels.length} isActive={i === activeIndex} />
+            {reel.videoUrl && !failedVideos.has(reel.id) ? (
+              <VideoReelCard reel={reel} index={i} total={reels.length} isActive={i === activeIndex} onVideoError={(id) => setFailedVideos(prev => new Set(prev).add(id))} />
             ) : (
               <ReelCard reel={reel} index={i} total={reels.length} />
             )}

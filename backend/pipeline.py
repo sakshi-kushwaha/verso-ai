@@ -6,10 +6,10 @@ import threading
 from database import get_db
 import httpx
 from parser import parse_document, detect_chapters, EmptyDocumentError, ScannedPDFError
-from llm import detect_doc_type, detect_subject_category, generate_reels, OllamaUnavailableError
+from llm import detect_doc_type, detect_subject_category, generate_reels, generate_reel_script, OllamaUnavailableError
 from bg_images import assign_images, _resolve_category
 from rag import embed_chunks
-from video import compose_reel_video
+from video import compose_reel_video, compose_multi_clip_reel, get_clips_for_category
 from tts.engine import generate_audio
 from config import STOCK_VIDEOS_DIR
 from ws_manager import manager
@@ -66,10 +66,8 @@ def _pick_stock_video(reel_category: str, upload_category: str) -> str | None:
 
 
 def _try_compose_video(reel_id: int, reel: dict, subject_category: str):
-    """Try to compose a video for a reel. Falls back silently on failure."""
-    stock_video = _pick_stock_video(reel.get("category", ""), subject_category)
-    if not stock_video:
-        return
+    """Try to compose a video for a reel. Tries multi-clip first, falls back to single-clip."""
+    cat = _resolve_category(reel.get("category", ""), subject_category)
 
     # Generate TTS from narration
     tts_path = None
@@ -79,6 +77,38 @@ def _try_compose_video(reel_id: int, reel: dict, subject_category: str):
             tts_path = generate_audio(narration)
         except Exception:
             log.debug("TTS failed for reel %d, composing without narration", reel_id)
+
+    # Try multi-clip composition first
+    try:
+        clips = get_clips_for_category(cat)
+        if clips and len(clips) >= 2:
+            script = generate_reel_script(
+                text=reel.get("summary", ""),
+                category=cat,
+                clips=clips,
+            )
+            if script and script.get("segments"):
+                video_path = compose_multi_clip_reel(
+                    reel_id=reel_id,
+                    title=script.get("title", reel.get("title", "")),
+                    narration=script.get("narration", narration or ""),
+                    segments=script["segments"],
+                    category=cat,
+                    tts_audio_path=str(tts_path) if tts_path else None,
+                )
+                conn = get_db()
+                conn.execute("UPDATE reels SET video_path = ? WHERE id = ?", (video_path, reel_id))
+                conn.commit()
+                conn.close()
+                log.info("Composed multi-clip video for reel %d: %s", reel_id, video_path)
+                return
+    except Exception as e:
+        log.warning("Multi-clip composition failed for reel %d: %s — falling back to single-clip", reel_id, e)
+
+    # Fallback: single-clip composition
+    stock_video = _pick_stock_video(reel.get("category", ""), subject_category)
+    if not stock_video:
+        return
 
     try:
         video_path = compose_reel_video(
@@ -93,7 +123,7 @@ def _try_compose_video(reel_id: int, reel: dict, subject_category: str):
         conn.execute("UPDATE reels SET video_path = ? WHERE id = ?", (video_path, reel_id))
         conn.commit()
         conn.close()
-        log.info("Composed video for reel %d: %s", reel_id, video_path)
+        log.info("Composed single-clip video for reel %d: %s", reel_id, video_path)
     except Exception as e:
         log.warning("Video composition failed for reel %d: %s", reel_id, e)
 

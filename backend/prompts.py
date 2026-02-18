@@ -90,6 +90,27 @@ Output: {{"reels":[{{"title":"How Plants Make Food","summary":"Photosynthesis co
 # Main reel generation prompt
 # ---------------------------------------------------------------------------
 
+REEL_SCRIPT_PROMPT = """You are a video editor for short educational reels. Create a script that uses multiple video clips.
+
+Available clips (use ONLY these filenames):
+{clip_list}
+
+Rules:
+1. Return ONLY valid JSON, no extra text.
+2. Pick exactly {num_segments} different clips from the list above.
+3. Each segment "duration" is in seconds. Durations MUST sum to exactly {total_duration}.
+4. Each duration must be at least 2 seconds.
+5. "narration" is one continuous paragraph for text-to-speech. No bullet points, no special characters.
+6. "overlay" is short text shown on screen (max 8 words per segment).
+7. "title" is a catchy title under 50 characters.
+
+Schema: {{"title":"catchy title","narration":"full spoken narration paragraph","segments":[{{"clip":"filename.mp4","overlay":"short text","duration":5}}]}}
+
+Text to create a reel about:
+{text}
+
+JSON:"""
+
 REEL_GENERATION_PROMPT = """You are a learning content creator for Verso. Generate reels and flashcards from the text below.
 
 DOCUMENT TYPE: {doc_type}

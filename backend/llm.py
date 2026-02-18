@@ -8,6 +8,7 @@ from prompts import (
     DOC_TYPE_PROMPT,
     SUBJECT_CATEGORY_PROMPT,
     REEL_GENERATION_PROMPT,
+    REEL_SCRIPT_PROMPT,
     REEL_STYLE_INSTRUCTIONS,
     REEL_DEPTH_INSTRUCTIONS,
     REEL_USE_CASE_INSTRUCTIONS,
@@ -194,4 +195,87 @@ def parse_llm_json(text: str) -> dict:
             validated_fcs.append(fc)
     parsed["flashcards"] = validated_fcs
 
+    return parsed
+
+
+def generate_reel_script(text: str, category: str, clips: list[dict]) -> dict | None:
+    """Generate a multi-segment reel script using the LLM.
+
+    Returns parsed dict with title, narration, segments — or None on failure.
+    """
+    if not clips:
+        return None
+
+    # Build numbered clip list for the prompt
+    clip_list_lines = []
+    for i, c in enumerate(clips, 1):
+        clip_list_lines.append(f"{i}. {c['file']} — {c['description']}")
+    clip_list = "\n".join(clip_list_lines)
+
+    num_segments = 3 if len(text) < 800 else 4
+    total_duration = 15
+
+    prompt = REEL_SCRIPT_PROMPT.format(
+        clip_list=clip_list,
+        num_segments=num_segments,
+        total_duration=total_duration,
+        text=text[:2000],
+    )
+
+    try:
+        result = llm_call(prompt, json_mode=True, timeout=300.0)
+    except (OllamaUnavailableError, httpx.TimeoutException):
+        log.warning("Reel script generation failed (LLM error)")
+        return None
+
+    # Parse JSON
+    parsed = None
+    try:
+        parsed = json.loads(result)
+    except json.JSONDecodeError:
+        match = re.search(r"\{[\s\S]*\}", result)
+        if match:
+            try:
+                parsed = json.loads(match.group())
+            except json.JSONDecodeError:
+                pass
+
+    if not parsed or "segments" not in parsed:
+        log.warning("Reel script generation returned invalid JSON")
+        return None
+
+    # Validate segments
+    valid_filenames = {c["file"] for c in clips}
+    validated_segments = []
+    for seg in parsed["segments"]:
+        if not isinstance(seg, dict):
+            continue
+        clip_file = seg.get("clip", "")
+        if clip_file not in valid_filenames:
+            continue
+        dur = seg.get("duration", 5)
+        if not isinstance(dur, (int, float)) or dur < 2:
+            dur = max(2, dur if isinstance(dur, (int, float)) else 5)
+        validated_segments.append({
+            "clip": clip_file,
+            "overlay": str(seg.get("overlay", ""))[:60],
+            "duration": float(dur),
+        })
+
+    if len(validated_segments) < 2:
+        log.warning("Reel script has too few valid segments (%d)", len(validated_segments))
+        return None
+
+    # Normalize durations to sum to total_duration
+    dur_sum = sum(s["duration"] for s in validated_segments)
+    if dur_sum > 0 and abs(dur_sum - total_duration) > 0.5:
+        scale = total_duration / dur_sum
+        for s in validated_segments:
+            s["duration"] = round(s["duration"] * scale, 1)
+
+    parsed["segments"] = validated_segments
+    parsed.setdefault("title", "")
+    parsed.setdefault("narration", "")
+
+    log.info("Generated reel script: %d segments, title=%r", len(validated_segments), parsed["title"][:40])
     return parsed
