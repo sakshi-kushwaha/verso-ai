@@ -4,7 +4,7 @@ import { Swiper, SwiperSlide } from 'swiper/react'
 import { Mousewheel, Keyboard } from 'swiper/modules'
 import 'swiper/css'
 
-import { getFeed, getAudio } from '../api'
+import api, { getFeed, getAudio } from '../api'
 import useStore from '../store/useStore'
 import Tag from '../components/Tag'
 import Button from '../components/Button'
@@ -62,71 +62,90 @@ function ReelCard({ reel, index, total }) {
     }
   }, [])
 
+  const hasBg = !!reel.bgImage
+
   return (
     <div className="flex items-center justify-center p-4 md:p-8 h-full">
       <div className="w-full max-w-lg h-4/5 fade-up">
         <div className="bg-surface rounded-2xl p-6 md:p-8 border border-border relative overflow-hidden h-full flex flex-col">
-          <div
-            className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl"
-            style={{ background: `linear-gradient(90deg, ${reel.accent}, transparent)` }}
-          />
-
-          <div className="flex items-center justify-between mb-4">
-            <Tag color={reel.accent}>{reel.category}</Tag>
-            <span className="text-text-muted text-xs font-mono">
-              p. {reel.pages} &middot; {index + 1}/{total}
-            </span>
-          </div>
-
-          <h2 className="text-xl md:text-2xl font-bold font-display leading-tight mb-4">
-            {reel.title}
-          </h2>
-
-          <div className="h-px bg-border mb-4" />
-
-          <p className={`text-text-secondary text-sm leading-relaxed flex-1 ${expanded ? 'overflow-y-auto' : 'line-clamp-6'}`}>
-            {reel.body}
-          </p>
-          {!expanded && (
-            <button
-              onClick={() => setExpanded(true)}
-              className="text-primary text-xs font-semibold mt-2 cursor-pointer hover:underline"
-            >
-              Read more
-            </button>
+          {hasBg && (
+            <>
+              <div
+                className="absolute inset-0 bg-cover bg-center"
+                style={{ backgroundImage: `url(${reel.bgImage})` }}
+              />
+              <div className="absolute inset-0 bg-black/60" />
+            </>
+          )}
+          {!hasBg && (
+            <div
+              className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl"
+              style={{ background: `linear-gradient(90deg, ${reel.accent}, transparent)` }}
+            />
           )}
 
-          <div className="flex flex-wrap gap-2 mt-4">
-            {reel.keywords.map((kw) => (
-              <span key={kw} className="px-2.5 py-1 rounded-full text-xs bg-surface-alt text-text-secondary">
-                {kw}
+          <div className="relative z-10 flex flex-col h-full">
+            <div className="flex items-center justify-between mb-4">
+              <Tag color={reel.accent}>{reel.category}</Tag>
+              <span className={`text-xs font-mono ${hasBg ? 'text-white/70' : 'text-text-muted'}`}>
+                p. {reel.pages} &middot; {index + 1}/{total}
               </span>
-            ))}
-          </div>
+            </div>
 
-          <div className="flex items-center gap-3 mt-auto pt-4 border-t border-border">
-            <button
-              onClick={handleAudio}
-              disabled={audioLoading}
-              className={`flex items-center gap-1.5 text-sm transition-colors cursor-pointer ${
-                playing ? 'text-primary' : 'text-text-muted hover:text-primary'
-              } ${audioLoading ? 'opacity-50' : ''}`}
-            >
-              {playing ? <Pause /> : <Play />}
-              {audioLoading ? 'Loading...' : playing ? 'Pause' : 'Listen'}
-            </button>
-            <button
-              onClick={() => toggleBookmark(reel.id)}
-              className={`flex items-center gap-1.5 text-sm transition-colors cursor-pointer ${
-                saved ? 'text-accent' : 'text-text-muted hover:text-primary'
-              }`}
-            >
-              {saved ? <BookmarkFill /> : <Bookmark />}
-              {saved ? 'Saved' : 'Save'}
-            </button>
-            <button className="flex items-center gap-1.5 text-text-muted hover:text-primary text-sm transition-colors cursor-pointer ml-auto">
-              <Share /> Share
-            </button>
+            <h2 className={`text-xl md:text-2xl font-bold font-display leading-tight mb-4 ${hasBg ? 'text-white' : ''}`}>
+              {reel.title}
+            </h2>
+
+            <div className={`h-px mb-4 ${hasBg ? 'bg-white/20' : 'bg-border'}`} />
+
+            <p className={`text-sm leading-relaxed flex-1 ${expanded ? 'overflow-y-auto' : 'line-clamp-6'} ${hasBg ? 'text-white/90' : 'text-text-secondary'}`}>
+              {reel.body}
+            </p>
+            {!expanded && (
+              <button
+                onClick={() => setExpanded(true)}
+                className={`text-xs font-semibold mt-2 cursor-pointer hover:underline ${hasBg ? 'text-white/80' : 'text-primary'}`}
+              >
+                Read more
+              </button>
+            )}
+
+            <div className="flex flex-wrap gap-2 mt-4">
+              {reel.keywords.map((kw) => (
+                <span key={kw} className={`px-2.5 py-1 rounded-full text-xs ${hasBg ? 'bg-white/15 text-white/80' : 'bg-surface-alt text-text-secondary'}`}>
+                  {kw}
+                </span>
+              ))}
+            </div>
+
+            <div className={`flex items-center gap-3 mt-auto pt-4 border-t ${hasBg ? 'border-white/20' : 'border-border'}`}>
+              <button
+                onClick={handleAudio}
+                disabled={audioLoading}
+                className={`flex items-center gap-1.5 text-sm transition-colors cursor-pointer ${
+                  playing
+                    ? (hasBg ? 'text-white' : 'text-primary')
+                    : (hasBg ? 'text-white/70 hover:text-white' : 'text-text-muted hover:text-primary')
+                } ${audioLoading ? 'opacity-50' : ''}`}
+              >
+                {playing ? <Pause /> : <Play />}
+                {audioLoading ? 'Loading...' : playing ? 'Pause' : 'Listen'}
+              </button>
+              <button
+                onClick={() => toggleBookmark(reel.id)}
+                className={`flex items-center gap-1.5 text-sm transition-colors cursor-pointer ${
+                  saved
+                    ? 'text-accent'
+                    : (hasBg ? 'text-white/70 hover:text-white' : 'text-text-muted hover:text-primary')
+                }`}
+              >
+                {saved ? <BookmarkFill /> : <Bookmark />}
+                {saved ? 'Saved' : 'Save'}
+              </button>
+              <button className={`flex items-center gap-1.5 text-sm transition-colors cursor-pointer ml-auto ${hasBg ? 'text-white/70 hover:text-white' : 'text-text-muted hover:text-primary'}`}>
+                <Share /> Share
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -151,6 +170,7 @@ export default function FeedPage() {
     body: r.summary || '',
     keywords: r.keywords ? r.keywords.split(',').map((k) => k.trim()).filter(Boolean) : [],
     accent: ACCENTS[i % ACCENTS.length],
+    bgImage: r.bg_image ? `${api.defaults.baseURL}/${r.bg_image}` : null,
   })
 
   const loadReels = async () => {

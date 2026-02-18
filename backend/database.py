@@ -119,6 +119,14 @@ def init_db():
     if "narration" not in reel_cols:
         conn.execute("ALTER TABLE reels ADD COLUMN narration TEXT")
 
+    # Migration: add subject_category to uploads
+    if "subject_category" not in upload_cols:
+        conn.execute("ALTER TABLE uploads ADD COLUMN subject_category TEXT DEFAULT 'general'")
+
+    # Migration: add bg_image to reels
+    if "bg_image" not in reel_cols:
+        conn.execute("ALTER TABLE reels ADD COLUMN bg_image TEXT")
+
     # Seed a default user (placeholder until auth is implemented)
     conn.execute(
         "INSERT OR IGNORE INTO users (id, name, password_hash) VALUES (1, 'default', 'placeholder')"

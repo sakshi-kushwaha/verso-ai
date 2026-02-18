@@ -5,6 +5,7 @@ import httpx
 from config import OLLAMA_HOST, LLM_MODEL, LLM_TIMEOUT
 from prompts import (
     DOC_TYPE_PROMPT,
+    SUBJECT_CATEGORY_PROMPT,
     REEL_GENERATION_PROMPT,
     REEL_STYLE_INSTRUCTIONS,
     REEL_DEPTH_INSTRUCTIONS,
@@ -78,6 +79,24 @@ def detect_doc_type(text: str) -> str:
 
     valid = {"textbook", "research_paper", "business", "fiction", "technical", "general"}
     for v in valid:
+        if v in result:
+            return v
+    return "general"
+
+
+VALID_CATEGORIES = {"science", "math", "history", "literature", "business", "technology", "medicine", "law", "arts", "engineering", "general"}
+
+
+def detect_subject_category(text: str) -> str:
+    """Detect subject category from first 2000 chars."""
+    try:
+        prompt = SUBJECT_CATEGORY_PROMPT.format(text=text[:2000])
+        result = llm_call(prompt, timeout=120.0).strip().lower()
+    except (OllamaUnavailableError, httpx.TimeoutException):
+        log.warning("Subject category detection failed, defaulting to 'general'")
+        return "general"
+
+    for v in VALID_CATEGORIES:
         if v in result:
             return v
     return "general"
