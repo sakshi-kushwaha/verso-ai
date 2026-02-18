@@ -73,9 +73,19 @@ def me(user: dict = Depends(get_current_user)):
         row = conn.execute(
             "SELECT id, name, created_at FROM users WHERE id = ?", (user["id"],)
         ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        uploads = conn.execute(
+            "SELECT COUNT(*) FROM uploads WHERE user_id = ? AND status = 'done'", (user["id"],)
+        ).fetchone()[0]
+        reels = conn.execute(
+            "SELECT COUNT(*) FROM reels r JOIN uploads u ON r.upload_id = u.id WHERE u.user_id = ?", (user["id"],)
+        ).fetchone()[0]
+        flashcards = conn.execute(
+            "SELECT COUNT(*) FROM flashcards f JOIN uploads u ON f.upload_id = u.id WHERE u.user_id = ?", (user["id"],)
+        ).fetchone()[0]
     finally:
         conn.close()
 
-    if not row:
-        raise HTTPException(status_code=404, detail="User not found")
-    return dict(row)
+    return {**dict(row), "total_uploads": uploads, "total_reels": reels, "total_flashcards": flashcards}

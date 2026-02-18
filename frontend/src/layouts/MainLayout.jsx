@@ -1,7 +1,7 @@
-import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import { Outlet, NavLink } from 'react-router-dom'
 import useStore from '../store/useStore'
 import UploadTracker from '../components/UploadTracker'
-import { Logo, Home, Cards, Chat, Bookmark, Upload, Logout, Book } from '../components/Icons'
+import { Logo, Home, Cards, Chat, Bookmark, Upload, User, Book } from '../components/Icons'
 
 const navItems = [
   { to: '/', icon: Home, label: 'Feed' },
@@ -18,15 +18,8 @@ const linkClass = ({ isActive }) =>
   }`
 
 export default function MainLayout() {
-  const navigate = useNavigate()
-  const logout = useStore((s) => s.logout)
   const bgUpload = useStore((s) => s.bgUpload)
   const hasBanner = !!bgUpload
-
-  const handleLogout = () => {
-    logout()
-    navigate('/login')
-  }
 
   return (
     <div className="min-h-screen bg-bg">
@@ -41,13 +34,9 @@ export default function MainLayout() {
           ))}
         </nav>
         <div className="mt-auto">
-          <button
-            onClick={handleLogout}
-            className="flex items-center justify-center w-10 h-10 rounded-xl text-text-muted hover:text-danger transition-colors cursor-pointer"
-            title="Logout"
-          >
-            <Logout />
-          </button>
+          <NavLink to="/profile" className={linkClass} title="Profile">
+            <User />
+          </NavLink>
         </div>
       </aside>
 
