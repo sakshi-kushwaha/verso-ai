@@ -11,6 +11,7 @@ import ChatPage from './pages/ChatPage'
 import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
 import MyBooksPage from './pages/MyBooksPage'
+import ProfilePage from './pages/ProfilePage'
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
           <Route path="/flashcards" element={<FlashcardsPage />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/books" element={<MyBooksPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
         </Route>
       </Route>
       <Route element={<AuthLayout />}>
