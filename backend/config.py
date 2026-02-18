@@ -17,6 +17,11 @@ TOP_K: int = 3
 DATA_DIR: Path = Path("data")
 EMBEDDINGS_DIR: Path = DATA_DIR / "embeddings"
 AUDIO_CACHE_DIR: Path = DATA_DIR / "audio_cache"
+VIDEO_CACHE_DIR: Path = DATA_DIR / "video_cache"
+
+# Stock assets
+STOCK_VIDEOS_DIR: Path = Path(os.path.dirname(__file__)) / "static" / "stock-videos"
+SOUND_EFFECTS_DIR: Path = Path(os.path.dirname(__file__)) / "static" / "sound-effects"
 
 # TTS — "piper" (neural, high quality) or "espeak" (formant, robotic fallback)
 TTS_ENGINE: str = os.getenv("TTS_ENGINE", "piper")

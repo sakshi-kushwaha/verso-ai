@@ -20,3 +20,4 @@ python-multipart==0.0.20
 bcrypt==4.2.1
 PyJWT==2.9.0
 piper-tts>=1.4.0
+Pillow>=10.0.0

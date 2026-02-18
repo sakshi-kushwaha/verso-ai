@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Swiper, SwiperSlide } from 'swiper/react'
 import { Mousewheel, Keyboard } from 'swiper/modules'
@@ -11,6 +11,100 @@ import Tag from '../components/Tag'
 import Button from '../components/Button'
 import { Bookmark, BookmarkFill, Play, Pause, Share, Upload } from '../components/Icons'
 import { Spinner, ErrorState, EmptyState } from '../components/StateScreens'
+
+function VideoReelCard({ reel, index, total, isActive }) {
+  const videoRef = useRef(null)
+  const [paused, setPaused] = useState(false)
+  const { bookmarks, toggleBookmark } = useStore()
+  const saved = bookmarks.has(reel.id)
+
+  // Autoplay when active slide, pause when not
+  useEffect(() => {
+    if (!videoRef.current) return
+    if (isActive && !paused) {
+      videoRef.current.play().catch(() => {})
+    } else {
+      videoRef.current.pause()
+    }
+  }, [isActive, paused])
+
+  const togglePlay = useCallback(() => {
+    if (!videoRef.current) return
+    if (videoRef.current.paused) {
+      videoRef.current.play().catch(() => {})
+      setPaused(false)
+    } else {
+      videoRef.current.pause()
+      setPaused(true)
+    }
+  }, [])
+
+  return (
+    <div className="flex items-center justify-center h-full bg-black">
+      <div className="relative w-full max-w-[480px] h-full">
+        {/* Full-screen video */}
+        <video
+          ref={videoRef}
+          src={reel.videoUrl}
+          className="absolute inset-0 w-full h-full object-cover"
+          loop
+          playsInline
+          preload="metadata"
+          onClick={togglePlay}
+        />
+
+        {/* Tap-to-pause overlay */}
+        {paused && (
+          <div
+            className="absolute inset-0 flex items-center justify-center bg-black/20 z-10 cursor-pointer"
+            onClick={togglePlay}
+          >
+            <div className="w-16 h-16 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center">
+              <Play />
+            </div>
+          </div>
+        )}
+
+        {/* Right side action buttons — YouTube Shorts style */}
+        <div className="absolute right-3 bottom-48 z-20 flex flex-col items-center gap-5">
+          <button
+            onClick={() => toggleBookmark(reel.id)}
+            className="flex flex-col items-center gap-1 cursor-pointer"
+          >
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+              saved ? 'bg-accent/20' : 'bg-black/40 backdrop-blur-sm'
+            }`}>
+              {saved ? <BookmarkFill /> : <Bookmark />}
+            </div>
+            <span className="text-white text-[10px]">{saved ? 'Saved' : 'Save'}</span>
+          </button>
+          <button className="flex flex-col items-center gap-1 cursor-pointer">
+            <div className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white">
+              <Share />
+            </div>
+            <span className="text-white text-[10px]">Share</span>
+          </button>
+        </div>
+
+        {/* Bottom info — minimal, over video */}
+        <div className="absolute bottom-0 left-0 right-14 z-10 p-4 pb-6 bg-gradient-to-t from-black/70 via-black/30 to-transparent">
+          <Tag color={reel.accent}>{reel.category}</Tag>
+          <h2 className="text-white font-bold font-display text-base leading-snug mt-2">
+            {reel.title}
+          </h2>
+          <p className="text-white/70 text-xs line-clamp-2 mt-1">
+            {reel.body}
+          </p>
+        </div>
+
+        {/* Progress bar at very bottom */}
+        <div className="absolute bottom-0 left-0 right-0 z-20 h-0.5 bg-white/20">
+          <div className="h-full bg-primary" style={{ width: `${((index + 1) / total) * 100}%` }} />
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function ReelCard({ reel, index, total }) {
   const [expanded, setExpanded] = useState(false)
@@ -161,6 +255,7 @@ export default function FeedPage() {
   const [initialLoading, setInitialLoading] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(0)
 
   const ACCENTS = ['#6366F1', '#8B5CF6', '#EC4899', '#F59E0B', '#10B981', '#3B82F6']
 
@@ -174,6 +269,7 @@ export default function FeedPage() {
     keywords: r.keywords ? r.keywords.split(',').map((k) => k.trim()).filter(Boolean) : [],
     accent: ACCENTS[i % ACCENTS.length],
     bgImage: r.bg_image ? `${api.defaults.baseURL}/${r.bg_image}` : null,
+    videoUrl: r.video_path ? `${api.defaults.baseURL}/video/${r.id}` : null,
   })
 
   const loadReels = async () => {
@@ -257,10 +353,15 @@ export default function FeedPage() {
         speed={400}
         className="h-full"
         onReachEnd={handleReachEnd}
+        onSlideChange={(swiper) => setActiveIndex(swiper.activeIndex)}
       >
         {reels.map((reel, i) => (
           <SwiperSlide key={reel.id}>
-            <ReelCard reel={reel} index={i} total={reels.length} />
+            {reel.videoUrl ? (
+              <VideoReelCard reel={reel} index={i} total={reels.length} isActive={i === activeIndex} />
+            ) : (
+              <ReelCard reel={reel} index={i} total={reels.length} />
+            )}
           </SwiperSlide>
         ))}
 
