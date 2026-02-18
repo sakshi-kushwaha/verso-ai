@@ -1,9 +1,12 @@
 import os
+import json
 import shutil
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, WebSocket, WebSocketDisconnect
 from database import get_db
 from pipeline import process_upload, TEMP_DIR
 from auth import get_current_user
+from ws_auth import ws_authenticate
+from ws_manager import manager
 
 router = APIRouter()
 
@@ -85,3 +88,31 @@ def get_upload_status(upload_id: int, user: dict = Depends(get_current_user)):
         "qa_ready": bool(row["qa_ready"]),
         "error_message": row["error_message"] if "error_message" in row.keys() else None,
     }
+
+
+@router.websocket("/ws/upload/{upload_id}")
+async def ws_upload_progress(ws: WebSocket, upload_id: int):
+    await ws.accept()
+    user = await ws_authenticate(ws)
+    if user is None:
+        return
+
+    # Verify upload ownership
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id FROM uploads WHERE id = ? AND user_id = ?", (upload_id, user["id"])
+    ).fetchone()
+    conn.close()
+    if not row:
+        await ws.close(code=1008, reason="Upload not found")
+        return
+
+    await manager.subscribe_upload(upload_id, ws)
+    try:
+        # Keep connection alive — client doesn't send data, just receives
+        while True:
+            await ws.receive_text()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await manager.unsubscribe_upload(upload_id, ws)

@@ -4,7 +4,8 @@ import { Swiper, SwiperSlide } from 'swiper/react'
 import { Mousewheel, Keyboard } from 'swiper/modules'
 import 'swiper/css'
 
-import api, { getFeed, getAudio } from '../api'
+import api, { getFeed } from '../api'
+import { speak } from '../services/tts'
 import useStore from '../store/useStore'
 import Tag from '../components/Tag'
 import Button from '../components/Button'
@@ -15,50 +16,51 @@ function ReelCard({ reel, index, total }) {
   const [expanded, setExpanded] = useState(false)
   const [playing, setPlaying] = useState(false)
   const [audioLoading, setAudioLoading] = useState(false)
-  const audioRef = useRef(null)
+  const ttsRef = useRef(null)
   const { bookmarks, toggleBookmark } = useStore()
   const saved = bookmarks.has(reel.id)
 
   const handleAudio = async () => {
+    // Block rapid clicks while loading
+    if (audioLoading) return
+
     // If already playing, pause
-    if (playing && audioRef.current) {
-      audioRef.current.pause()
+    if (playing && ttsRef.current) {
+      ttsRef.current.pause()
       setPlaying(false)
       return
     }
 
-    // If audio element exists and is paused, resume
-    if (audioRef.current && audioRef.current.src) {
-      audioRef.current.play()
+    // If paused with existing controller, resume
+    if (ttsRef.current && !playing) {
+      ttsRef.current.resume()
       setPlaying(true)
       return
     }
 
-    // Fetch audio from API
+    // Start new playback — server TTS (Piper) first, browser fallback
     setAudioLoading(true)
     try {
-      const blobUrl = await getAudio(reel.id)
-      const audio = new Audio(blobUrl)
-      audioRef.current = audio
-      audio.onended = () => setPlaying(false)
-      audio.play()
+      // Cancel any lingering previous audio
+      if (ttsRef.current) { ttsRef.current.cancel(); ttsRef.current = null }
+      const controller = await speak(reel.id, reel.narration, () => {
+        setPlaying(false)
+        ttsRef.current = null
+      })
+      ttsRef.current = controller
       setPlaying(true)
     } catch {
       // Audio not available — silently fail
+      ttsRef.current = null
     } finally {
       setAudioLoading(false)
     }
   }
 
-  // Cleanup audio on unmount
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (audioRef.current) {
-        audioRef.current.pause()
-        if (audioRef.current.src?.startsWith('blob:')) {
-          URL.revokeObjectURL(audioRef.current.src)
-        }
-      }
+      if (ttsRef.current) ttsRef.current.cancel()
     }
   }, [])
 
@@ -168,6 +170,7 @@ export default function FeedPage() {
     category: r.category || 'General',
     pages: r.page_ref || '—',
     body: r.summary || '',
+    narration: r.narration || r.summary || '',
     keywords: r.keywords ? r.keywords.split(',').map((k) => k.trim()).filter(Boolean) : [],
     accent: ACCENTS[i % ACCENTS.length],
     bgImage: r.bg_image ? `${api.defaults.baseURL}/${r.bg_image}` : null,

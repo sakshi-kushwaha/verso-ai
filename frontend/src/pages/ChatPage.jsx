@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { Send, Sparkle, ChevDown } from '../components/Icons'
 import { askChat, getChatHistory, getChatStatus, getUploads } from '../api'
+import { getWsBaseUrl, getAuthToken } from '../api/ws'
 
 export default function ChatPage() {
   const [messages, setMessages] = useState([
@@ -13,6 +14,7 @@ export default function ChatPage() {
   const [qaReady, setQaReady] = useState(false)
   const [remaining, setRemaining] = useState(null)
   const endRef = useRef(null)
+  const wsRef = useRef(null)
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -28,7 +30,56 @@ export default function ChatPage() {
       .catch(() => {})
   }, [])
 
-  // When uploadId changes, load status + history
+  // Connect/reconnect WebSocket when uploadId changes
+  const connectChatWs = useCallback((uid) => {
+    if (wsRef.current) {
+      try { wsRef.current.close() } catch {}
+      wsRef.current = null
+    }
+    if (!uid) return
+
+    const token = getAuthToken()
+    if (!token) return
+
+    try {
+      const ws = new WebSocket(`${getWsBaseUrl()}/ws/chat/${uid}?token=${token}`)
+      wsRef.current = ws
+
+      ws.onmessage = (evt) => {
+        try {
+          const msg = JSON.parse(evt.data)
+          if (msg.type === 'stream_start') {
+            setTyping(false)
+            setMessages((prev) => [...prev, { role: 'ai', text: '', sources: msg.sources || [] }])
+          } else if (msg.type === 'token') {
+            setMessages((prev) => {
+              const updated = [...prev]
+              const last = updated[updated.length - 1]
+              if (last && last.role === 'ai') {
+                updated[updated.length - 1] = { ...last, text: last.text + msg.content }
+              }
+              return updated
+            })
+          } else if (msg.type === 'stream_end') {
+            setRemaining(msg.limit - msg.exchange_count)
+          } else if (msg.type === 'error') {
+            setTyping(false)
+            setMessages((prev) => [
+              ...prev,
+              { role: 'ai', text: msg.detail, sources: [], error: true },
+            ])
+          }
+        } catch {}
+      }
+
+      ws.onerror = () => { wsRef.current = null }
+      ws.onclose = () => { wsRef.current = null }
+    } catch {
+      wsRef.current = null
+    }
+  }, [])
+
+  // When uploadId changes, load status + history + connect WS
   useEffect(() => {
     if (!uploadId) return
 
@@ -39,6 +90,7 @@ export default function ChatPage() {
       .then((s) => {
         setQaReady(s.qa_ready)
         setRemaining(s.remaining)
+        if (s.qa_ready) connectChatWs(uploadId)
       })
       .catch(() => setQaReady(false))
 
@@ -58,15 +110,23 @@ export default function ChatPage() {
           { role: 'ai', text: `Ask me anything about ${name}!`, sources: [] },
         ])
       })
-  }, [uploadId])
 
-  const send = async () => {
-    if (!input.trim() || !uploadId || !qaReady || typing) return
-    const userMsg = input.trim()
-    setInput('')
-    setMessages((prev) => [...prev, { role: 'user', text: userMsg }])
-    setTyping(true)
+    return () => {
+      if (wsRef.current) { try { wsRef.current.close() } catch {} }
+      wsRef.current = null
+    }
+  }, [uploadId, connectChatWs])
 
+  const sendViaWs = (userMsg) => {
+    const ws = wsRef.current
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ question: userMsg }))
+      return true
+    }
+    return false
+  }
+
+  const sendViaRest = async (userMsg) => {
     try {
       const res = await askChat(uploadId, userMsg)
       setMessages((prev) => [
@@ -82,6 +142,19 @@ export default function ChatPage() {
       ])
     } finally {
       setTyping(false)
+    }
+  }
+
+  const send = async () => {
+    if (!input.trim() || !uploadId || !qaReady || typing) return
+    const userMsg = input.trim()
+    setInput('')
+    setMessages((prev) => [...prev, { role: 'user', text: userMsg }])
+    setTyping(true)
+
+    // Try WebSocket first, fall back to REST
+    if (!sendViaWs(userMsg)) {
+      await sendViaRest(userMsg)
     }
   }
 
