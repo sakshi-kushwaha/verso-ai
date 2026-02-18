@@ -1,9 +1,10 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import useStore from '../store/useStore'
-import { Logo, Home, Cards, Chat, Bookmark, Chart, Upload, Logout } from '../components/Icons'
+import { Logo, Home, Cards, Chat, Bookmark, Chart, Upload, Logout, Book } from '../components/Icons'
 
 const navItems = [
   { to: '/', icon: Home, label: 'Feed' },
+  { to: '/books', icon: Book, label: 'My Collections' },
   { to: '/flashcards', icon: Cards, label: 'Cards' },
   { to: '/upload', icon: Upload, label: 'Upload' },
   { to: '/chat', icon: Chat, label: 'Chat' },
@@ -55,7 +56,7 @@ export default function MainLayout() {
 
       {/* Mobile bottom nav */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 h-16 bg-surface border-t border-border flex items-center justify-around z-30">
-        {navItems.slice(0, 5).map(({ to, icon: Icon, label }) => (
+        {navItems.slice(0, 6).map(({ to, icon: Icon, label }) => (
           <NavLink key={to} to={to} className={linkClass} title={label} end={to === '/'}>
             <Icon />
           </NavLink>

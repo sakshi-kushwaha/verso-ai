@@ -47,7 +47,12 @@ async def upload_document(file: UploadFile = File(...), user: dict = Depends(get
 def list_uploads(user: dict = Depends(get_current_user)):
     conn = get_db()
     rows = conn.execute(
-        "SELECT id, filename, status, qa_ready FROM uploads WHERE user_id = ? ORDER BY created_at DESC",
+        """SELECT u.id, u.filename, u.status, u.doc_type, u.total_pages, u.qa_ready, u.created_at,
+                  (SELECT COUNT(*) FROM reels WHERE upload_id = u.id) AS reel_count,
+                  (SELECT COUNT(*) FROM flashcards WHERE upload_id = u.id) AS flashcard_count
+           FROM uploads u
+           WHERE u.user_id = ?
+           ORDER BY u.created_at DESC""",
         (user["id"],),
     ).fetchall()
     conn.close()

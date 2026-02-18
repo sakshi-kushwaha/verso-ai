@@ -10,9 +10,9 @@
 
 | Engineer | Day 3 Role | Scope |
 |----------|-----------|-------|
-| **Sanika** | All Frontend + Bug Fixes | UI for My Books, feed interleaving, bookmarks wiring, download, profile, emoji display, responsive polish |
+| **Sanika** | All Frontend + Bug Fixes | UI for My Collections, feed interleaving, bookmarks wiring, download, profile, emoji display, responsive polish |
 | **Esha** | Prompts & AI Model Tuning | Prompt quality, emoji in prompts, pipeline edge cases, timeout handling, graceful degradation, TTS narration, RAM checks |
-| **Sakshi** | Backend APIs + Pipeline Fixes | Bookmarks/progress/download APIs, feed interleaving, My Books data, profile API, 50-page limit, emoji schema, carry-over edge cases |
+| **Sakshi** | Backend APIs + Pipeline Fixes | Bookmarks/progress/download APIs, feed interleaving, My Collections data, profile API, 50-page limit, emoji schema, carry-over edge cases |
 
 ---
 
@@ -118,7 +118,7 @@
 These flow changes apply across Day 3 tasks:
 
 1. **Feed interleaving:** After every 3 reels → 1 flashcard appears in the feed
-2. **My Books:** New separate nav item showing uploaded books with reels/flashcards/chat per book
+2. **My Collections:** New separate nav item showing uploaded books with reels/flashcards/chat per book
 3. **Saved section:** Accessible from book detail and from main nav
 4. **Download:** reels only (no flashcards in download bundle)
 5. **PDF upload limit:** 50 MB file size + 50 page cap (8 GB CPU constraint)
@@ -136,7 +136,7 @@ These flow changes apply across Day 3 tasks:
 - [ ] Progress tracking: `POST /progress/view`, `GET /progress/{upload_id}` (DB table exists, no API yet)
 - [ ] Download: `GET /download/{upload_id}` — reels only, bundled as zip
 - [ ] Update `/feed` to interleave flashcards (every 3 reels → 1 flashcard in response)
-- [ ] Update `/uploads` response to include `reel_count` + `flashcard_count` per upload (for My Books page)
+- [ ] Update `/uploads` response to include `reel_count` + `flashcard_count` per upload (for My Collections page)
 - [ ] User profile: `GET /profile`, `PUT /profile` (return preferences + user info)
 - [ ] Enforce 50-page limit on upload (in addition to 50 MB file size)
 - [ ] Add emoji field to reel DB schema + generation (update `prompts.py` and `llm.py` for emoji in reel output)
@@ -144,7 +144,7 @@ These flow changes apply across Day 3 tasks:
 
 ### Sanika — All Frontend + Bug Fixes ← **#98**
 - [ ] Wire bookmarks to real backend API (replace Zustand-only client-side bookmarks)
-- [ ] Build "My Books" page — new nav item, list of uploads with reel/flashcard counts, tap into book detail (reels + flashcards + chat for that book)
+- [ ] Build "My Collections" page — new nav item, list of uploads with reel/flashcard counts, tap into book detail (reels + flashcards + chat for that book)
 - [ ] Update feed to render interleaved flashcards (every 3 reels → 1 flashcard card)
 - [ ] Build download button on reel cards (reels only, hit backend `/download`)
 - [ ] Build user profile page (view/edit preferences + logout) — lightweight, skip if heavy
@@ -173,7 +173,7 @@ These flow changes apply across Day 3 tasks:
 ## Priority Order (updated Feb 18)
 
 1. **Backend APIs for bookmarks/progress/download** (Sakshi #97) — unblocks frontend
-2. **Feed interleaving + My Books** (Sakshi #97 backend + Sanika #98 frontend) — new user flow
+2. **Feed interleaving + My Collections** (Sakshi #97 backend + Sanika #98 frontend) — new user flow
 3. **Prompt tuning + emoji** (Esha #99 + Sakshi #97) — quality improvement
 4. **User profile** (Sakshi #97 backend + Sanika #98 frontend) — lightweight, skip if time-tight
 5. **Pipeline hardening + edge cases** (Esha #99) — robustness

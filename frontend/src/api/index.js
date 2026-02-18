@@ -61,9 +61,11 @@ export async function getUploadStatus(uploadId) {
   return data // { status, progress, reels_count }
 }
 
-// Fetch feed reels (paginated)
-export async function getFeed(page = 1, limit = 5) {
-  const { data } = await api.get('/feed', { params: { page, limit } })
+// Fetch feed reels (paginated, optional upload_id filter)
+export async function getFeed(page = 1, limit = 5, uploadId = null) {
+  const params = { page, limit }
+  if (uploadId) params.upload_id = uploadId
+  const { data } = await api.get('/feed', { params })
   return data // { reels: [], total, page }
 }
 
@@ -95,10 +97,10 @@ export async function getPreferences() {
   return data
 }
 
-// List uploads
+// List uploads (includes reel_count, flashcard_count, doc_type, total_pages)
 export async function getUploads() {
   const { data } = await api.get('/uploads')
-  return data // [{ id, filename, status, qa_ready }]
+  return data
 }
 
 // Chat Q&A
