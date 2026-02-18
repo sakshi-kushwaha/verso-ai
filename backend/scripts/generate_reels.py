@@ -2,7 +2,7 @@
 """Generate video reels from CSV — LLM generates content, ffmpeg composes MP4.
 
 CSV format (videos.csv):
-    video_file,description,category
+    video_file,description
 
 Flow per row:
     1. LLM generates title, summary, narration, keywords from description + category
@@ -170,8 +170,8 @@ def load_sound_effects_csv(path: str) -> list[dict]:
 def process_single_reel(entry: dict, sound_effects: list[dict], upload_id: int) -> dict:
     """Process a single reel: LLM → TTS → compose video → return result."""
     description = entry["description"]
-    category = entry.get("category", "General Knowledge")
     video_file = entry["video_file"]
+    category = video_file.split("/")[0] if "/" in video_file else "general"
 
     # Resolve stock video path
     stock_video_path = str(STOCK_VIDEOS_DIR / video_file)
