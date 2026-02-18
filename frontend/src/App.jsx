@@ -5,7 +5,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import FeedPage from './pages/FeedPage'
 import BookmarksPage from './pages/BookmarksPage'
 import UploadPage from './pages/UploadPage'
-import ProgressPage from './pages/ProgressPage'
+
 import FlashcardsPage from './pages/FlashcardsPage'
 import ChatPage from './pages/ChatPage'
 import LoginPage from './pages/LoginPage'
@@ -21,7 +21,7 @@ function App() {
           <Route path="/" element={<FeedPage />} />
           <Route path="/bookmarks" element={<BookmarksPage />} />
           <Route path="/upload" element={<UploadPage />} />
-          <Route path="/progress" element={<ProgressPage />} />
+
           <Route path="/flashcards" element={<FlashcardsPage />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/books" element={<MyBooksPage />} />
