@@ -1,9 +1,10 @@
 """Video reel composition using ffmpeg — stock video + TTS audio + background music.
 
-Memory-conscious: uses 720p output and ffmpeg thread limits to stay under ~150MB per encode.
+Memory-conscious: uses 1080p output and ffmpeg thread limits to stay under ~250MB per encode.
 """
 
 import csv
+import json
 import os
 import subprocess
 import tempfile
@@ -15,8 +16,12 @@ from config import VIDEO_CACHE_DIR, STOCK_VIDEOS_DIR
 WIDTH = 1080
 HEIGHT = 1920
 
-# Per-category background music profiles: (bg_freq, bg_type)
-# TTS voice quality is now handled by Piper directly — no more ffmpeg pitch/tempo shifts
+# Duration bounds (seconds) — video length adapts to narration
+MIN_DURATION = 10
+MAX_DURATION = 30
+DEFAULT_DURATION = 15
+
+# Per-category ambient music: (base_freq, wave_type)
 AUDIO_PROFILES = {
     "Science":     (220, "sine"),
     "Biology":     (330, "sine"),
@@ -93,19 +98,42 @@ def _resolve_font() -> str:
     return "Sans"
 
 
+def _get_tts_duration(tts_audio_path: str | None) -> float:
+    """Get TTS audio duration in seconds using ffprobe, clamped to bounds."""
+    if not tts_audio_path or not os.path.exists(tts_audio_path):
+        return DEFAULT_DURATION
+    try:
+        result = subprocess.run(
+            ["ffprobe", "-v", "quiet", "-show_entries", "format=duration",
+             "-of", "json", tts_audio_path],
+            capture_output=True, timeout=10,
+        )
+        info = json.loads(result.stdout)
+        dur = float(info["format"]["duration"])
+        # Add 1.5s padding after narration ends
+        return max(MIN_DURATION, min(dur + 1.5, MAX_DURATION))
+    except Exception:
+        return DEFAULT_DURATION
+
+
 def _generate_background_music(out_path: str, freq: float, wave_type: str, duration: float = 16.0):
-    """Generate a soft ambient background tone using ffmpeg synthesis."""
+    """Generate ambient background music — a warm pad with fade in/out."""
+    fade_out_start = max(0, duration - 3)
     cmd = [
         "ffmpeg", "-y",
         "-f", "lavfi",
         "-i", f"{wave_type}=frequency={freq}:duration={duration}",
         "-f", "lavfi",
-        "-i", f"{wave_type}=frequency={freq * 1.5}:duration={duration}",
+        "-i", f"{wave_type}=frequency={freq * 1.498}:duration={duration}",
+        "-f", "lavfi",
+        "-i", f"{wave_type}=frequency={freq * 0.501}:duration={duration}",
         "-filter_complex",
-        "[0:a]volume=0.03[a1];"
-        "[1:a]volume=0.02[a2];"
-        "[a1][a2]amix=inputs=2:duration=longest,"
-        "afade=t=in:st=0:d=2,afade=t=out:st=13:d=3[out]",
+        f"[0:a]volume=0.06[a1];"
+        f"[1:a]volume=0.04[a2];"
+        f"[2:a]volume=0.03[a3];"
+        f"[a1][a2][a3]amix=inputs=3:duration=longest:normalize=0,"
+        f"lowpass=f=800,highpass=f=80,"
+        f"afade=t=in:st=0:d=2,afade=t=out:st={fade_out_start:.1f}:d=3[out]",
         "-map", "[out]",
         "-threads", FFMPEG_THREADS,
         "-c:a", "pcm_s16le",
@@ -125,7 +153,8 @@ def compose_reel_video(
 ) -> str:
     """Compose a video reel: stock video + TTS narration + background music → MP4.
 
-    Memory budget: ~100-150MB per encode at 720x1280 with 2 threads.
+    Video duration adapts to TTS narration length (10-30s).
+    Memory budget: ~200-250MB per encode at 1080x1920 with 2 threads.
     Returns the path to the output MP4 file.
     """
     VIDEO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -134,12 +163,14 @@ def compose_reel_video(
     if os.path.exists(out_path) and os.path.getsize(out_path) > 0:
         return out_path
 
+    # Determine video duration from TTS audio length
+    duration = _get_tts_duration(tts_audio_path)
     bg_freq, bg_type = AUDIO_PROFILES.get(category or "", DEFAULT_PROFILE)
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        # Generate category-specific background music
+        # Generate background music matching video duration
         bg_music_path = os.path.join(tmpdir, "bg_music.wav")
-        _generate_background_music(bg_music_path, bg_freq, bg_type)
+        _generate_background_music(bg_music_path, bg_freq, bg_type, duration=duration + 1)
 
         # Build ffmpeg command
         inputs = ["-stream_loop", "-1", "-i", stock_video_path]
@@ -154,23 +185,23 @@ def compose_reel_video(
         audio_layers = []
         audio_idx = 1
 
-        # TTS narration — voice quality handled by Piper, no ffmpeg pitch/tempo mangling
+        # TTS narration
         if tts_audio_path and os.path.exists(tts_audio_path):
             inputs.extend(["-i", tts_audio_path])
-            filter_parts.append(f"[{audio_idx}:a]volume=1.0[tts]")
+            filter_parts.append(f"[{audio_idx}:a]volume=1.2[tts]")
             audio_layers.append("[tts]")
             audio_idx += 1
 
         # Sound effect (chime etc.)
         if sound_effect_path and os.path.exists(sound_effect_path):
             inputs.extend(["-i", sound_effect_path])
-            filter_parts.append(f"[{audio_idx}:a]volume=0.2[sfx]")
+            filter_parts.append(f"[{audio_idx}:a]volume=0.25[sfx]")
             audio_layers.append("[sfx]")
             audio_idx += 1
 
-        # Background music (always present)
+        # Background music (always present, audible but below narration)
         inputs.extend(["-i", bg_music_path])
-        filter_parts.append(f"[{audio_idx}:a]volume=0.08[bgm]")
+        filter_parts.append(f"[{audio_idx}:a]volume=0.15[bgm]")
         audio_layers.append("[bgm]")
         audio_idx += 1
 
@@ -193,11 +224,11 @@ def compose_reel_video(
             "-filter_complex", filter_complex,
             "-map", "[vout]",
             *audio_map,
-            "-t", "15",
+            "-t", str(duration),
             "-threads", FFMPEG_THREADS,
             "-c:v", "libx264",
             "-preset", "fast",
-            "-crf", "26",            # slightly higher CRF = smaller files, less RAM
+            "-crf", "26",
             "-c:a", "aac", "-b:a", "128k",
             "-movflags", "+faststart",
             "-pix_fmt", "yuv420p",
@@ -224,7 +255,8 @@ def compose_multi_clip_reel(
     Clips are joined with xfade transitions, text overlays are drawn per segment,
     and audio (TTS + background music) is mixed on top.
 
-    Memory budget: ~120-170MB per encode at 720x1280 with 2 threads.
+    Video duration adapts to TTS narration length (10-30s).
+    Memory budget: ~200-300MB per encode at 1080x1920 with 2 threads.
     Returns the path to the output MP4 file.
     """
     VIDEO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -235,7 +267,7 @@ def compose_multi_clip_reel(
 
     n = len(segments)
     TRANSITION_DUR = 0.5
-    TOTAL_DURATION = 15.0
+    TOTAL_DURATION = _get_tts_duration(tts_audio_path)
     font = _resolve_font()
 
     # Scale segment durations so output = 15s accounting for xfade overlaps
@@ -324,25 +356,25 @@ def compose_multi_clip_reel(
         audio_layers = []
         audio_idx = n  # video inputs used indices 0..n-1
 
-        # TTS narration — voice quality handled by Piper, no ffmpeg pitch/tempo mangling
+        # TTS narration
         if tts_audio_path and os.path.exists(tts_audio_path):
             inputs.extend(["-i", tts_audio_path])
-            filter_parts.append(f"[{audio_idx}:a]volume=1.0[tts]")
+            filter_parts.append(f"[{audio_idx}:a]volume=1.2[tts]")
             audio_layers.append("[tts]")
             audio_idx += 1
 
         # Sound effect
         if sound_effect_path and os.path.exists(sound_effect_path):
             inputs.extend(["-i", sound_effect_path])
-            filter_parts.append(f"[{audio_idx}:a]volume=0.2[sfx]")
+            filter_parts.append(f"[{audio_idx}:a]volume=0.25[sfx]")
             audio_layers.append("[sfx]")
             audio_idx += 1
 
         # Background music
         bg_music_path = os.path.join(tmpdir, "bg_music.wav")
-        _generate_background_music(bg_music_path, bg_freq, bg_type)
+        _generate_background_music(bg_music_path, bg_freq, bg_type, duration=TOTAL_DURATION + 1)
         inputs.extend(["-i", bg_music_path])
-        filter_parts.append(f"[{audio_idx}:a]volume=0.08[bgm]")
+        filter_parts.append(f"[{audio_idx}:a]volume=0.15[bgm]")
         audio_layers.append("[bgm]")
         audio_idx += 1
 
