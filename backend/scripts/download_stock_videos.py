@@ -6,7 +6,7 @@ Creates:
   data/videos.csv — master CSV with all downloaded videos
 
 All 60 video IDs are unique and verified-working on Pexels CDN.
-Videos are landscape HD (1920x1080) — ffmpeg crops to 720x1280 in video.py.
+Videos prefer SD (640x360) to save disk space — ffmpeg scales to 720x1280 in video.py.
 
 Usage:
   cd backend && pip install httpx && python scripts/download_stock_videos.py
@@ -129,18 +129,18 @@ VIDEOS = {
 
 
 def download_video(vid_id, fps, out_path):
-    """Download a Pexels video by ID. Tries HD landscape then SD. Returns True on success."""
+    """Download a Pexels video by ID. Prefers SD to save disk space; falls back to HD."""
     patterns = [
-        f"https://videos.pexels.com/video-files/{vid_id}/{vid_id}-hd_1920_1080_{fps}fps.mp4",
-        f"https://videos.pexels.com/video-files/{vid_id}/{vid_id}-hd_1080_1920_{fps}fps.mp4",
         f"https://videos.pexels.com/video-files/{vid_id}/{vid_id}-sd_640_360_{fps}fps.mp4",
         f"https://videos.pexels.com/video-files/{vid_id}/{vid_id}-sd_360_640_{fps}fps.mp4",
+        f"https://videos.pexels.com/video-files/{vid_id}/{vid_id}-hd_1920_1080_{fps}fps.mp4",
+        f"https://videos.pexels.com/video-files/{vid_id}/{vid_id}-hd_1080_1920_{fps}fps.mp4",
     ]
     # Also try other fps values as fallback
     for alt_fps in [25, 30, 24]:
         if alt_fps != fps:
-            patterns.append(f"https://videos.pexels.com/video-files/{vid_id}/{vid_id}-hd_1920_1080_{alt_fps}fps.mp4")
             patterns.append(f"https://videos.pexels.com/video-files/{vid_id}/{vid_id}-sd_640_360_{alt_fps}fps.mp4")
+            patterns.append(f"https://videos.pexels.com/video-files/{vid_id}/{vid_id}-hd_1920_1080_{alt_fps}fps.mp4")
 
     for url in patterns:
         try:
