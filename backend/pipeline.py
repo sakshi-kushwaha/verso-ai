@@ -11,7 +11,7 @@ from rag import embed_chunks
 log = logging.getLogger(__name__)
 
 TEMP_DIR = os.path.join(os.path.dirname(__file__), "data", "temp")
-BATCH_SIZE = 5
+BATCH_SIZE = 3
 
 
 def process_upload(upload_id: int, filepath: str, user_id: int = 1):
@@ -75,7 +75,7 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
         # Step 3: Detect chapters and generate reels
         _update_progress(upload_id, 20, "extracting")
         sections = detect_chapters(pages)
-        max_sections = max(1, len(pages) // 4)
+        max_sections = max(2, len(pages) // 2)
         sections = sections[:max_sections]
 
         total_batches = max(1, (len(sections) + BATCH_SIZE - 1) // BATCH_SIZE)
