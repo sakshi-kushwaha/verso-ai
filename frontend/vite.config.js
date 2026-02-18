@@ -19,7 +19,6 @@ export default defineConfig({
       '/chat': 'http://backend:8000',
       '/flashcards': 'http://backend:8000',
       '/auth': 'http://backend:8000',
-      '/onboarding': 'http://backend:8000',
       '/health': 'http://backend:8000',
       '/bg-images': 'http://backend:8000',
     },
