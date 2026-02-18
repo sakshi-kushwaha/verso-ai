@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+import time
 import httpx
 from config import OLLAMA_HOST, LLM_MODEL, LLM_TIMEOUT
 from prompts import (
@@ -17,7 +18,7 @@ from prompts import (
 
 log = logging.getLogger(__name__)
 
-MAX_RETRIES = 1
+MAX_RETRIES = 3
 
 
 class OllamaUnavailableError(Exception):
@@ -59,9 +60,13 @@ def llm_call(prompt: str, json_mode: bool = False, timeout: float = None) -> str
         except httpx.ConnectError as e:
             last_error = e
             log.warning("Ollama connection failed (attempt %d/%d): %s", attempt + 1, 1 + MAX_RETRIES, e)
+            if attempt < MAX_RETRIES:
+                time.sleep(min(2 ** attempt, 10))
         except httpx.TimeoutException as e:
             last_error = e
             log.warning("Ollama call timed out after %ss (attempt %d/%d)", timeout, attempt + 1, 1 + MAX_RETRIES)
+            if attempt < MAX_RETRIES:
+                time.sleep(min(2 ** attempt, 10))
 
     if isinstance(last_error, httpx.ConnectError):
         raise OllamaUnavailableError(f"Cannot reach Ollama at {OLLAMA_HOST}") from last_error
@@ -125,8 +130,19 @@ def generate_reels(text: str, doc_type: str, prefs: dict = None) -> dict:
         difficulty_instruction=FLASHCARD_DIFFICULTY_INSTRUCTIONS.get(prefs.get("flashcard_difficulty", "medium"), FLASHCARD_DIFFICULTY_INSTRUCTIONS["medium"]),
         few_shot=REEL_FEW_SHOT,
     )
-    result = llm_call(prompt, json_mode=True, timeout=600.0)
-    return parse_llm_json(result)
+
+    max_parse_attempts = 3
+    for attempt in range(max_parse_attempts):
+        result = llm_call(prompt, json_mode=True, timeout=600.0)
+        parsed = parse_llm_json(result)
+        # If parse hit Level 3 fallback (title == "Summary"), retry unless last attempt
+        if parsed["reels"] and parsed["reels"][0].get("title") == "Summary" and len(parsed["reels"]) == 1:
+            if attempt < max_parse_attempts - 1:
+                log.warning("LLM returned unparseable JSON (attempt %d/%d), retrying", attempt + 1, max_parse_attempts)
+                time.sleep(min(2 ** attempt, 10))
+                continue
+        return parsed
+    return parsed
 
 
 def parse_llm_json(text: str) -> dict:

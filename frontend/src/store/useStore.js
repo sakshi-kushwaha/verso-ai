@@ -62,7 +62,7 @@ const useStore = create((set, get) => ({
   reels: [],
   feedPage: 1,
   hasMore: true,
-  setReels: (reels) => set({ reels }),
+  setReels: (reels) => set({ reels, feedPage: 1, hasMore: true }),
   appendReels: (newReels) =>
     set((state) => ({
       reels: [...state.reels, ...newReels],

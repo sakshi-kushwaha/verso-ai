@@ -15,6 +15,7 @@ import { Spinner, ErrorState, EmptyState } from '../components/StateScreens'
 function VideoReelCard({ reel, index, total, isActive }) {
   const videoRef = useRef(null)
   const [paused, setPaused] = useState(false)
+  const [buffering, setBuffering] = useState(true)
   const { bookmarks, toggleBookmark } = useStore()
   const saved = bookmarks.has(reel.id)
 
@@ -41,7 +42,12 @@ function VideoReelCard({ reel, index, total, isActive }) {
 
   return (
     <div className="flex items-center justify-center h-full bg-black">
-      <div className="relative w-full max-w-[480px] h-full">
+      <div className="relative w-full max-w-[480px] h-full bg-gray-900">
+        {/* Reel counter */}
+        <span className="absolute top-4 right-4 z-20 text-white/80 text-xs font-mono bg-black/40 backdrop-blur-sm px-2 py-1 rounded-full">
+          {index + 1} / {total}
+        </span>
+
         {/* Full-screen video */}
         <video
           ref={videoRef}
@@ -51,7 +57,21 @@ function VideoReelCard({ reel, index, total, isActive }) {
           playsInline
           preload="metadata"
           onClick={togglePlay}
+          onWaiting={() => setBuffering(true)}
+          onCanPlay={() => setBuffering(false)}
+          onPlaying={() => setBuffering(false)}
         />
+
+        {/* Buffering indicator */}
+        {buffering && isActive && !paused && (
+          <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+            <div className="flex gap-1.5">
+              <span className="w-2 h-2 bg-white/80 rounded-full animate-pulse" style={{ animationDelay: '0ms' }} />
+              <span className="w-2 h-2 bg-white/80 rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
+              <span className="w-2 h-2 bg-white/80 rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
+            </div>
+          </div>
+        )}
 
         {/* Tap-to-pause overlay */}
         {paused && (
@@ -249,6 +269,12 @@ function ReelCard({ reel, index, total }) {
   )
 }
 
+const TABS = [
+  { id: 'all', label: 'All' },
+  { id: 'explore', label: 'Explore' },
+  { id: 'my-docs', label: 'My Docs' },
+]
+
 export default function FeedPage() {
   const navigate = useNavigate()
   const { reels, setReels, appendReels, feedPage, hasMore } = useStore()
@@ -256,6 +282,7 @@ export default function FeedPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
+  const [tab, setTab] = useState('all')
 
   const ACCENTS = ['#6366F1', '#8B5CF6', '#EC4899', '#F59E0B', '#10B981', '#3B82F6']
 
@@ -272,19 +299,29 @@ export default function FeedPage() {
     videoUrl: r.video_path ? `${api.defaults.baseURL}/video/${r.id}` : null,
   })
 
-  const loadReels = async () => {
+  const loadReels = async (activeTab = tab) => {
     setInitialLoading(true)
     setError(false)
     try {
-      const data = await getFeed(1, 10)
+      const data = await getFeed(1, 10, null, activeTab)
       if (data.reels?.length) {
         setReels(data.reels.map(mapReel))
+      } else {
+        setReels([])
       }
     } catch {
       setError(true)
     } finally {
       setInitialLoading(false)
     }
+  }
+
+  const handleTabChange = (newTab) => {
+    if (newTab === tab) return
+    setTab(newTab)
+    setReels([])
+    setActiveIndex(0)
+    loadReels(newTab)
   }
 
   // Load reels from API on mount
@@ -301,7 +338,7 @@ export default function FeedPage() {
     if (!hasMore || loading) return
     setLoading(true)
     try {
-      const data = await getFeed(feedPage + 1, 5)
+      const data = await getFeed(feedPage + 1, 5, null, tab)
       if (data.reels?.length) {
         appendReels(data.reels.map(mapReel))
       }
@@ -312,38 +349,66 @@ export default function FeedPage() {
     }
   }
 
+  const tabBar = (
+    <div className="flex items-center gap-2 px-4 py-2 bg-surface border-b border-border">
+      {TABS.map((t) => (
+        <button
+          key={t.id}
+          onClick={() => handleTabChange(t.id)}
+          className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors cursor-pointer ${
+            tab === t.id
+              ? 'bg-primary text-white'
+              : 'bg-surface-alt text-text-secondary hover:text-text-primary'
+          }`}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  )
+
   if (initialLoading) {
     return (
-      <div className="h-[calc(100dvh-4rem)] md:h-screen">
-        <Spinner text="Loading reels..." />
+      <div className="h-[calc(100dvh-4rem)] md:h-screen flex flex-col">
+        {tabBar}
+        <div className="flex-1">
+          <Spinner text="Loading reels..." />
+        </div>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="h-[calc(100dvh-4rem)] md:h-screen">
-        <ErrorState onRetry={loadReels} />
+      <div className="h-[calc(100dvh-4rem)] md:h-screen flex flex-col">
+        {tabBar}
+        <div className="flex-1">
+          <ErrorState onRetry={() => loadReels()} />
+        </div>
       </div>
     )
   }
 
   if (reels.length === 0) {
     return (
-      <div className="h-[calc(100dvh-4rem)] md:h-screen">
-        <EmptyState
-          icon={<Upload />}
-          title="No reels yet"
-          subtitle="Upload a document to get started"
-        >
-          <Button onClick={() => navigate('/upload')}>Upload Document</Button>
-        </EmptyState>
+      <div className="h-[calc(100dvh-4rem)] md:h-screen flex flex-col">
+        {tabBar}
+        <div className="flex-1">
+          <EmptyState
+            icon={<Upload />}
+            title="No reels yet"
+            subtitle={tab === 'my-docs' ? 'Upload a document to see your reels here' : 'Upload a document to get started'}
+          >
+            <Button onClick={() => navigate('/upload')}>Upload Document</Button>
+          </EmptyState>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="h-[calc(100dvh-4rem)] md:h-screen">
+    <div className="h-[calc(100dvh-4rem)] md:h-screen flex flex-col">
+      {tabBar}
       <Swiper
         direction="vertical"
         modules={[Mousewheel, Keyboard]}
@@ -351,7 +416,7 @@ export default function FeedPage() {
         keyboard
         slidesPerView={1}
         speed={400}
-        className="h-full"
+        className="h-full flex-1"
         onReachEnd={handleReachEnd}
         onSlideChange={(swiper) => setActiveIndex(swiper.activeIndex)}
       >
