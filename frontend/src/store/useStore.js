@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { getBookmarks, addBookmark as apiAddBookmark, removeBookmark as apiRemoveBookmark } from '../api';
 
 const useStore = create((set, get) => ({
   // --- Auth ---
@@ -15,18 +16,47 @@ const useStore = create((set, get) => ({
     set({ user: null, token: null });
   },
 
-  // --- Bookmarks ---
-  bookmarks: new Set(),
-  toggleBookmark: (id) =>
-    set((state) => {
-      const next = new Set(state.bookmarks);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return { bookmarks: next };
-    }),
+  // --- Bookmarks (API-backed) ---
+  bookmarks: new Map(), // reel_id -> bookmark_id
+  bookmarkItems: [],    // full bookmark objects from API
+  loadBookmarks: async () => {
+    try {
+      const items = await getBookmarks();
+      const map = new Map();
+      items.forEach((b) => {
+        if (b.reel_id) map.set(b.reel_id, b.id);
+        if (b.flashcard_id) map.set('fc_' + b.flashcard_id, b.id);
+      });
+      set({ bookmarks: map, bookmarkItems: items });
+    } catch {
+      // silent fail — bookmarks stay empty
+    }
+  },
+  toggleBookmark: async (reelId) => {
+    const { bookmarks } = get();
+    if (bookmarks.has(reelId)) {
+      const bookmarkId = bookmarks.get(reelId);
+      try {
+        await apiRemoveBookmark(bookmarkId);
+        const next = new Map(bookmarks);
+        next.delete(reelId);
+        set((state) => ({
+          bookmarks: next,
+          bookmarkItems: state.bookmarkItems.filter((b) => b.id !== bookmarkId),
+        }));
+      } catch { /* silent */ }
+    } else {
+      try {
+        const result = await apiAddBookmark(reelId, null);
+        const next = new Map(bookmarks);
+        next.set(reelId, result.id);
+        set((state) => ({
+          bookmarks: next,
+          bookmarkItems: [...state.bookmarkItems, { id: result.id, reel_id: reelId }],
+        }));
+      } catch { /* silent */ }
+    }
+  },
 
   // --- Reels / Feed ---
   reels: [],
