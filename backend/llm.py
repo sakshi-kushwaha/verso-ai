@@ -102,7 +102,7 @@ def detect_subject_category(text: str) -> str:
     return "general"
 
 
-def generate_reels(text: str, doc_type: str, prefs: dict = None) -> dict:
+def generate_reels(text: str, doc_type: str, prefs: dict = None, reel_count: int = 2) -> dict:
     """Generate reels and flashcards from text with personalization.
 
     Raises OllamaUnavailableError if Ollama is down.
@@ -124,6 +124,7 @@ def generate_reels(text: str, doc_type: str, prefs: dict = None) -> dict:
         use_case_instruction=REEL_USE_CASE_INSTRUCTIONS.get(prefs.get("use_case", "learning"), REEL_USE_CASE_INSTRUCTIONS["learning"]),
         difficulty_instruction=FLASHCARD_DIFFICULTY_INSTRUCTIONS.get(prefs.get("flashcard_difficulty", "medium"), FLASHCARD_DIFFICULTY_INSTRUCTIONS["medium"]),
         few_shot=REEL_FEW_SHOT,
+        reel_count=reel_count,
     )
     result = llm_call(prompt, json_mode=True, timeout=600.0)
     return parse_llm_json(result)

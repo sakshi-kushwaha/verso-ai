@@ -104,7 +104,7 @@ DIFFICULTY: {difficulty_instruction}
 
 RULES:
 1. Return ONLY valid JSON matching this exact schema — no extra text before or after.
-2. You MUST generate at least 1 reel and at least 1 flashcard. Never omit flashcards.
+2. You MUST generate exactly {reel_count} reels and {reel_count} flashcards. Never generate fewer. Never omit flashcards.
 3. Every flashcard question MUST end with a question mark (?).
 4. Every flashcard answer MUST be at least 10 words long.
 5. Reel titles must be under 60 characters.

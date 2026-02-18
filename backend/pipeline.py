@@ -84,6 +84,8 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
         sections = sections[:max_sections]
 
         total_batches = max(1, (len(sections) + BATCH_SIZE - 1) // BATCH_SIZE)
+        target_total_reels = max(2, (len(pages) * 4) // 10)  # 4 reels per 10 pages
+        reels_per_batch = max(2, target_total_reels // total_batches)
         batches_completed = 0
         ollama_failed = False
 
@@ -96,7 +98,7 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
             batch_text = "\n".join(s["text"] for s in batch)
 
             try:
-                result = generate_reels(batch_text, doc_type, prefs)
+                result = generate_reels(batch_text, doc_type, prefs, reel_count=reels_per_batch)
             except OllamaUnavailableError:
                 log.error("Ollama went down during batch %d/%d for upload %s", batch_num + 1, total_batches, upload_id)
                 ollama_failed = True
