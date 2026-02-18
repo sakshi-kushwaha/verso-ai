@@ -8,11 +8,15 @@ from parser import parse_document, detect_chapters, EmptyDocumentError, ScannedP
 from llm import detect_doc_type, detect_subject_category, generate_reels, OllamaUnavailableError
 from bg_images import assign_images
 from rag import embed_chunks
+from ws_manager import manager
 
 log = logging.getLogger(__name__)
 
 TEMP_DIR = os.path.join(os.path.dirname(__file__), "data", "temp")
 BATCH_SIZE = 3
+
+# Set by main.py lifespan — the running asyncio event loop
+_event_loop: asyncio.AbstractEventLoop | None = None
 
 
 def process_upload(upload_id: int, filepath: str, user_id: int = 1):
@@ -159,11 +163,26 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
             pass
 
 
+def _notify_progress(upload_id: int, progress: int, stage: str, status: str | None = None, error: str | None = None):
+    """Push a progress update to any WebSocket subscribers (non-blocking from thread)."""
+    loop = _event_loop
+    if loop is None or loop.is_closed():
+        return
+    try:
+        asyncio.run_coroutine_threadsafe(
+            manager.broadcast_upload_progress(upload_id, progress, stage, status, error),
+            loop,
+        )
+    except Exception:
+        log.debug("WS notify failed for upload %s", upload_id)
+
+
 def _update_progress(upload_id: int, progress: int, stage: str):
     conn = get_db()
     conn.execute("UPDATE uploads SET progress = ?, stage = ? WHERE id = ?", (progress, stage, upload_id))
     conn.commit()
     conn.close()
+    _notify_progress(upload_id, progress, stage)
 
 
 def _update_status(upload_id: int, status: str, error_message: str = None):
@@ -174,6 +193,7 @@ def _update_status(upload_id: int, status: str, error_message: str = None):
     )
     conn.commit()
     conn.close()
+    _notify_progress(upload_id, 0, "", status, error_message)
 
 
 def _update_pages(upload_id: int, total_pages: int):

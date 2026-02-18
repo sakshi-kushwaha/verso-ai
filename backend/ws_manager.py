@@ -1,0 +1,55 @@
+import asyncio
+import json
+import logging
+from fastapi import WebSocket
+
+log = logging.getLogger(__name__)
+
+
+class ConnectionManager:
+    """Manages WebSocket subscriptions for upload progress broadcasts."""
+
+    def __init__(self):
+        self._lock = asyncio.Lock()
+        # upload_id -> set of connected WebSockets
+        self._subs: dict[int, set[WebSocket]] = {}
+
+    async def subscribe_upload(self, upload_id: int, ws: WebSocket):
+        async with self._lock:
+            self._subs.setdefault(upload_id, set()).add(ws)
+
+    async def unsubscribe_upload(self, upload_id: int, ws: WebSocket):
+        async with self._lock:
+            if upload_id in self._subs:
+                self._subs[upload_id].discard(ws)
+                if not self._subs[upload_id]:
+                    del self._subs[upload_id]
+
+    async def broadcast_upload_progress(
+        self,
+        upload_id: int,
+        progress: int,
+        stage: str,
+        status: str | None = None,
+        error: str | None = None,
+    ):
+        async with self._lock:
+            clients = list(self._subs.get(upload_id, []))
+
+        msg = json.dumps({
+            "type": "progress",
+            "upload_id": upload_id,
+            "progress": progress,
+            "stage": stage,
+            "status": status,
+            "error": error,
+        })
+
+        for ws in clients:
+            try:
+                await ws.send_text(msg)
+            except Exception:
+                log.debug("Failed to send WS message for upload %s", upload_id)
+
+
+manager = ConnectionManager()

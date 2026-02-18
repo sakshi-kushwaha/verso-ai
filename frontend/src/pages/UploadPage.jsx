@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { uploadDocument, getUploadStatus, getUploads } from '../api'
+import { getWsBaseUrl, getAuthToken } from '../api/ws'
 import useStore from '../store/useStore'
 import Button from '../components/Button'
 import { Upload, File, X } from '../components/Icons'
@@ -23,6 +24,7 @@ export default function UploadPage() {
   const fileRef = useRef(null)
   const pollRef = useRef(null)
   const tickRef = useRef(null)
+  const wsRef = useRef(null)
   const serverRef = useRef({ progress: 0, stage: 'uploading' })
   const [file, setFile] = useState(null)
   const [dragOver, setDragOver] = useState(false)
@@ -56,6 +58,7 @@ export default function UploadPage() {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current)
       if (tickRef.current) clearInterval(tickRef.current)
+      if (wsRef.current) { try { wsRef.current.close() } catch {} }
     }
   }, [])
 
@@ -75,30 +78,63 @@ export default function UploadPage() {
     }, 200)
   }
 
+  const handleProgressUpdate = (uploadId, p, s, st, errMsg) => {
+    serverRef.current = { progress: p, stage: s }
+    setStage(s)
+    setUploadStatus({ id: uploadId, status: st || 'processing', progress: p })
+
+    if (st === 'done') {
+      if (pollRef.current) clearInterval(pollRef.current)
+      clearInterval(tickRef.current)
+      if (wsRef.current) { try { wsRef.current.close() } catch {} }
+      setDisplayProgress(100)
+      setTimeout(() => { clearUpload(); navigate('/') }, 600)
+    } else if (st === 'error' || st === 'partial') {
+      if (pollRef.current) clearInterval(pollRef.current)
+      clearInterval(tickRef.current)
+      if (wsRef.current) { try { wsRef.current.close() } catch {} }
+      setError(errMsg || 'Processing failed. Please try again.')
+      setProcessing(false)
+    }
+  }
+
+  const connectWs = (uploadId) => {
+    const token = getAuthToken()
+    if (!token) { pollStatus(uploadId); return }
+
+    try {
+      const ws = new WebSocket(`${getWsBaseUrl()}/ws/upload/${uploadId}?token=${token}`)
+      wsRef.current = ws
+
+      ws.onmessage = (evt) => {
+        try {
+          const msg = JSON.parse(evt.data)
+          if (msg.type === 'progress') {
+            handleProgressUpdate(uploadId, msg.progress ?? 0, msg.stage || 'uploading', msg.status, msg.error)
+          }
+        } catch {}
+      }
+
+      ws.onerror = () => {
+        // WebSocket failed — fall back to polling
+        ws.close()
+        wsRef.current = null
+        pollStatus(uploadId)
+      }
+
+      ws.onclose = () => { wsRef.current = null }
+    } catch {
+      pollStatus(uploadId)
+    }
+  }
+
   const pollStatus = (uploadId) => {
     pollRef.current = setInterval(async () => {
       try {
         const status = await getUploadStatus(uploadId)
         const p = status.progress ?? 0
         const s = status.stage || 'uploading'
-        serverRef.current = { progress: p, stage: s }
-        setStage(s)
-        setUploadStatus({ id: uploadId, status: status.status, progress: p })
-
-        if (status.status === 'done') {
-          clearInterval(pollRef.current)
-          clearInterval(tickRef.current)
-          setDisplayProgress(100)
-          setTimeout(() => {
-            clearUpload()
-            navigate('/')
-          }, 600)
-        } else if (status.status === 'error' || status.status === 'partial') {
-          clearInterval(pollRef.current)
-          clearInterval(tickRef.current)
-          setError(status.error_message || 'Processing failed. Please try again.')
-          setProcessing(false)
-        }
+        handleProgressUpdate(uploadId, p, s, status.status, status.error_message)
       } catch {
         // Keep polling on transient errors
       }
@@ -117,7 +153,7 @@ export default function UploadPage() {
       const id = data.id || data.upload_id
       setUploadStatus({ id, status: 'processing', progress: 0 })
       startTicker()
-      pollStatus(id)
+      connectWs(id)
     } catch {
       // API not available — fall back to simulated progress
       simulateProgress()

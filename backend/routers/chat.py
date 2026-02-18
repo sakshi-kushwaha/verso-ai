@@ -1,11 +1,15 @@
 import json
+import logging
 import httpx
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from database import get_db
 from auth import get_current_user
+from ws_auth import ws_authenticate
 from rag import retrieve_chunks
 from config import OLLAMA_HOST, LLM_MODEL, LLM_TIMEOUT, MAX_EXCHANGES_PER_DOC
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["chat"])
 
@@ -171,6 +175,35 @@ async def _generate(prompt: str) -> str:
         return resp.json()["response"].strip()
 
 
+async def _generate_stream(prompt: str):
+    """Async generator that yields tokens from Ollama streaming API."""
+    async with httpx.AsyncClient() as client:
+        async with client.stream(
+            "POST",
+            f"{OLLAMA_HOST}/api/generate",
+            json={
+                "model": LLM_MODEL,
+                "prompt": prompt,
+                "stream": True,
+                "options": {"num_ctx": 4096},
+            },
+            timeout=LLM_TIMEOUT,
+        ) as resp:
+            resp.raise_for_status()
+            async for line in resp.aiter_lines():
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                    token = data.get("response", "")
+                    if token:
+                        yield token
+                    if data.get("done"):
+                        break
+                except json.JSONDecodeError:
+                    continue
+
+
 def _build_sources(chunks: list[dict]) -> list[str]:
     return [f"Chunk {c['index'] + 1} (score: {c['score']:.2f})" for c in chunks]
 
@@ -277,3 +310,101 @@ async def chat_status(upload_id: int, user: dict = Depends(get_current_user)):
         }
     finally:
         db.close()
+
+
+@router.websocket("/ws/chat/{upload_id}")
+async def ws_chat(ws: WebSocket, upload_id: int):
+    await ws.accept()
+    user = await ws_authenticate(ws)
+    if user is None:
+        return
+
+    # Verify ownership and qa_ready
+    db = get_db()
+    try:
+        row = db.execute(
+            "SELECT qa_ready FROM uploads WHERE id = ? AND user_id = ?",
+            (upload_id, user["id"]),
+        ).fetchone()
+    finally:
+        db.close()
+
+    if not row:
+        await ws.send_text(json.dumps({"type": "error", "detail": "Upload not found"}))
+        await ws.close(code=1008)
+        return
+
+    if not row["qa_ready"]:
+        await ws.send_text(json.dumps({"type": "error", "detail": "Document still processing"}))
+        await ws.close(code=1008)
+        return
+
+    try:
+        while True:
+            raw = await ws.receive_text()
+            try:
+                msg = json.loads(raw)
+            except json.JSONDecodeError:
+                await ws.send_text(json.dumps({"type": "error", "detail": "Invalid JSON"}))
+                continue
+
+            question = msg.get("question", "").strip()
+            if not question:
+                await ws.send_text(json.dumps({"type": "error", "detail": "Empty question"}))
+                continue
+
+            # Check exchange limit
+            db = get_db()
+            try:
+                count = db.execute(
+                    "SELECT COUNT(*) as cnt FROM chat_history WHERE upload_id = ?",
+                    (upload_id,),
+                ).fetchone()["cnt"]
+            finally:
+                db.close()
+
+            if count >= MAX_EXCHANGES_PER_DOC:
+                await ws.send_text(json.dumps({
+                    "type": "error",
+                    "detail": f"Exchange limit reached ({MAX_EXCHANGES_PER_DOC} questions per document).",
+                }))
+                continue
+
+            # Retrieve chunks
+            try:
+                chunks = await retrieve_chunks(question, upload_id)
+            except Exception as e:
+                await ws.send_text(json.dumps({"type": "error", "detail": str(e)}))
+                continue
+
+            if not chunks:
+                await ws.send_text(json.dumps({"type": "error", "detail": "No relevant content found"}))
+                continue
+
+            prefs = _get_user_preferences(user["id"])
+            prompt = _build_chat_prompt(question, chunks, prefs)
+            sources = _build_sources(chunks)
+
+            await ws.send_text(json.dumps({"type": "stream_start", "sources": sources}))
+
+            # Stream tokens
+            full_answer = []
+            try:
+                async for token in _generate_stream(prompt):
+                    full_answer.append(token)
+                    await ws.send_text(json.dumps({"type": "token", "content": token}))
+            except Exception as e:
+                await ws.send_text(json.dumps({"type": "error", "detail": f"Generation failed: {e}"}))
+                continue
+
+            answer = "".join(full_answer).strip()
+            _save_exchange(upload_id, question, answer, sources)
+
+            await ws.send_text(json.dumps({
+                "type": "stream_end",
+                "exchange_count": count + 1,
+                "limit": MAX_EXCHANGES_PER_DOC,
+            }))
+
+    except WebSocketDisconnect:
+        pass

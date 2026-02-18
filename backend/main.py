@@ -1,4 +1,5 @@
 import os
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,6 +14,7 @@ from routers.feed import router as feed_router
 from routers.flashcards import router as flashcards_router
 from routers.chat import router as chat_router
 from routers.auth import router as auth_router
+import pipeline
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 
@@ -22,6 +24,8 @@ async def lifespan(app: FastAPI):
     EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
     AUDIO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     init_db()
+    # Store the running event loop so background threads can schedule async broadcasts
+    pipeline._event_loop = asyncio.get_running_loop()
     yield
 
 
