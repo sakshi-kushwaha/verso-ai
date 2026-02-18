@@ -1,7 +1,7 @@
 FROM python:3.11-slim
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends espeak-ng && \
+    apt-get install -y --no-install-recommends espeak-ng ffmpeg && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -11,7 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-RUN mkdir -p data/embeddings data/audio_cache tts/models
+RUN mkdir -p data/embeddings data/audio_cache data/video_cache tts/models
 
 # Download Piper voice model (en_US-lessac-medium — natural sounding, ~60MB)
 RUN python -c "\

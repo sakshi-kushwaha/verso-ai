@@ -30,14 +30,14 @@ def get_feed(page: int = Query(1, ge=1), limit: int = Query(5, ge=1, le=50),
         reels = conn.execute(
             """SELECT r.* FROM reels r
                JOIN uploads u ON r.upload_id = u.id
-               WHERE u.user_id = ?
+               WHERE u.user_id = ? OR u.doc_type = 'seed'
                ORDER BY r.created_at DESC LIMIT ? OFFSET ?""",
             (user["id"], limit, offset),
         ).fetchall()
         total = conn.execute(
             """SELECT COUNT(*) FROM reels r
                JOIN uploads u ON r.upload_id = u.id
-               WHERE u.user_id = ?""",
+               WHERE u.user_id = ? OR u.doc_type = 'seed'""",
             (user["id"],),
         ).fetchone()[0]
 

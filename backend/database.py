@@ -127,6 +127,10 @@ def init_db():
     if "bg_image" not in reel_cols:
         conn.execute("ALTER TABLE reels ADD COLUMN bg_image TEXT")
 
+    # Migration: add video_path to reels
+    if "video_path" not in reel_cols:
+        conn.execute("ALTER TABLE reels ADD COLUMN video_path TEXT")
+
     # Seed a default user (placeholder until auth is implemented)
     conn.execute(
         "INSERT OR IGNORE INTO users (id, name, password_hash) VALUES (1, 'default', 'placeholder')"
