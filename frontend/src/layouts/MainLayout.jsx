@@ -1,6 +1,7 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import useStore from '../store/useStore'
-import { Logo, Home, Cards, Chat, Bookmark, Chart, Upload, Logout, Book } from '../components/Icons'
+import UploadTracker from '../components/UploadTracker'
+import { Logo, Home, Cards, Chat, Bookmark, Upload, Logout, Book } from '../components/Icons'
 
 const navItems = [
   { to: '/', icon: Home, label: 'Feed' },
@@ -9,7 +10,6 @@ const navItems = [
   { to: '/upload', icon: Upload, label: 'Upload' },
   { to: '/chat', icon: Chat, label: 'Chat' },
   { to: '/bookmarks', icon: Bookmark, label: 'Saved' },
-  { to: '/progress', icon: Chart, label: 'Progress' },
 ]
 
 const linkClass = ({ isActive }) =>
@@ -20,6 +20,8 @@ const linkClass = ({ isActive }) =>
 export default function MainLayout() {
   const navigate = useNavigate()
   const logout = useStore((s) => s.logout)
+  const bgUpload = useStore((s) => s.bgUpload)
+  const hasBanner = !!bgUpload
 
   const handleLogout = () => {
     logout()
@@ -49,8 +51,11 @@ export default function MainLayout() {
         </div>
       </aside>
 
+      {/* Background upload progress banner */}
+      <UploadTracker />
+
       {/* Main content */}
-      <main className="md:ml-16 pb-18 md:pb-0 min-h-screen">
+      <main className={`md:ml-16 pb-18 md:pb-0 min-h-screen ${hasBanner ? 'pt-14' : ''}`}>
         <Outlet />
       </main>
 

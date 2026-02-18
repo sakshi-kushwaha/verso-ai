@@ -141,4 +141,20 @@ export async function removeBookmark(bookmarkId) {
   return data
 }
 
+// --- Progress ---
+export async function recordView(uploadId, reelId) {
+  const { data } = await api.post('/progress/view', { upload_id: uploadId, reel_id: reelId })
+  return data
+}
+
+export async function getProgress(uploadId) {
+  const { data } = await api.get(`/progress/${uploadId}`)
+  return data
+}
+
+export async function getAllProgress() {
+  const { data } = await api.get('/progress')
+  return data
+}
+
 export default api

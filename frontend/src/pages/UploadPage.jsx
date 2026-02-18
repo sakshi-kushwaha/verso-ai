@@ -1,39 +1,21 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { uploadDocument, getUploadStatus, getUploads } from '../api'
-import { getWsBaseUrl, getAuthToken } from '../api/ws'
+import { uploadDocument, getUploads } from '../api'
 import useStore from '../store/useStore'
 import Button from '../components/Button'
 import { Upload, File, X } from '../components/Icons'
 
-const STAGE_LABELS = {
-  uploading: 'Uploading document...',
-  parsing: 'Parsing document...',
-  analyzing: 'Analyzing content...',
-  extracting: 'Extracting key concepts...',
-  generating: 'Generating reels...',
-  embedding: 'Building knowledge base...',
-  done: 'Finalizing...',
-}
-
-// Max display progress per stage (creep ceiling before next server update)
-const STAGE_CEIL = { uploading: 4, parsing: 14, analyzing: 19, extracting: 24, generating: 69, embedding: 95, done: 100 }
-
 export default function UploadPage() {
   const navigate = useNavigate()
   const fileRef = useRef(null)
-  const pollRef = useRef(null)
-  const tickRef = useRef(null)
-  const wsRef = useRef(null)
-  const serverRef = useRef({ progress: 0, stage: 'uploading' })
   const [file, setFile] = useState(null)
   const [dragOver, setDragOver] = useState(false)
-  const [processing, setProcessing] = useState(false)
-  const [displayProgress, setDisplayProgress] = useState(0)
-  const [stage, setStage] = useState('uploading')
+  const [uploading, setUploading] = useState(false)
   const [error, setError] = useState(null)
   const [recentUploads, setRecentUploads] = useState([])
-  const { setUploadStatus, clearUpload } = useStore()
+  const setBgUpload = useStore((s) => s.setBgUpload)
+  const bgUpload = useStore((s) => s.bgUpload)
+  const isProcessing = bgUpload && bgUpload.status !== 'done'
 
   useEffect(() => {
     getUploads().then((uploads) => setRecentUploads(uploads.filter(u => u.status === 'done'))).catch(() => {})
@@ -53,179 +35,28 @@ export default function UploadPage() {
     handleFile(f)
   }, [])
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current)
-      if (tickRef.current) clearInterval(tickRef.current)
-      if (wsRef.current) { try { wsRef.current.close() } catch {} }
-    }
-  }, [])
-
-  // Smooth progress ticker — runs every 200ms, creeps display toward ceiling
-  const startTicker = () => {
-    tickRef.current = setInterval(() => {
-      setDisplayProgress((prev) => {
-        const { progress: server, stage: curStage } = serverRef.current
-        const ceil = STAGE_CEIL[curStage] ?? 99
-        if (prev >= 100) return 100
-        // If server is ahead, catch up quickly
-        if (prev < server) return Math.min(prev + 2, server)
-        // Otherwise creep slowly toward stage ceiling
-        if (prev < ceil) return Math.round((prev + 0.4) * 10) / 10
-        return prev
-      })
-    }, 200)
-  }
-
-  const handleProgressUpdate = (uploadId, p, s, st, errMsg) => {
-    serverRef.current = { progress: p, stage: s }
-    setStage(s)
-    setUploadStatus({ id: uploadId, status: st || 'processing', progress: p })
-
-    if (st === 'done') {
-      if (pollRef.current) clearInterval(pollRef.current)
-      clearInterval(tickRef.current)
-      if (wsRef.current) { try { wsRef.current.close() } catch {} }
-      setDisplayProgress(100)
-      setTimeout(() => { clearUpload(); navigate('/') }, 600)
-    } else if (st === 'error' || st === 'partial') {
-      if (pollRef.current) clearInterval(pollRef.current)
-      clearInterval(tickRef.current)
-      if (wsRef.current) { try { wsRef.current.close() } catch {} }
-      setError(errMsg || 'Processing failed. Please try again.')
-      setProcessing(false)
-    }
-  }
-
-  const connectWs = (uploadId) => {
-    const token = getAuthToken()
-    if (!token) { pollStatus(uploadId); return }
-
-    try {
-      const ws = new WebSocket(`${getWsBaseUrl()}/ws/upload/${uploadId}?token=${token}`)
-      wsRef.current = ws
-
-      ws.onmessage = (evt) => {
-        try {
-          const msg = JSON.parse(evt.data)
-          if (msg.type === 'progress') {
-            handleProgressUpdate(uploadId, msg.progress ?? 0, msg.stage || 'uploading', msg.status, msg.error)
-          }
-        } catch {}
-      }
-
-      ws.onerror = () => {
-        // WebSocket failed — fall back to polling
-        ws.close()
-        wsRef.current = null
-        pollStatus(uploadId)
-      }
-
-      ws.onclose = () => { wsRef.current = null }
-    } catch {
-      pollStatus(uploadId)
-    }
-  }
-
-  const pollStatus = (uploadId) => {
-    pollRef.current = setInterval(async () => {
-      try {
-        const status = await getUploadStatus(uploadId)
-        const p = status.progress ?? 0
-        const s = status.stage || 'uploading'
-        handleProgressUpdate(uploadId, p, s, status.status, status.error_message)
-      } catch {
-        // Keep polling on transient errors
-      }
-    }, 2000)
-  }
-
   const startProcessing = async () => {
-    setProcessing(true)
-    setDisplayProgress(0)
-    setStage('uploading')
-    serverRef.current = { progress: 0, stage: 'uploading' }
+    setUploading(true)
     setError(null)
 
     try {
       const data = await uploadDocument(file)
       const id = data.id || data.upload_id
-      setUploadStatus({ id, status: 'processing', progress: 0 })
-      startTicker()
-      connectWs(id)
+      // Hand off to global background tracker and navigate away
+      setBgUpload({ id, filename: file.name, progress: 0, stage: 'uploading', status: 'processing' })
+      setFile(null)
+      navigate('/')
     } catch {
-      // API not available — fall back to simulated progress
-      simulateProgress()
+      setError('Upload failed. Please try again.')
+    } finally {
+      setUploading(false)
     }
-  }
-
-  // Fallback simulated progress when backend is unavailable
-  const simulateProgress = () => {
-    const stages = ['parsing', 'analyzing', 'extracting', 'generating', 'embedding', 'done']
-    const interval = setInterval(() => {
-      setDisplayProgress((prev) => {
-        const next = prev + 2
-        if (next >= 100) {
-          clearInterval(interval)
-          setTimeout(() => navigate('/'), 600)
-          return 100
-        }
-        setStage(stages[Math.min(Math.floor(next / 18), stages.length - 1)])
-        return next
-      })
-    }, 80)
   }
 
   const formatSize = (bytes) => {
     if (bytes < 1024) return bytes + ' B'
     if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB'
     return (bytes / 1048576).toFixed(1) + ' MB'
-  }
-
-  if (processing) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-6 fade-up">
-        {/* Progress ring */}
-        <div className="relative w-48 h-48 mb-8">
-          <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-            <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(99,102,241,0.1)" strokeWidth="6" />
-            <circle
-              cx="50" cy="50" r="42" fill="none"
-              stroke="url(#progressGrad)" strokeWidth="6"
-              strokeLinecap="round"
-              strokeDasharray={`${displayProgress * 2.64} 264`}
-              className="transition-all duration-200"
-            />
-            <defs>
-              <linearGradient id="progressGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#6366F1" />
-                <stop offset="100%" stopColor="#818CF8" />
-              </linearGradient>
-            </defs>
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-3xl font-bold font-display">{Math.floor(displayProgress)}%</span>
-            <span className="text-text-muted text-xs">Processing</span>
-          </div>
-        </div>
-
-        <p className="text-text-secondary text-sm font-medium mb-2 progress-pulse">
-          {STAGE_LABELS[stage] || 'Processing...'}
-        </p>
-
-        {/* Animated dots */}
-        <div className="flex gap-1.5 mt-4">
-          {[0, 1, 2].map((i) => (
-            <div
-              key={i}
-              className="w-2 h-2 rounded-full bg-primary pulse-3"
-              style={{ animationDelay: `${i * 0.2}s` }}
-            />
-          ))}
-        </div>
-      </div>
-    )
   }
 
   return (
@@ -239,54 +70,89 @@ export default function UploadPage() {
         </div>
       )}
 
-      {/* Drop zone */}
-      <div
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={onDrop}
-        onClick={() => fileRef.current?.click()}
-        className={`border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all ${
-          dragOver
-            ? 'border-primary bg-primary/5 scale-[1.01]'
-            : 'border-border hover:border-primary/30 hover:bg-surface-alt/50'
-        }`}
-      >
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".pdf,.docx"
-          className="hidden"
-          onChange={(e) => handleFile(e.target.files[0])}
-        />
-        <div className="flex justify-center mb-4 text-text-muted">
-          <Upload />
-        </div>
-        <p className="font-semibold mb-1">Drag & drop your file here</p>
-        <p className="text-text-muted text-sm">or click to browse</p>
-        <p className="text-text-muted text-xs mt-3">PDF, DOCX up to 50 MB</p>
-      </div>
-
-      {/* Selected file */}
-      {file && (
-        <div className="mt-6 flex items-center gap-3 p-4 bg-surface rounded-xl border border-border scale-in">
-          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-            <File />
+      {/* Currently processing banner */}
+      {isProcessing && (
+        <div className="bg-surface rounded-2xl p-6 border border-primary/30 mb-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+              <File />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold truncate">{bgUpload.filename}</p>
+              <p className="text-primary text-xs">
+                {bgUpload.stage === 'uploading' ? 'Uploading...' :
+                 bgUpload.stage === 'parsing' ? 'Parsing document...' :
+                 bgUpload.stage === 'analyzing' ? 'Analyzing content...' :
+                 bgUpload.stage === 'extracting' ? 'Extracting concepts...' :
+                 bgUpload.stage === 'generating' ? 'Generating reels...' :
+                 bgUpload.stage === 'embedding' ? 'Building knowledge base...' :
+                 'Processing...'}
+              </p>
+            </div>
+            <span className="text-sm font-bold text-primary tabular-nums">{Math.round(bgUpload.progress || 0)}%</span>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{file.name}</p>
-            <p className="text-text-muted text-xs">{formatSize(file.size)}</p>
+          <div className="h-2 rounded-full bg-surface-alt overflow-hidden">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-500"
+              style={{ width: `${bgUpload.progress || 0}%` }}
+            />
           </div>
-          <button onClick={() => setFile(null)} className="text-text-muted hover:text-danger cursor-pointer">
-            <X />
-          </button>
+          <p className="text-text-muted text-xs mt-3 text-center">Please wait for processing to finish before uploading another document</p>
         </div>
       )}
 
-      {/* Generate button */}
-      {file && (
-        <Button full onClick={startProcessing} className="mt-6">
-          Generate Reels
-        </Button>
+      {/* Drop zone */}
+      {!isProcessing && (
+        <>
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={onDrop}
+            onClick={() => fileRef.current?.click()}
+            className={`border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all ${
+              dragOver
+                ? 'border-primary bg-primary/5 scale-[1.01]'
+                : 'border-border hover:border-primary/30 hover:bg-surface-alt/50'
+            }`}
+          >
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".pdf,.docx"
+              className="hidden"
+              onChange={(e) => handleFile(e.target.files[0])}
+            />
+            <div className="flex justify-center mb-4 text-text-muted">
+              <Upload />
+            </div>
+            <p className="font-semibold mb-1">Drag & drop your file here</p>
+            <p className="text-text-muted text-sm">or click to browse</p>
+            <p className="text-text-muted text-xs mt-3">PDF, DOCX up to 50 MB</p>
+          </div>
+
+          {/* Selected file */}
+          {file && (
+            <div className="mt-6 flex items-center gap-3 p-4 bg-surface rounded-xl border border-border scale-in">
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                <File />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{file.name}</p>
+                <p className="text-text-muted text-xs">{formatSize(file.size)}</p>
+              </div>
+              <button onClick={() => setFile(null)} className="text-text-muted hover:text-danger cursor-pointer">
+                <X />
+              </button>
+            </div>
+          )}
+
+          {/* Generate button */}
+          {file && (
+            <Button full onClick={startProcessing} disabled={uploading} className="mt-6">
+              {uploading ? 'Uploading...' : 'Generate Reels'}
+            </Button>
+          )}
+        </>
       )}
 
       {/* Recent uploads */}

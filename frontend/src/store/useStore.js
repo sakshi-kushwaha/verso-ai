@@ -75,6 +75,15 @@ const useStore = create((set, get) => ({
   setUploadStatus: (upload) => set({ currentUpload: upload }),
   clearUpload: () => set({ currentUpload: null }),
 
+  // --- Background Upload Processing ---
+  bgUpload: null, // { id, filename, progress, stage, status }
+  setBgUpload: (upload) => set({ bgUpload: upload }),
+  updateBgUpload: (updates) =>
+    set((state) => ({
+      bgUpload: state.bgUpload ? { ...state.bgUpload, ...updates } : null,
+    })),
+  clearBgUpload: () => set({ bgUpload: null, reels: [] }),
+
   // --- Onboarding Preferences ---
   preferences: null,
   onboardingCompleted: false,

@@ -15,6 +15,7 @@ from routers.flashcards import router as flashcards_router
 from routers.chat import router as chat_router
 from routers.auth import router as auth_router
 from routers.bookmarks import router as bookmarks_router
+from routers.progress import router as progress_router
 import pipeline
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
@@ -59,6 +60,7 @@ app.include_router(flashcards_router)
 app.include_router(chat_router)
 app.include_router(auth_router)
 app.include_router(bookmarks_router)
+app.include_router(progress_router)
 
 
 @app.get("/health")
