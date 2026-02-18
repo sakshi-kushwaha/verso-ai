@@ -15,15 +15,16 @@ from config import VIDEO_CACHE_DIR, STOCK_VIDEOS_DIR
 WIDTH = 1080
 HEIGHT = 1920
 
-# Per-category audio profiles: (tts_tempo, tts_pitch_semitones, bg_freq, bg_type)
+# Per-category background music profiles: (bg_freq, bg_type)
+# TTS voice quality is now handled by Piper directly — no more ffmpeg pitch/tempo shifts
 AUDIO_PROFILES = {
-    "Science":     (1.05, 1.0,  220, "sine"),
-    "Biology":     (0.95, -0.5, 330, "sine"),
-    "Astronomy":   (1.0,  0.5,  165, "sine"),
-    "Mathematics": (1.1,  1.5,  440, "sine"),
-    "History":     (0.9,  -1.0, 196, "sine"),
+    "Science":     (220, "sine"),
+    "Biology":     (330, "sine"),
+    "Astronomy":   (165, "sine"),
+    "Mathematics": (440, "sine"),
+    "History":     (196, "sine"),
 }
-DEFAULT_PROFILE = (1.0, 0.0, 261, "sine")
+DEFAULT_PROFILE = (261, "sine")
 
 # ffmpeg resource limits for 8GB environments
 FFMPEG_THREADS = "2"          # limit encoder threads (default would use all cores)
@@ -122,7 +123,7 @@ def compose_reel_video(
     tts_audio_path: str | None = None,
     category: str | None = None,
 ) -> str:
-    """Compose a video reel: stock video + pitch/tempo-shifted TTS + background music → MP4.
+    """Compose a video reel: stock video + TTS narration + background music → MP4.
 
     Memory budget: ~100-150MB per encode at 720x1280 with 2 threads.
     Returns the path to the output MP4 file.
@@ -133,7 +134,7 @@ def compose_reel_video(
     if os.path.exists(out_path) and os.path.getsize(out_path) > 0:
         return out_path
 
-    tempo, pitch_st, bg_freq, bg_type = AUDIO_PROFILES.get(category or "", DEFAULT_PROFILE)
+    bg_freq, bg_type = AUDIO_PROFILES.get(category or "", DEFAULT_PROFILE)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         # Generate category-specific background music
@@ -153,15 +154,10 @@ def compose_reel_video(
         audio_layers = []
         audio_idx = 1
 
-        # TTS narration with per-category pitch/tempo shift
+        # TTS narration — voice quality handled by Piper, no ffmpeg pitch/tempo mangling
         if tts_audio_path and os.path.exists(tts_audio_path):
             inputs.extend(["-i", tts_audio_path])
-            tts_filter = f"[{audio_idx}:a]atempo={tempo}"
-            if pitch_st != 0.0:
-                pitch_ratio = 2 ** (pitch_st / 12.0)
-                tts_filter += f",asetrate=44100*{pitch_ratio:.4f},aresample=44100"
-            tts_filter += ",volume=1.0[tts]"
-            filter_parts.append(tts_filter)
+            filter_parts.append(f"[{audio_idx}:a]volume=1.0[tts]")
             audio_layers.append("[tts]")
             audio_idx += 1
 
@@ -256,7 +252,7 @@ def compose_multi_clip_reel(
         adjust = target_raw / actual_sum
         durations = [d * adjust for d in durations]
 
-    tempo, pitch_st, bg_freq, bg_type = AUDIO_PROFILES.get(category or "", DEFAULT_PROFILE)
+    bg_freq, bg_type = AUDIO_PROFILES.get(category or "", DEFAULT_PROFILE)
 
     catalog = load_video_catalog()
     cat_clips = catalog.get(category, catalog.get("general", []))
@@ -328,15 +324,10 @@ def compose_multi_clip_reel(
         audio_layers = []
         audio_idx = n  # video inputs used indices 0..n-1
 
-        # TTS narration with per-category pitch/tempo shift
+        # TTS narration — voice quality handled by Piper, no ffmpeg pitch/tempo mangling
         if tts_audio_path and os.path.exists(tts_audio_path):
             inputs.extend(["-i", tts_audio_path])
-            tts_filter = f"[{audio_idx}:a]atempo={tempo}"
-            if pitch_st != 0.0:
-                pitch_ratio = 2 ** (pitch_st / 12.0)
-                tts_filter += f",asetrate=44100*{pitch_ratio:.4f},aresample=44100"
-            tts_filter += ",volume=1.0[tts]"
-            filter_parts.append(tts_filter)
+            filter_parts.append(f"[{audio_idx}:a]volume=1.0[tts]")
             audio_layers.append("[tts]")
             audio_idx += 1
 
