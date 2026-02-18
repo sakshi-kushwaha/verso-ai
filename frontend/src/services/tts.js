@@ -130,15 +130,20 @@ async function cacheAudioFromUrl(reelId, blobUrl) {
 }
 
 /**
- * Main entry: browser TTS first (saves ~200-300MB server RAM by never loading Piper).
- * Falls back to server /audio/ endpoint only if browser has no voices.
+ * Main entry: server audio first (same engine as video reels for consistency).
+ * Falls back to browser TTS only if server audio fails.
  * Returns a controller { pause, resume, cancel }.
  */
 export async function speak(reelId, text, onEnd) {
-  // Browser TTS first — offloads server RAM entirely
-  if (text && isBrowserTtsReady()) {
-    return speakBrowser(text, onEnd)
+  // Server audio first — same Piper/edge-tts engine as video reels
+  try {
+    return await speakServer(reelId, onEnd)
+  } catch {
+    // Server unavailable — fall back to browser TTS
+    if (text && isBrowserTtsReady()) {
+      return speakBrowser(text, onEnd)
+    }
+    if (onEnd) onEnd()
+    return { pause: () => {}, resume: () => {}, cancel: () => {} }
   }
-  // No browser voices — fall back to server TTS (Piper/espeak)
-  return speakServer(reelId, onEnd)
 }

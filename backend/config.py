@@ -28,8 +28,10 @@ TTS_ENGINE: str = os.getenv("TTS_ENGINE", "piper")
 
 # Piper TTS (neural voice)
 PIPER_MODEL_DIR: Path = Path(os.path.dirname(__file__)) / "tts" / "models"
-PIPER_MODEL: str = "en_US-lessac-medium.onnx"
+PIPER_MODEL: str = "en_GB-jenny_dioco-medium.onnx"  # warm British female — best Piper narrator
 PIPER_SPEAKER_ID = None  # int or None
+# Multi-speaker model for voice variety across reels
+PIPER_MULTI_MODEL: str = "en_US-libritts_r-medium.onnx"
 
 # espeak-ng fallback
 ESPEAK_CMD: str = "espeak-ng"

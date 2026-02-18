@@ -24,7 +24,7 @@ def serve_video(reel_id: int):
 
     # Path is stored relative to cwd (e.g. "data/video_cache/reel_1.mp4") — use as-is
 
-    if not os.path.exists(video_path):
+    if not os.path.exists(video_path) or os.path.getsize(video_path) == 0:
         raise HTTPException(status_code=404, detail="Video file missing")
 
     return FileResponse(

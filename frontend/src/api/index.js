@@ -62,9 +62,10 @@ export async function getUploadStatus(uploadId) {
 }
 
 // Fetch feed reels (paginated, optional upload_id filter)
-export async function getFeed(page = 1, limit = 5, uploadId = null) {
+export async function getFeed(page = 1, limit = 5, uploadId = null, tab = null) {
   const params = { page, limit }
   if (uploadId) params.upload_id = uploadId
+  if (tab) params.tab = tab
   const { data } = await api.get('/feed', { params })
   return data // { reels: [], total, page }
 }
