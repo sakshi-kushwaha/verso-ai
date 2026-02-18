@@ -6,6 +6,8 @@ services:
     environment:
       - OLLAMA_HOST=http://ollama:11434
     volumes:
+      - ./backend:/app
+      - backend_data:/app/data
       - ./scripts:/scripts
     depends_on:
       - ollama
@@ -15,6 +17,9 @@ services:
     build: ./frontend
     ports:
       - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
     depends_on:
       - backend
     restart: unless-stopped
@@ -31,3 +36,4 @@ services:
 
 volumes:
   ollama_data:
+  backend_data:
