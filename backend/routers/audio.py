@@ -25,7 +25,7 @@ async def serve_audio(reel_id: int):
         raise HTTPException(status_code=404, detail="Reel not found")
 
     try:
-        path = await asyncio.to_thread(generate_audio, text)
+        path = await asyncio.to_thread(generate_audio, text, reel_index=reel_id)
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
 

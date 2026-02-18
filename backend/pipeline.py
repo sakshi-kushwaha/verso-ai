@@ -10,7 +10,7 @@ from llm import detect_doc_type, detect_subject_category, generate_reels, genera
 from bg_images import assign_images, _resolve_category
 from rag import embed_chunks
 from video import compose_reel_video, compose_multi_clip_reel, get_clips_for_category
-from tts.engine import generate_audio, CURATED_SPEAKERS
+from tts.engine import generate_audio
 from config import STOCK_VIDEOS_DIR
 from ws_manager import manager
 
@@ -69,15 +69,12 @@ def _try_compose_video(reel_id: int, reel: dict, subject_category: str):
     """Try to compose a video for a reel. Tries multi-clip first, falls back to single-clip."""
     cat = _resolve_category(reel.get("category", ""), subject_category)
 
-    # Assign a speaker voice based on reel ID for variety across reels
-    speaker_id = CURATED_SPEAKERS[reel_id % len(CURATED_SPEAKERS)]
-
-    # Generate TTS from narration
+    # Generate TTS from narration — voice rotates by reel_id for variety
     tts_path = None
     narration = reel.get("narration", reel.get("summary", ""))
     if narration:
         try:
-            tts_path = generate_audio(narration, speaker_id=speaker_id)
+            tts_path = generate_audio(narration, reel_index=reel_id)
         except Exception:
             log.debug("TTS failed for reel %d, composing without narration", reel_id)
 
