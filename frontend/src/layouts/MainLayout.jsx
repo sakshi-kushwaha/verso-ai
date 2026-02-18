@@ -4,7 +4,7 @@ import { Logo, Home, Cards, Chat, Bookmark, Chart, Upload, Logout, Book } from '
 
 const navItems = [
   { to: '/', icon: Home, label: 'Feed' },
-  { to: '/books', icon: Book, label: 'My Books' },
+  { to: '/books', icon: Book, label: 'My Collections' },
   { to: '/flashcards', icon: Cards, label: 'Cards' },
   { to: '/upload', icon: Upload, label: 'Upload' },
   { to: '/chat', icon: Chat, label: 'Chat' },

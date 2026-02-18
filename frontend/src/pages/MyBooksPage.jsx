@@ -85,7 +85,7 @@ function BookDetail({ book, onBack }) {
   return (
     <div className="max-w-2xl mx-auto p-6 pt-6 fade-up">
       <button onClick={onBack} className="flex items-center gap-1.5 text-text-muted hover:text-primary text-sm mb-4 cursor-pointer transition-colors">
-        <ArrowL /> Back to My Books
+        <ArrowL /> Back to My Collections
       </button>
 
       <div className="flex items-start gap-3 mb-6">
@@ -208,7 +208,7 @@ export default function MyBooksPage() {
   if (loading) {
     return (
       <div className="max-w-2xl mx-auto p-6">
-        <Spinner text="Loading your books..." />
+        <Spinner text="Loading your collections..." />
       </div>
     )
   }
@@ -225,7 +225,7 @@ export default function MyBooksPage() {
     <div className="max-w-2xl mx-auto p-6 pt-10 fade-up">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold font-display mb-1">My Books</h1>
+          <h1 className="text-2xl font-bold font-display mb-1">My Collections</h1>
           <p className="text-text-muted text-sm">{books.length} document{books.length !== 1 ? 's' : ''} uploaded</p>
         </div>
         <Button variant="secondary" onClick={() => navigate('/upload')}>
@@ -236,7 +236,7 @@ export default function MyBooksPage() {
       {books.length === 0 ? (
         <EmptyState
           icon={<File />}
-          title="No books yet"
+          title="No collections yet"
           subtitle="Upload a document to get started with reels, flashcards, and chat"
         >
           <Button onClick={() => navigate('/upload')}>Upload Document</Button>

@@ -29,7 +29,7 @@
 | Term | Meaning |
 |------|---------|
 | **Upload** | Submitting a PDF or DOCX document (max 50 MB, max 50 pages) that triggers the AI processing pipeline. |
-| **My Books** | A dedicated section showing all uploaded documents. Each book shows its Reel count, flashcard count, and links to its Reels, flashcards, and chat. |
+| **My Collections** | A dedicated section showing all uploaded documents. Each book shows its Reel count, flashcard count, and links to its Reels, flashcards, and chat. |
 | **Chat (Q&A)** | A document-specific conversational AI interface. Users ask questions and get answers grounded in the actual document content, with source references. Limited to 10 exchanges per document. |
 | **Onboarding** | A 5-step preference quiz on first login that personalizes all content generation (learning style, content depth, use case, flashcard difficulty). |
 | **Progress** | Tracks which Reels a user has viewed per upload. Enables resume-from-where-you-left-off. |
