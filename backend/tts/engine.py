@@ -33,10 +33,10 @@ _piper_multi_voice = None
 # Rotated across reels for variety
 # ---------------------------------------------------------------------------
 EDGE_VOICES = [
-    "en-GB-SoniaNeural",       # warm British female — great for narration
-    "en-US-AndrewMultilingualNeural",  # clear, calm male
-    "en-GB-RyanNeural",        # friendly British male
-    "en-US-AvaMultilingualNeural",     # natural, expressive female
+    "en-IN-NeerjaExpressiveNeural",    # expressive Indian female
+    "en-IN-PrabhatNeural",             # clear Indian male
+    "en-IN-NeerjaNeural",              # warm Indian female
+    "en-GB-SoniaNeural",               # warm British female — variety
 ]
 
 # ---------------------------------------------------------------------------
