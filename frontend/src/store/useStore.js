@@ -84,11 +84,6 @@ const useStore = create((set, get) => ({
     })),
   clearBgUpload: () => set({ bgUpload: null, reels: [] }),
 
-  // --- Onboarding Preferences ---
-  preferences: null,
-  onboardingCompleted: false,
-  setPreferences: (prefs) => set({ preferences: prefs, onboardingCompleted: true }),
-  clearPreferences: () => set({ preferences: null, onboardingCompleted: false }),
 }));
 
 export default useStore;

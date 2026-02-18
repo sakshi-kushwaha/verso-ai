@@ -10,7 +10,6 @@ import FlashcardsPage from './pages/FlashcardsPage'
 import ChatPage from './pages/ChatPage'
 import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
-import OnboardingPage from './pages/OnboardingPage'
 import MyBooksPage from './pages/MyBooksPage'
 
 function App() {
@@ -30,7 +29,6 @@ function App() {
       <Route element={<AuthLayout />}>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
-        <Route path="/onboarding" element={<OnboardingPage />} />
       </Route>
     </Routes>
   )

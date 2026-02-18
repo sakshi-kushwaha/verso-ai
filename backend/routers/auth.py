@@ -31,8 +31,12 @@ def signup(body: AuthBody):
             "INSERT INTO users (name, password_hash) VALUES (?, ?)",
             (name, hashed),
         )
-        conn.commit()
         user_id = cursor.lastrowid
+        conn.execute(
+            "INSERT OR IGNORE INTO user_preferences (user_id, display_name, learning_style, content_depth, use_case, flashcard_difficulty) VALUES (?, ?, 'mixed', 'balanced', 'learning', 'medium')",
+            (user_id, name),
+        )
+        conn.commit()
     finally:
         conn.close()
 

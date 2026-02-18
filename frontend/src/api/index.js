@@ -85,18 +85,6 @@ export async function getFlashcards(uploadId) {
   return data
 }
 
-// Save onboarding preferences (upsert)
-export async function savePreferences(prefs) {
-  const { data } = await api.put('/onboarding/preferences', prefs)
-  return data // { status, user_id }
-}
-
-// Get onboarding preferences
-export async function getPreferences() {
-  const { data } = await api.get('/onboarding/preferences')
-  return data
-}
-
 // List uploads (includes reel_count, flashcard_count, doc_type, total_pages)
 export async function getUploads() {
   const { data } = await api.get('/uploads')

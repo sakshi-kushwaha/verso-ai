@@ -28,11 +28,7 @@ export default function LoginPage() {
 
       setAuth(data.user, data.token)
 
-      if (tab === 'signup') {
-        navigate('/onboarding')
-      } else {
-        navigate('/')
-      }
+      navigate('/')
     } catch (err) {
       const msg = err.response?.data?.detail || 'Something went wrong'
       setError(msg)
