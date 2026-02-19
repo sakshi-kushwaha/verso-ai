@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getUploads, getFeed, getFlashcards, getDocSummary, getSummaryAudio } from '../api'
+import api from '../api'
 import Button from '../components/Button'
-import Tag from '../components/Tag'
-import { File, Upload, ArrowL, Cards, Chat, Volume, Pause } from '../components/Icons'
+import { File, Upload, ArrowL, Cards, Chat, Volume, Pause, Play, Grid } from '../components/Icons'
 import { Spinner, ErrorState, EmptyState } from '../components/StateScreens'
 
 const ACCENTS = ['#6366F1', '#8B5CF6', '#EC4899', '#F59E0B', '#10B981', '#3B82F6']
@@ -80,9 +80,9 @@ function BookSummary({ bookId, initialSummary }) {
   }
 
   useEffect(() => {
-    if (initialSummary) return
+    if (summary) return
     fetchSummary()
-  }, [bookId, initialSummary])
+  }, [bookId])
 
   useEffect(() => {
     return () => {
@@ -117,7 +117,7 @@ function BookSummary({ bookId, initialSummary }) {
 
   if (summaryLoading) {
     return (
-      <div className="bg-surface rounded-xl border border-border p-4 mb-6">
+      <div className="bg-surface rounded-xl border border-border p-4 mb-4">
         <div className="flex items-center gap-2 mb-3">
           <span className="text-sm font-semibold">Summary</span>
         </div>
@@ -133,7 +133,7 @@ function BookSummary({ bookId, initialSummary }) {
 
   if (summaryError) {
     return (
-      <div className="bg-surface rounded-xl border border-border p-4 mb-6">
+      <div className="bg-surface rounded-xl border border-border p-4 mb-4">
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold">Summary</span>
           <button
@@ -151,13 +151,13 @@ function BookSummary({ bookId, initialSummary }) {
   if (!summary) return null
 
   return (
-    <div className="bg-surface rounded-xl border border-border p-4 mb-6">
+    <div className="bg-surface rounded-xl border border-border p-4 mb-4">
       <div className="flex items-center justify-between mb-3">
         <span className="text-sm font-semibold">Summary</span>
         <button
           onClick={handleAudio}
           disabled={audioState === 'loading'}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer
+          className={`flex items-center justify-center w-8 h-8 rounded-lg text-xs font-medium transition-all cursor-pointer
             ${audioState === 'playing'
               ? 'bg-primary text-white'
               : 'bg-surface-alt text-text-muted hover:text-text hover:bg-surface-alt/80'
@@ -172,7 +172,6 @@ function BookSummary({ bookId, initialSummary }) {
           ) : (
             <Volume />
           )}
-          {audioState === 'playing' ? 'Stop' : 'Listen'}
         </button>
       </div>
 
@@ -198,13 +197,117 @@ function BookSummary({ bookId, initialSummary }) {
   )
 }
 
+function ReelThumbnail({ reel, accent, onClick }) {
+  const videoUrl = reel.video_path ? `${api.defaults.baseURL}/video/${reel.id}` : null
+  const bgImage = reel.bg_image ? `${api.defaults.baseURL}/${reel.bg_image}` : null
+
+  return (
+    <div
+      onClick={onClick}
+      className="relative aspect-[9/16] rounded-lg overflow-hidden cursor-pointer group border border-border hover:border-primary/40 transition-all"
+    >
+      {videoUrl ? (
+        <video
+          src={videoUrl}
+          className="w-full h-full object-cover"
+          muted
+          preload="metadata"
+        />
+      ) : bgImage ? (
+        <img src={bgImage} className="w-full h-full object-cover" alt="" />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${accent}22, ${accent}44)` }}>
+          <Play />
+        </div>
+      )}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+      <div className="absolute bottom-0 left-0 right-0 p-2">
+        <p className="text-white text-[10px] sm:text-xs font-semibold line-clamp-2 leading-tight">{reel.title}</p>
+      </div>
+      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20">
+        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-white/90 flex items-center justify-center text-black">
+          <Play />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function FlashcardItem({ fc, index }) {
+  const [flipped, setFlipped] = useState(false)
+  const gradients = [
+    'from-indigo-500/20 to-purple-500/20',
+    'from-pink-500/20 to-rose-500/20',
+    'from-emerald-500/20 to-teal-500/20',
+    'from-amber-500/20 to-orange-500/20',
+    'from-blue-500/20 to-cyan-500/20',
+  ]
+  const borderColors = [
+    'border-indigo-500/30',
+    'border-pink-500/30',
+    'border-emerald-500/30',
+    'border-amber-500/30',
+    'border-blue-500/30',
+  ]
+  const gradient = gradients[index % gradients.length]
+  const borderColor = borderColors[index % borderColors.length]
+
+  return (
+    <div
+      onClick={() => setFlipped(f => !f)}
+      className="cursor-pointer"
+      style={{ perspective: '1000px' }}
+    >
+      <div
+        className="relative w-full transition-transform duration-500"
+        style={{
+          transformStyle: 'preserve-3d',
+          transform: flipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
+          minHeight: '160px',
+        }}
+      >
+        {/* Front — Question */}
+        <div
+          className={`absolute inset-0 rounded-xl border ${borderColor} p-4 sm:p-5 bg-gradient-to-br ${gradient}`}
+          style={{ backfaceVisibility: 'hidden' }}
+        >
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-primary">Question</span>
+            <span className="text-xs text-text-muted">#{index + 1}</span>
+          </div>
+          <p className="text-sm leading-relaxed font-medium">{fc.question}</p>
+          <div className="mt-3 flex items-center gap-1.5">
+            <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+            <span className="text-xs text-text-muted">Tap to reveal answer</span>
+          </div>
+        </div>
+
+        {/* Back — Answer */}
+        <div
+          className={`absolute inset-0 rounded-xl border ${borderColor} p-4 sm:p-5 bg-gradient-to-br ${gradient}`}
+          style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
+        >
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">Answer</span>
+            <span className="text-xs text-text-muted">#{index + 1}</span>
+          </div>
+          <p className="text-sm leading-relaxed text-text-secondary">{fc.answer}</p>
+          <div className="mt-3 flex items-center gap-1.5">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            <span className="text-xs text-text-muted">Tap to see question</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function BookDetail({ book, onBack }) {
   const navigate = useNavigate()
   const [tab, setTab] = useState('reels')
   const [reels, setReels] = useState([])
   const [flashcards, setFlashcards] = useState([])
   const [loading, setLoading] = useState(true)
-  const [flipped, setFlipped] = useState({})
 
   useEffect(() => {
     setLoading(true)
@@ -218,27 +321,32 @@ function BookDetail({ book, onBack }) {
     })
   }, [book.id])
 
+  const handleReelClick = (index) => {
+    navigate('/', { state: { uploadId: book.id, startReelIndex: index } })
+  }
+
   const tabs = [
-    { id: 'reels', label: 'Reels', count: reels.length },
-    { id: 'flashcards', label: 'Flashcards', count: flashcards.length },
+    { id: 'reels', icon: Grid, label: 'Reels' },
+    { id: 'flashcards', icon: Cards, label: 'Cards' },
+    { id: 'chat', icon: Chat, label: 'Chat' },
   ]
 
   return (
-    <div className="max-w-2xl mx-auto p-6 pt-6 fade-up">
+    <div className="max-w-2xl mx-auto px-4 sm:px-6 pt-4 sm:pt-6 pb-20 md:pb-6 fade-up">
       <button onClick={onBack} className="flex items-center gap-1.5 text-text-muted hover:text-primary text-sm mb-4 cursor-pointer transition-colors">
-        <ArrowL /> Back to My Collections
+        <ArrowL /> Back
       </button>
 
-      <div className="flex items-start gap-3 mb-6">
-        <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
+      <div className="flex items-start gap-3 mb-4">
+        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
           <File />
         </div>
-        <div>
-          <h1 className="text-xl font-bold font-display">{book.filename}</h1>
+        <div className="min-w-0">
+          <h1 className="text-lg sm:text-xl font-bold font-display truncate">{book.filename}</h1>
           <div className="flex items-center gap-3 mt-1">
             {book.doc_type && <span className="text-xs text-text-muted">{book.doc_type}</span>}
             <span className="text-xs text-text-muted">{book.reel_count || 0} reels</span>
-            <span className="text-xs text-text-muted">{book.flashcard_count || 0} flashcards</span>
+            <span className="text-xs text-text-muted">{book.flashcard_count || 0} cards</span>
           </div>
         </div>
       </div>
@@ -246,25 +354,35 @@ function BookDetail({ book, onBack }) {
       {/* Summary */}
       <BookSummary bookId={book.id} initialSummary={book.doc_summary || null} />
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-surface-alt rounded-lg p-1 mb-6">
-        {tabs.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors cursor-pointer ${
-              tab === t.id ? 'bg-surface text-text shadow-sm' : 'text-text-muted hover:text-text'
-            }`}
-          >
-            {t.label} ({t.count})
-          </button>
-        ))}
-        <button
-          onClick={() => navigate(`/chat?upload=${book.id}`)}
-          className="flex-1 py-2 px-3 rounded-md text-sm font-medium text-text-muted hover:text-text transition-colors cursor-pointer flex items-center justify-center gap-1.5"
-        >
-          <Chat /> Chat
-        </button>
+      {/* Icon Tab Bar */}
+      <div className="mb-4">
+        <div className="flex">
+          {tabs.map(t => {
+            const Icon = t.icon
+            const isActive = tab === t.id
+            return (
+              <button
+                key={t.id}
+                onClick={() => {
+                  if (t.id === 'chat') {
+                    navigate(`/chat?upload=${book.id}`)
+                    return
+                  }
+                  setTab(t.id)
+                }}
+                className={`flex-1 flex items-center justify-center py-3.5 relative cursor-pointer transition-colors ${
+                  isActive ? 'text-text' : 'text-text-muted hover:text-text'
+                }`}
+              >
+                <Icon />
+                {isActive && (
+                  <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-10 h-0.5 bg-text rounded-full" />
+                )}
+              </button>
+            )
+          })}
+        </div>
+        <div className="h-px bg-border" />
       </div>
 
       {loading ? (
@@ -273,9 +391,14 @@ function BookDetail({ book, onBack }) {
         reels.length === 0 ? (
           <EmptyState title="No reels yet" subtitle="Reels will appear once processing is complete" />
         ) : (
-          <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
             {reels.map((reel, i) => (
-              <ReelMiniCard key={reel.id} reel={reel} accent={ACCENTS[i % ACCENTS.length]} />
+              <ReelThumbnail
+                key={reel.id}
+                reel={reel}
+                accent={ACCENTS[i % ACCENTS.length]}
+                onClick={() => handleReelClick(i)}
+              />
             ))}
           </div>
         )
@@ -284,42 +407,11 @@ function BookDetail({ book, onBack }) {
           <EmptyState title="No flashcards yet" subtitle="Flashcards will appear once processing is complete" />
         ) : (
           <div className="space-y-3">
-            {flashcards.map((fc) => (
-              <div
-                key={fc.id}
-                onClick={() => setFlipped(prev => ({ ...prev, [fc.id]: !prev[fc.id] }))}
-                className="bg-surface rounded-xl border border-border p-4 cursor-pointer hover:border-primary/30 transition-all"
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <Cards />
-                  <span className="text-xs font-medium text-text-muted">{flipped[fc.id] ? 'Answer' : 'Question'}</span>
-                </div>
-                <p className="text-sm">{flipped[fc.id] ? fc.answer : fc.question}</p>
-                <p className="text-xs text-primary mt-2">Tap to {flipped[fc.id] ? 'see question' : 'reveal answer'}</p>
-              </div>
+            {flashcards.map((fc, i) => (
+              <FlashcardItem key={fc.id} fc={fc} index={i} />
             ))}
           </div>
         )
-      )}
-    </div>
-  )
-}
-
-function ReelMiniCard({ reel, accent }) {
-  return (
-    <div className="bg-surface rounded-xl border border-border p-4">
-      <div className="flex items-center gap-2 mb-2">
-        <Tag color={accent}>{reel.category || 'General'}</Tag>
-        {reel.page_ref && <span className="text-xs text-text-muted">p. {reel.page_ref}</span>}
-      </div>
-      <h3 className="font-semibold text-sm mb-1">{reel.title}</h3>
-      <p className="text-text-secondary text-xs line-clamp-2">{reel.summary}</p>
-      {reel.keywords && (
-        <div className="flex flex-wrap gap-1.5 mt-2">
-          {(typeof reel.keywords === 'string' ? reel.keywords.split(',') : reel.keywords).map(kw => kw.trim()).filter(Boolean).map(kw => (
-            <span key={kw} className="px-2 py-0.5 rounded-full text-xs bg-surface-alt text-text-secondary">{kw}</span>
-          ))}
-        </div>
       )}
     </div>
   )
@@ -366,10 +458,10 @@ export default function MyBooksPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto p-6 pt-10 fade-up">
+    <div className="max-w-2xl mx-auto px-4 sm:px-6 pt-8 sm:pt-10 pb-20 md:pb-6 fade-up">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold font-display mb-1">My Collections</h1>
+          <h1 className="text-xl sm:text-2xl font-bold font-display mb-1">My Collections</h1>
           <p className="text-text-muted text-sm">{books.length} document{books.length !== 1 ? 's' : ''} uploaded</p>
         </div>
         <Button variant="secondary" onClick={() => navigate('/upload')}>
