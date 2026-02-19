@@ -28,6 +28,9 @@ def main():
         "SELECT id, upload_id, title, summary, narration, category, keywords, source_text "
         "FROM reels"
     ).fetchall()
+
+    # Pre-fetch flashcards grouped by upload_id
+    fc_rows = conn.execute("SELECT upload_id, question, answer FROM flashcards").fetchall()
     conn.close()
 
     if not rows:
@@ -38,6 +41,12 @@ def main():
 
     scores = []
     violation_counts = {}
+    flashcards_by_upload = {}
+    for fc in fc_rows:
+        uid = fc["upload_id"]
+        flashcards_by_upload.setdefault(uid, []).append(
+            {"question": fc["question"], "answer": fc["answer"]}
+        )
 
     for row in rows:
         reel_dict = {
@@ -48,7 +57,7 @@ def main():
                 "category": row["category"] or "",
                 "keywords": row["keywords"] or "",
             }],
-            "flashcards": [],  # can't recover flashcards from reels table alone
+            "flashcards": flashcards_by_upload.get(row["upload_id"], []),
         }
         source_text = row["source_text"] or ""
         result = score_reel(reel_dict, source_text)

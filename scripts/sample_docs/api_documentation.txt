@@ -1,6 +1,8 @@
 DataSync API v3 — Webhook Configuration Guide
 
-Overview: DataSync webhooks allow your application to receive real-time notifications when data changes occur in your synced datasets. Instead of polling the API for updates, webhooks push event data directly to your specified endpoint, reducing latency and API usage.
+Overview: DataSync webhooks allow your application to receive real-time notifications when data changes occur in your synced datasets. Instead of polling the API for updates, webhooks push event data directly to your specified endpoint, reducing latency and API usage. Webhooks are the recommended approach for building real-time integrations, as they eliminate the need for frequent polling requests that consume rate limit quota and introduce unnecessary delay between data changes and application awareness. All webhook deliveries use HTTPS with TLS 1.2 or higher, and payloads are signed using HMAC-SHA256 to ensure authenticity and integrity.
+
+Authentication and Permissions: All webhook management endpoints require a valid API key with the "webhooks:manage" permission scope. API keys can be generated from the DataSync dashboard under Settings > API Keys. Each API key can be scoped to specific datasets, meaning a key with access to Dataset A cannot create webhooks for Dataset B. Organization administrators can also set webhook policies that restrict which domains are allowed as webhook endpoints, preventing accidental delivery to unauthorized servers.
 
 POST /api/v3/webhooks — Register a new webhook endpoint.
 
@@ -10,11 +12,11 @@ Request Headers:
   X-Idempotency-Key: {uuid} (optional, recommended for retry safety)
 
 Request Body Parameters:
-  url (string, required): The HTTPS endpoint that will receive webhook events. Must be publicly accessible and respond with 2xx status within 30 seconds. HTTP endpoints are not accepted for security reasons.
-  events (array of strings, required): List of event types to subscribe to. Available events: "record.created", "record.updated", "record.deleted", "sync.completed", "sync.failed", "schema.changed". Use ["*"] to subscribe to all events.
-  secret (string, optional): A shared secret used to generate HMAC-SHA256 signatures for payload verification. If not provided, one will be auto-generated and returned in the response. Maximum 128 characters.
-  metadata (object, optional): Arbitrary key-value pairs attached to the webhook for your reference. Maximum 10 keys, each key max 64 characters, each value max 256 characters.
-  retry_policy (object, optional): Configure retry behavior for failed deliveries. Properties: max_retries (integer, 1-10, default 5), backoff_multiplier (float, 1.0-5.0, default 2.0), initial_delay_seconds (integer, 1-300, default 10).
+  url (string, required): The HTTPS endpoint that will receive webhook events. Must be publicly accessible and respond with 2xx status within 30 seconds. HTTP endpoints are not accepted for security reasons. The URL must not contain authentication credentials, query parameters with sensitive data, or point to localhost/private IP ranges. During registration, DataSync sends a verification POST request containing a challenge token that your endpoint must echo back within 10 seconds to confirm ownership.
+  events (array of strings, required): List of event types to subscribe to. Available events: "record.created", "record.updated", "record.deleted", "sync.completed", "sync.failed", "schema.changed". Use ["*"] to subscribe to all events. When subscribing to specific events, you can further filter by dataset using the format "record.created:dataset_id_here". Wildcard subscriptions cannot be filtered by dataset.
+  secret (string, optional): A shared secret used to generate HMAC-SHA256 signatures for payload verification. If not provided, one will be auto-generated and returned in the response. Maximum 128 characters. The secret is only returned once during creation — store it securely, as it cannot be retrieved later. If lost, you must rotate the secret using the PATCH endpoint.
+  metadata (object, optional): Arbitrary key-value pairs attached to the webhook for your reference. Maximum 10 keys, each key max 64 characters, each value max 256 characters. Metadata is useful for tagging webhooks by environment (production, staging), team ownership, or integration purpose. Metadata is returned in all webhook management API responses but is not included in webhook delivery payloads.
+  retry_policy (object, optional): Configure retry behavior for failed deliveries. Properties: max_retries (integer, 1-10, default 5), backoff_multiplier (float, 1.0-5.0, default 2.0), initial_delay_seconds (integer, 1-300, default 10). Failed deliveries are retried with exponential backoff. For example, with default settings, retries occur at approximately 10s, 20s, 40s, 80s, and 160s after the initial failure. A delivery is considered failed if your endpoint returns a non-2xx status code, times out (30 second limit), or the connection cannot be established.
 
 Response (201 Created):
   {
@@ -28,10 +30,12 @@ Response (201 Created):
   }
 
 Error Responses:
-  400 Bad Request — Invalid URL format, unsupported event type, or malformed request body. Response includes a "details" array describing each validation error.
-  401 Unauthorized — Missing or invalid API key. Ensure your Bearer token is correct and has webhook management permissions.
-  409 Conflict — A webhook with the same URL and event combination already exists. Use PATCH to modify existing webhooks.
-  422 Unprocessable Entity — URL endpoint failed verification. DataSync sends a verification POST with a challenge token that your endpoint must echo back within 10 seconds.
-  429 Too Many Requests — Webhook limit exceeded (maximum 25 active webhooks per account). Delete unused webhooks before creating new ones.
+  400 Bad Request — Invalid URL format, unsupported event type, or malformed request body. Response includes a "details" array describing each validation error with the field path and a human-readable message.
+  401 Unauthorized — Missing or invalid API key. Ensure your Bearer token is correct and has webhook management permissions. Tokens expire after 90 days by default; check your key's expiration date in the dashboard.
+  409 Conflict — A webhook with the same URL and event combination already exists. Use PATCH /api/v3/webhooks/{id} to modify existing webhooks rather than creating duplicates.
+  422 Unprocessable Entity — URL endpoint failed verification. DataSync sends a verification POST with a challenge token that your endpoint must echo back within 10 seconds. Common causes include firewall rules blocking DataSync IP ranges (published at api.datasync.io/meta/ips), SSL certificate issues, or the endpoint returning the challenge in an incorrect format.
+  429 Too Many Requests — Webhook limit exceeded (maximum 25 active webhooks per account on Standard plans, 100 on Enterprise). Delete unused webhooks before creating new ones. Use GET /api/v3/webhooks to list all active webhooks.
 
-Webhook Payload Format: Each delivery includes headers X-DataSync-Signature (HMAC-SHA256 of the body using your secret), X-DataSync-Event (event type), and X-DataSync-Delivery-ID (unique delivery identifier for deduplication). The body contains the event type, timestamp, and the full affected record data.
+Webhook Payload Format: Each delivery includes three signature headers: X-DataSync-Signature containing the HMAC-SHA256 hex digest of the raw request body using your webhook secret, X-DataSync-Event containing the event type string, and X-DataSync-Delivery-ID containing a unique UUID for deduplication. The JSON body includes the event type, an ISO 8601 timestamp, the webhook ID, and the full affected record data including both the previous and current state for update events. Payloads are limited to 256KB; events affecting records larger than this threshold will include a truncated payload with a "fetch_url" field pointing to the full record data.
+
+Best Practices: Always verify the X-DataSync-Signature header before processing any webhook payload to prevent spoofing attacks. Process webhooks asynchronously — return a 200 response immediately and handle the event in a background job queue. Implement idempotent event handling using the X-DataSync-Delivery-ID header, as the same event may be delivered multiple times during retries. Monitor your webhook endpoint's response times and error rates using the delivery logs available at GET /api/v3/webhooks/{id}/deliveries.
