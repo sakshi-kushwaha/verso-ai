@@ -1,6 +1,6 @@
 # Self-Learning Pipeline for Reel Generation
 
-The reel generation model (qwen2.5:1.5b) follows prompt rules inconsistently — contractions, pauses, conversational starters, and word count targets are often ignored. There's no feedback loop: reels are generated once and never evaluated. This plan adds a closed-loop self-learning pipeline: **score reels → identify weaknesses → fix prompts → generate gold training data → fine-tune → deploy → repeat**.
+The reel generation model (qwen2.5:3b) follows prompt rules inconsistently — contractions, pauses, conversational starters, and word count targets are often ignored. There's no feedback loop: reels are generated once and never evaluated. This plan adds a closed-loop self-learning pipeline: **score reels → identify weaknesses → fix prompts → generate gold training data → fine-tune → deploy → repeat**.
 
 The codebase already has evaluation infrastructure (`evals.py`, `eval_fixtures.py`), training data generation (`scripts/generate_training_data.py`), ShareGPT conversion (`scripts/convert_to_sharegpt.py`), and a Colab fine-tuning notebook (`scripts/verso_finetune.ipynb`). This plan extends and connects these existing pieces.
 
@@ -59,7 +59,7 @@ All scripts and infrastructure are ready. Esha needs to **run the pipeline** and
 ### Prerequisites
 
 1. Docker running with `docker compose up -d`
-2. Ollama has `qwen2.5:1.5b` pulled: `docker compose exec ollama ollama pull qwen2.5:1.5b`
+2. Ollama has `qwen2.5:3b` pulled: `docker compose exec ollama ollama pull qwen2.5:3b`
 3. At least 5-10 sample text documents for training data generation
 
 ### Step 1: Add Sample Documents
@@ -123,12 +123,12 @@ The project has CI/CD via GitHub Actions (`.github/workflows/deploy.yml`). On pu
 **Option A: SCP the GGUF directly to EC2**
 ```bash
 # From your local machine
-scp ~/Downloads/verso-qwen2.5-1.5b.Q4_K_M.gguf <EC2_USER>@<EC2_HOST>:/root/verso-ai/scripts/verso-qwen2.5-1.5b_gguf/
+scp ~/Downloads/verso-qwen2.5-3b.Q4_K_M.gguf <EC2_USER>@<EC2_HOST>:/root/verso-ai/scripts/verso-qwen2.5-3b_gguf/
 
 # SSH into EC2 and create the Ollama model
 ssh <EC2_USER>@<EC2_HOST>
 cd /root/verso-ai/scripts
-mkdir -p verso-qwen2.5-1.5b_gguf
+mkdir -p verso-qwen2.5-3b_gguf
 ollama create verso-reel-v2 -f Modelfile.v2
 ollama run verso-reel-v2 "Say hello"  # verify it responds
 ```
@@ -136,8 +136,8 @@ ollama run verso-reel-v2 "Say hello"  # verify it responds
 **Option B: Test locally first, then deploy**
 ```bash
 # Local test
-mkdir -p scripts/verso-qwen2.5-1.5b_gguf/
-mv ~/Downloads/verso-qwen2.5-1.5b.Q4_K_M.gguf scripts/verso-qwen2.5-1.5b_gguf/
+mkdir -p scripts/verso-qwen2.5-3b_gguf/
+mv ~/Downloads/verso-qwen2.5-3b.Q4_K_M.gguf scripts/verso-qwen2.5-3b_gguf/
 cd scripts && ollama create verso-reel-v2 -f Modelfile.v2
 ollama run verso-reel-v2 "Say hello"
 # If good, SCP to EC2 (Option A)
@@ -161,7 +161,7 @@ Or locally via Docker:
 docker compose exec backend python /scripts/ab_eval_models.py
 ```
 
-This compares `qwen2.5:1.5b` (base) vs `verso-reel-v2` (fine-tuned) on 8 test cases.
+This compares `qwen2.5:3b` (base) vs `verso-reel-v2` (fine-tuned) on 8 test cases.
 
 **Gate criteria:**
 - JSON validity >= 89%
@@ -183,7 +183,7 @@ nohup uvicorn main:app --host 0.0.0.0 --port 8000 > /root/verso-ai/server.log 2>
 To make this permanent across CI/CD deploys, update `ec2-setup.sh` to add:
 ```bash
 # After Ollama model pulls, also create fine-tuned model if GGUF exists
-if [ -f "${APP_DIR}/scripts/verso-qwen2.5-1.5b_gguf/verso-qwen2.5-1.5b.Q4_K_M.gguf" ]; then
+if [ -f "${APP_DIR}/scripts/verso-qwen2.5-3b_gguf/verso-qwen2.5-3b.Q4_K_M.gguf" ]; then
     ollama create verso-reel-v2 -f "${APP_DIR}/scripts/Modelfile.v2"
 fi
 ```
@@ -212,7 +212,7 @@ v2 generates better reels (with source_text saved)
     → Repeat
 ```
 
-Each cycle improves the model. Expect diminishing returns after 2-3 cycles for 1.5B.
+Each cycle improves the model. Expect diminishing returns after 2-3 cycles for 3B.
 
 ### CI/CD Integration Notes
 
@@ -238,7 +238,7 @@ These are things Esha should investigate/decide:
 - [ ] **Training hyperparameters:** The notebook uses 3 epochs, lr=2e-4, batch_size=2. If the model overfits (test output looks memorized), reduce epochs to 2. If underfits (output still bad), increase to 5.
 - [ ] **GGUF quantization:** Default is Q4_K_M (~900MB). If quality is borderline, try Q5_K_M (~1.1GB) for slightly better quality at the cost of more RAM.
 - [ ] **CI/CD integration:** After A/B eval passes, decide how to persist `REEL_MODEL=verso-reel-v2` across deploys. Options: (a) update the `nohup` command in `deploy.yml` to include the env var, (b) add it to `ec2-setup.sh`, or (c) create a `/root/.env` file sourced at startup.
-- [ ] **EC2 RAM check:** On the 8GB EC2 instance, verify peak RAM stays under 5.5GB ceiling after model swap. SSH in and run `free -h` during a test upload. The fine-tuned 1.5B Q4_K_M model should use roughly the same RAM as the base qwen2.5:1.5b.
+- [ ] **EC2 RAM check:** On the 8GB EC2 instance, verify peak RAM stays under 5.5GB ceiling after model swap. SSH in and run `free -h` during a test upload. The fine-tuned 3B Q4_K_M model should use roughly the same RAM as the base qwen2.5:3b.
 - [ ] **GGUF storage:** The GGUF file (~900MB) is too large for git. Decide on a permanent storage strategy: (a) keep on EC2 only, (b) upload to a private S3 bucket and pull during setup, or (c) store in Google Drive alongside the Colab notebook.
 
 ---
@@ -256,7 +256,7 @@ These are things Esha should investigate/decide:
 | `scripts/ab_compare.py` | NEW — A/B prompt comparison | 3 | DONE |
 | `scripts/best_of_n_generate.py` | NEW — gold data generator | 4 | DONE |
 | `scripts/convert_gold_to_sharegpt.py` | NEW — ShareGPT v2 converter | 5 | DONE |
-| `scripts/verso_finetune.ipynb` | MODIFY — target 1.5B model | 6 | DONE |
+| `scripts/verso_finetune.ipynb` | MODIFY — target 3B model | 6 | DONE |
 | `scripts/Modelfile.v2` | NEW — Ollama config for fine-tuned model | 7 | DONE |
 | `scripts/ab_eval_models.py` | NEW — A/B model comparison | 8 | DONE |
 | `scripts/self_learning_loop.sh` | NEW — orchestrator | 9 | DONE |
@@ -265,11 +265,11 @@ These are things Esha should investigate/decide:
 
 | Component | RAM |
 |-----------|-----|
-| Ollama + qwen2.5:1.5b | ~1.8 GB |
+| Ollama + qwen2.5:3b | ~2.5 GB |
 | Python backend | ~0.2 GB |
 | Scoring/generation scripts | ~0.1 GB |
 | OS | ~0.8 GB |
-| **Peak total** | **~2.9 GB** (well under 5.5 GB ceiling) |
+| **Peak total** | **~3.6 GB** (well under 5.5 GB ceiling) |
 
 ---
 
