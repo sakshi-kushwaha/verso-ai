@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Swiper, SwiperSlide } from 'swiper/react'
 import { Mousewheel, Keyboard } from 'swiper/modules'
 import 'swiper/css'
@@ -301,6 +301,7 @@ const TABS = [
 
 export default function FeedPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { reels, setReels, appendReels, feedPage, hasMore } = useStore()
   const [initialLoading, setInitialLoading] = useState(true)
   const [loading, setLoading] = useState(false)
@@ -308,6 +309,8 @@ export default function FeedPage() {
   const [activeIndex, setActiveIndex] = useState(0)
   const [tab, setTab] = useState('all')
   const [failedVideos, setFailedVideos] = useState(new Set())
+  const [initialSlide, setInitialSlide] = useState(0)
+  const bookNavState = useRef(location.state)
 
   const ACCENTS = ['#6366F1', '#8B5CF6', '#EC4899', '#F59E0B', '#10B981', '#3B82F6']
 
@@ -349,8 +352,30 @@ export default function FeedPage() {
     loadReels(newTab)
   }
 
-  // Load reels from API on mount
+  // Load reels from API on mount — or from a specific book if navigated from BookDetail
   useEffect(() => {
+    const nav = bookNavState.current
+    if (nav?.uploadId) {
+      // Clear the state so refresh doesn't re-trigger
+      window.history.replaceState({}, '')
+      bookNavState.current = null
+      setInitialLoading(true)
+      setTab('my-docs')
+      getFeed(1, 50, nav.uploadId)
+        .then(data => {
+          if (data.reels?.length) {
+            setReels(data.reels.map(mapReel))
+            const idx = nav.startReelIndex || 0
+            setInitialSlide(idx)
+            setActiveIndex(idx)
+          } else {
+            setReels([])
+          }
+        })
+        .catch(() => setError(true))
+        .finally(() => setInitialLoading(false))
+      return
+    }
     if (reels.length > 0) {
       setInitialLoading(false)
       return
@@ -441,6 +466,7 @@ export default function FeedPage() {
         keyboard
         slidesPerView={1}
         speed={400}
+        initialSlide={initialSlide}
         className="h-full flex-1"
         onReachEnd={handleReachEnd}
         onSlideChange={(swiper) => {
