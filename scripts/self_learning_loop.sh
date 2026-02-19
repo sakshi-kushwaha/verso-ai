@@ -15,7 +15,7 @@
 #   bash scripts/self_learning_loop.sh --n 5     # 5 candidates per input
 #
 # Prerequisites:
-#   - Ollama running with qwen2.5:1.5b loaded
+#   - Ollama running with qwen2.5:3b loaded
 #   - Sample docs in scripts/sample_docs/
 #   - Backend dependencies installed
 #
@@ -78,7 +78,7 @@ echo " Manual steps remaining:"
 echo "   1. Upload verso_training_sharegpt_v2.json to Google Colab"
 echo "   2. Run scripts/verso_finetune.ipynb (fine-tune on T4 GPU)"
 echo "   3. Download the GGUF file from Colab"
-echo "   4. Place it in scripts/verso-qwen2.5-1.5b_gguf/"
+echo "   4. Place it in scripts/verso-qwen2.5-3b_gguf/"
 echo "   5. Deploy: ollama create verso-reel-v2 -f scripts/Modelfile.v2"
 echo "   6. Evaluate: cd backend && python ../scripts/ab_eval_models.py"
 echo ""

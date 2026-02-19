@@ -6,7 +6,7 @@ Patches config.REEL_MODEL between runs to minimize Ollama model swaps.
 
 Usage:
     cd backend && python ../scripts/ab_eval_models.py
-    cd backend && python ../scripts/ab_eval_models.py --model-a qwen2.5:1.5b --model-b verso-reel-v2
+    cd backend && python ../scripts/ab_eval_models.py --model-a qwen2.5:3b --model-b verso-reel-v2
 """
 
 import json
@@ -23,15 +23,25 @@ sys.path.insert(0, backend_dir)
 import config
 from llm import generate_reels
 from evals import score_reel
-from eval_fixtures import QUICK_EVAL_PAIRS, TEST_DOCS
+from eval_fixtures import QUICK_EVAL_PAIRS, TEST_DOCS, EVAL_COMBOS
 from prompts import REEL_SYSTEM_PROMPT
 
 SCRIPT_DIR = os.path.dirname(__file__)
 RESULTS_FILE = os.path.join(SCRIPT_DIR, "ab_model_results.json")
 
 
-def run_eval(model_name: str, label: str) -> list:
-    """Run all QUICK_EVAL_PAIRS with a specific model, return per-test results."""
+def resolve_pairs():
+    """Resolve QUICK_EVAL_PAIRS (name, label) tuples into (doc, combo) dicts."""
+    pairs = []
+    for doc_name, combo_label in QUICK_EVAL_PAIRS:
+        doc = next(d for d in TEST_DOCS if d["name"] == doc_name)
+        combo = next(c for c in EVAL_COMBOS if c["label"] == combo_label)
+        pairs.append((doc, combo))
+    return pairs
+
+
+def run_eval(model_name: str, label: str, pairs: list) -> list:
+    """Run all test pairs with a specific model, return per-test results."""
     # Patch the model at runtime
     config.REEL_MODEL = model_name
     # Also need to reimport to pick up config change in llm module
@@ -39,17 +49,17 @@ def run_eval(model_name: str, label: str) -> list:
     llm.REEL_MODEL = model_name
 
     results = []
-    total = len(QUICK_EVAL_PAIRS)
+    total = len(pairs)
 
     print(f"\n── {label}: {model_name} ──")
-    for i, (doc_key, prefs) in enumerate(QUICK_EVAL_PAIRS):
-        tag = f"{doc_key} + {prefs['learning_style']}+{prefs['content_depth']}+{prefs['use_case']}"
+    for i, (doc, combo) in enumerate(pairs):
+        tag = f"{doc['name']} + {combo['learning_style']}+{combo['content_depth']}+{combo['use_case']}"
         print(f"  [{i+1}/{total}] {tag}...", end=" ", flush=True)
 
-        text = TEST_DOCS[doc_key][:3000]
+        text = doc["text"][:3000]
         try:
-            output = generate_reels(text, "general", prefs)
-            score_result = score_reel(output, text, prefs)
+            output = generate_reels(text, doc.get("doc_type", "general"), combo)
+            score_result = score_reel(output, text, combo)
             score = score_result["composite_score"]
             metrics = {k: v["score"] for k, v in score_result["metrics"].items()}
             json_ok = metrics.get("json_valid", 0) == 1.0
@@ -61,8 +71,8 @@ def run_eval(model_name: str, label: str) -> list:
             json_ok = False
 
         results.append({
-            "doc": doc_key,
-            "prefs": prefs,
+            "doc": doc["name"],
+            "prefs": combo,
             "score": score,
             "metrics": metrics,
             "json_ok": json_ok,
@@ -120,20 +130,22 @@ def print_comparison(results_a: list, results_b: list, name_a: str, name_b: str)
 
 def main():
     parser = argparse.ArgumentParser(description="A/B model evaluation")
-    parser.add_argument("--model-a", type=str, default="qwen2.5:1.5b", help="Base model (default: qwen2.5:1.5b)")
+    parser.add_argument("--model-a", type=str, default="qwen2.5:3b", help="Base model (default: qwen2.5:3b)")
     parser.add_argument("--model-b", type=str, default="verso-reel-v2", help="Fine-tuned model (default: verso-reel-v2)")
     args = parser.parse_args()
+
+    pairs = resolve_pairs()
 
     print(f"A/B Model Evaluation")
     print(f"  Model A (base):      {args.model_a}")
     print(f"  Model B (fine-tuned): {args.model_b}")
-    print(f"  Tests: {len(QUICK_EVAL_PAIRS)}")
+    print(f"  Tests: {len(pairs)}")
 
     # Run Model A first (all tests), then Model B (minimizes Ollama model swaps)
     t0 = time.time()
-    results_a = run_eval(args.model_a, "Model A (base)")
+    results_a = run_eval(args.model_a, "Model A (base)", pairs)
     t1 = time.time()
-    results_b = run_eval(args.model_b, "Model B (fine-tuned)")
+    results_b = run_eval(args.model_b, "Model B (fine-tuned)", pairs)
     t2 = time.time()
 
     gate = print_comparison(results_a, results_b, args.model_a, args.model_b)

@@ -1,4 +1,4 @@
-FROM ./verso-qwen2.5-1.5b_gguf/verso-qwen2.5-1.5b.Q4_K_M.gguf
+FROM ./verso-qwen2.5-3b_gguf/verso-qwen2.5-3b.Q4_K_M.gguf
 
 TEMPLATE """{{- if .Messages }}
 {{- if or .System .Tools }}<|im_start|>system
