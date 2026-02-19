@@ -39,6 +39,8 @@ sleep 3
 
 # 4. Pull AI models
 echo "[4/5] Pulling AI models..."
+ollama pull qwen3:0.6b
+ollama pull qwen2.5:1.5b
 ollama pull qwen2.5:3b
 ollama pull nomic-embed-text
 
