@@ -9,7 +9,7 @@ import { speak } from '../services/tts'
 import useStore from '../store/useStore'
 import Tag from '../components/Tag'
 import Button from '../components/Button'
-import { Bookmark, BookmarkFill, Play, Pause, Share, Upload } from '../components/Icons'
+import { Bookmark, BookmarkFill, Play, Pause, Upload, Volume, VolumeOff } from '../components/Icons'
 import { Spinner, ErrorState, EmptyState } from '../components/StateScreens'
 
 function VideoReelCard({ reel, index, total, isActive, onVideoError }) {
@@ -18,16 +18,23 @@ function VideoReelCard({ reel, index, total, isActive, onVideoError }) {
   const [buffering, setBuffering] = useState(true)
   const { bookmarks, toggleBookmark } = useStore()
   const saved = bookmarks.has(reel.id)
+  const [progress, setProgress] = useState(0)
+  const [muted, setMuted] = useState(false)
 
   // Autoplay when active slide, pause when not
   useEffect(() => {
     if (!videoRef.current) return
-    if (isActive && !paused) {
+    if (isActive) {
+      videoRef.current.currentTime = 0
+      videoRef.current.muted = false
+      setProgress(0)
+      setPaused(false)
+      setMuted(false)
       videoRef.current.play().catch(() => {})
     } else {
       videoRef.current.pause()
     }
-  }, [isActive, paused])
+  }, [isActive])
 
   const togglePlay = useCallback(() => {
     if (!videoRef.current) return
@@ -40,13 +47,22 @@ function VideoReelCard({ reel, index, total, isActive, onVideoError }) {
     }
   }, [])
 
+  const toggleMute = useCallback(() => {
+    if (!videoRef.current) return
+    videoRef.current.muted = !videoRef.current.muted
+    setMuted(videoRef.current.muted)
+  }, [])
+
+  const handleSeek = useCallback((e) => {
+    if (!videoRef.current || !videoRef.current.duration) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const ratio = (e.clientX - rect.left) / rect.width
+    videoRef.current.currentTime = ratio * videoRef.current.duration
+  }, [])
+
   return (
     <div className="flex items-center justify-center h-full bg-black">
       <div className="relative w-full max-w-[480px] h-full bg-gray-900">
-        {/* Reel counter */}
-        <span className="absolute top-4 right-4 z-20 text-white/80 text-xs font-mono bg-black/40 backdrop-blur-sm px-2 py-1 rounded-full">
-          {index + 1} / {total}
-        </span>
 
         {/* Full-screen video */}
         <video
@@ -60,6 +76,10 @@ function VideoReelCard({ reel, index, total, isActive, onVideoError }) {
           onWaiting={() => setBuffering(true)}
           onCanPlay={() => setBuffering(false)}
           onPlaying={() => setBuffering(false)}
+          onTimeUpdate={(e) => {
+            const v = e.target
+            if (v.duration) setProgress((v.currentTime / v.duration) * 100)
+          }}
           onError={() => onVideoError?.(reel.id)}
         />
 
@@ -86,8 +106,15 @@ function VideoReelCard({ reel, index, total, isActive, onVideoError }) {
           </div>
         )}
 
-        {/* Right side action buttons — YouTube Shorts style */}
-        <div className="absolute right-3 bottom-48 z-20 flex flex-col items-center gap-5">
+        {/* Mute button — top right */}
+        <button onClick={toggleMute} className="absolute top-4 right-4 z-20 cursor-pointer">
+          <div className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white">
+            {muted ? <VolumeOff /> : <Volume />}
+          </div>
+        </button>
+
+        {/* Save button — bottom right, aligned vertically with mute */}
+        <div className="absolute right-3 bottom-20 z-20">
           <button
             onClick={() => toggleBookmark(reel.id)}
             className="flex flex-col items-center gap-1 cursor-pointer"
@@ -99,16 +126,10 @@ function VideoReelCard({ reel, index, total, isActive, onVideoError }) {
             </div>
             <span className="text-white text-[10px]">{saved ? 'Saved' : 'Save'}</span>
           </button>
-          <button className="flex flex-col items-center gap-1 cursor-pointer">
-            <div className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white">
-              <Share />
-            </div>
-            <span className="text-white text-[10px]">Share</span>
-          </button>
         </div>
 
         {/* Bottom info — minimal, over video */}
-        <div className="absolute bottom-0 left-0 right-14 z-10 p-4 pb-6 bg-gradient-to-t from-black/70 via-black/30 to-transparent">
+        <div className="absolute bottom-0 left-0 right-0 z-10 p-4 pb-6 bg-gradient-to-t from-black/70 via-black/30 to-transparent">
           <Tag color={reel.accent}>{reel.category}</Tag>
           <h2 className="text-white font-bold font-display text-base leading-snug mt-2">
             {reel.title}
@@ -119,8 +140,13 @@ function VideoReelCard({ reel, index, total, isActive, onVideoError }) {
         </div>
 
         {/* Progress bar at very bottom */}
-        <div className="absolute bottom-0 left-0 right-0 z-20 h-0.5 bg-white/20">
-          <div className="h-full bg-primary" style={{ width: `${((index + 1) / total) * 100}%` }} />
+        <div
+          className="absolute bottom-0 left-0 right-0 z-20 h-3 flex items-end cursor-pointer"
+          onClick={handleSeek}
+        >
+          <div className="w-full h-1 bg-white/20">
+            <div className="h-full bg-primary rounded-full" style={{ width: `${progress}%` }} />
+          </div>
         </div>
       </div>
     </div>
@@ -258,9 +284,6 @@ function ReelCard({ reel, index, total }) {
               >
                 {saved ? <BookmarkFill /> : <Bookmark />}
                 {saved ? 'Saved' : 'Save'}
-              </button>
-              <button className={`flex items-center gap-1.5 text-sm transition-colors cursor-pointer ml-auto ${hasBg ? 'text-white/70 hover:text-white' : 'text-text-muted hover:text-primary'}`}>
-                <Share /> Share
               </button>
             </div>
           </div>
@@ -420,7 +443,10 @@ export default function FeedPage() {
         speed={400}
         className="h-full flex-1"
         onReachEnd={handleReachEnd}
-        onSlideChange={(swiper) => setActiveIndex(swiper.activeIndex)}
+        onSlideChange={(swiper) => {
+          setActiveIndex(swiper.activeIndex)
+          swiper.allowSlideNext = swiper.activeIndex < reels.length - 1
+        }}
       >
         {reels.map((reel, i) => (
           <SwiperSlide key={reel.id}>
@@ -432,7 +458,7 @@ export default function FeedPage() {
           </SwiperSlide>
         ))}
 
-        {/* Upload CTA slide */}
+        {/* Swiper needs this slide to initialize — scroll guard prevents reaching it */}
         <SwiperSlide>
           <div className="flex items-center justify-center p-4 md:p-8 h-full">
             <div className="flex flex-col items-center text-center gap-4 fade-up">
