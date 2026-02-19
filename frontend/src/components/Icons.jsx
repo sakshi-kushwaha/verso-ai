@@ -23,7 +23,7 @@ export const VolumeOff = () => icon(16, 16, <><polygon points="11 5 6 9 2 9 2 15
 export const Bookmark = () => icon(18, 18, <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />)
 export const BookmarkFill = () => <svg width="18" height="18" viewBox="0 0 24 24" className="fill-accent stroke-accent" strokeWidth="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" /></svg>
 export const Home = () => icon(19, 19, <><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></>)
-export const Cards = () => icon(19, 19, <><rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /></>)
+export const Cards = () => icon(19, 19, <><rect x="2" y="6" width="16" height="12" rx="2" /><path d="M6 6V4a2 2 0 012-2h8a2 2 0 012 2v2" /><line x1="6" y1="12" x2="14" y2="12" /></>)
 export const Chat = () => icon(19, 19, <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />)
 export const Chart = () => icon(19, 19, <><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></>)
 export const Send = () => <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" /></svg>
@@ -38,3 +38,4 @@ export const Share = () => icon(16, 16, <><circle cx="18" cy="5" r="3" /><circle
 export const Logout = () => icon(17, 17, <><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></>)
 export const Download = () => icon(17, 17, <><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></>)
 export const Book = () => icon(19, 19, <><path d="M4 19.5A2.5 2.5 0 016.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" /></>)
+export const Grid = () => icon(19, 19, <><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></>)
