@@ -18,6 +18,8 @@ export const Upload = () => icon(22, 22, <><path d="M21 15v4a2 2 0 01-2 2H5a2 2 
 export const File = () => icon(18, 18, <><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /></>)
 export const Play = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21" /></svg>
 export const Pause = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
+export const Volume = () => icon(16, 16, <><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><path d="M19.07 4.93a10 10 0 010 14.14" /><path d="M15.54 8.46a5 5 0 010 7.07" /></>)
+export const VolumeOff = () => icon(16, 16, <><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><line x1="23" y1="9" x2="17" y2="15" /><line x1="17" y1="9" x2="23" y2="15" /></>)
 export const Bookmark = () => icon(18, 18, <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />)
 export const BookmarkFill = () => <svg width="18" height="18" viewBox="0 0 24 24" className="fill-accent stroke-accent" strokeWidth="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" /></svg>
 export const Home = () => icon(19, 19, <><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></>)
