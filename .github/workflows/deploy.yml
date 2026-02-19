@@ -29,8 +29,14 @@ jobs:
 
       - name: Copy build to backend/static
         run: |
+          # Preserve stock videos before replacing static dir
+          cp -r backend/static/stock-videos /tmp/stock-videos-backup 2>/dev/null || true
           rm -rf backend/static
           cp -r frontend/dist backend/static
+          # Restore stock videos into the built static dir
+          if [ -d /tmp/stock-videos-backup ]; then
+            cp -r /tmp/stock-videos-backup backend/static/stock-videos
+          fi
 
       - name: Upload built static files to EC2
         uses: appleboy/scp-action@v0.1.7
@@ -49,14 +55,12 @@ jobs:
           chmod 600 ~/.ssh/ec2_key
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
 
-      - name: Pull and install on EC2
+      - name: Pull code and sync dependencies on EC2
         run: |
           ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'ENDSSH'
             cd /root/verso-ai
             git pull origin main
-            cd backend
-            source venv/bin/activate
-            pip install -r requirements.txt --quiet
+            bash ec2-setup.sh --deploy
           ENDSSH
 
       - name: Restart server on EC2
