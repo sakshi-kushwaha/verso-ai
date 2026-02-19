@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { getBookmarks, addBookmark as apiAddBookmark, removeBookmark as apiRemoveBookmark } from '../api';
+import { clearAudioCache } from '../services/audioCache';
 
 const useStore = create((set, get) => ({
   // --- Auth ---
@@ -13,7 +14,18 @@ const useStore = create((set, get) => ({
   logout: () => {
     localStorage.removeItem('verso_user');
     localStorage.removeItem('verso_token');
-    set({ user: null, token: null });
+    clearAudioCache();
+    set({
+      user: null,
+      token: null,
+      reels: [],
+      feedPage: 1,
+      hasMore: true,
+      bookmarks: new Map(),
+      bookmarkItems: [],
+      currentUpload: null,
+      bgUpload: null,
+    });
   },
 
   // --- Bookmarks (API-backed) ---
