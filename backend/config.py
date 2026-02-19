@@ -42,8 +42,8 @@ ESPEAK_GAP: int = 4
 
 # LLM — multi-model routing
 LLM_MODEL: str = "qwen2.5:3b"  # legacy default, used by generate_reel_script / chat
-CLASSIFICATION_MODEL: str = os.getenv("CLASSIFICATION_MODEL", "qwen3:0.6b")
-REEL_MODEL: str = os.getenv("REEL_MODEL", "qwen2.5:3b")
+CLASSIFICATION_MODEL: str = os.getenv("CLASSIFICATION_MODEL", "qwen2.5:1.5b")
+REEL_MODEL: str = os.getenv("REEL_MODEL", "qwen2.5:1.5b")
 CHAT_MODEL: str = os.getenv("CHAT_MODEL", "qwen2.5:3b")
 LLM_TIMEOUT: float = 300.0
 

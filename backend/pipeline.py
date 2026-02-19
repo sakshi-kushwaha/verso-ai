@@ -5,8 +5,12 @@ import asyncio
 import threading
 from database import get_db
 import httpx
-from parser import parse_document, detect_chapters, EmptyDocumentError, ScannedPDFError
-from llm import detect_doc_type, detect_subject_category, generate_reels, generate_reel_script, OllamaUnavailableError
+from parser import parse_document, EmptyDocumentError, ScannedPDFError
+from llm import (
+    detect_doc_type, detect_subject_category, generate_reels, generate_reel_script,
+    extract_topics, gather_topic_content, generate_topic_reel,
+    OllamaUnavailableError,
+)
 from bg_images import assign_images, _resolve_category
 from rag import embed_chunks
 from video import compose_reel_video, compose_multi_clip_reel, get_clips_for_category
@@ -162,64 +166,75 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
         subject_category = detect_subject_category(full_text)
         _update_subject_category(upload_id, subject_category)
 
-        # Step 3: Detect chapters and generate reels
+        # Step 3: Extract topics and generate one reel per topic
         _update_progress(upload_id, 20, "extracting")
-        sections = detect_chapters(pages)
-        max_sections = max(2, len(pages) // 2)
-        sections = sections[:max_sections]
 
-        total_batches = max(1, (len(sections) + BATCH_SIZE - 1) // BATCH_SIZE)
-        batches_completed = 0
-        failed_batches = []
+        # Decide number of reels based on document length
+        num_topics = min(max(3, len(pages) // 2), 7)
+
+        try:
+            topics = extract_topics(full_text, num_topics=num_topics)
+        except OllamaUnavailableError:
+            _update_status(upload_id, "error", "Ollama is unavailable. Please try again later.")
+            return
+
+        if not topics:
+            # Fallback: treat the whole document as one topic
+            topics = [{"topic": "Key Concepts", "keywords": subject_category}]
+
+        log.info("Upload %s: extracted %d topics — %s",
+                 upload_id, len(topics), ", ".join(t["topic"] for t in topics))
+
+        reels_completed = 0
+        reels_failed = 0
         ollama_down = False
 
-        for i in range(0, len(sections), BATCH_SIZE):
-            batch_num = i // BATCH_SIZE
-            batch_progress = 20 + int((batch_num / total_batches) * 50)
-            _update_progress(upload_id, batch_progress, "generating")
+        for i, topic in enumerate(topics):
+            topic_progress = 20 + int(((i + 1) / len(topics)) * 50)
+            _update_progress(upload_id, topic_progress, "generating")
 
-            batch = sections[i:i + BATCH_SIZE]
-            batch_text = "\n".join(s["text"] for s in batch)
+            # Gather relevant content for this topic
+            topic_text = gather_topic_content(topic, full_text)
+            log.info("Topic %d/%d: %r (%d chars)", i + 1, len(topics), topic["topic"], len(topic_text))
 
             try:
-                result = generate_reels(batch_text, doc_type, prefs)
+                result = generate_topic_reel(topic["topic"], topic_text, doc_type, prefs)
             except OllamaUnavailableError:
-                log.error("Ollama went down during batch %d/%d for upload %s", batch_num + 1, total_batches, upload_id)
+                log.error("Ollama went down at topic %d/%d for upload %s", i + 1, len(topics), upload_id)
                 ollama_down = True
                 break
             except httpx.TimeoutException:
-                log.warning("Ollama timed out on batch %d/%d for upload %s, skipping", batch_num + 1, total_batches, upload_id)
-                failed_batches.append(batch_num + 1)
+                log.warning("Ollama timed out on topic %r for upload %s, skipping", topic["topic"], upload_id)
+                reels_failed += 1
                 continue
             except Exception:
-                log.exception("Unexpected error on batch %d/%d for upload %s, skipping", batch_num + 1, total_batches, upload_id)
-                failed_batches.append(batch_num + 1)
+                log.exception("Error generating reel for topic %r, upload %s", topic["topic"], upload_id)
+                reels_failed += 1
                 continue
 
-            batch_reels = result.get("reels", [])
-            bg_paths = assign_images(batch_reels, subject_category)
+            topic_reels = result.get("reels", [])
+            bg_paths = assign_images(topic_reels, subject_category)
             saved_reels = []
-            for reel, bg_image in zip(batch_reels, bg_paths):
-                reel_id = _save_reel(upload_id, reel, batch[0].get("start_page", i + 1), bg_image, source_text=batch_text)
+            for reel, bg_image in zip(topic_reels, bg_paths):
+                reel_id = _save_reel(upload_id, reel, i + 1, bg_image, source_text=topic_text)
                 saved_reels.append((reel_id, reel))
 
             for fc in result.get("flashcards", []):
                 _save_flashcard(upload_id, fc)
 
-            # Video composition — try to compose video for each reel
-            _update_progress(upload_id, batch_progress + 2, "composing")
+            # Video composition
+            _update_progress(upload_id, topic_progress + 2, "composing")
             for reel_id, reel in saved_reels:
                 _try_compose_video(reel_id, reel, subject_category)
 
-            batches_completed += 1
+            reels_completed += 1
 
-        # If Ollama server is completely down, save partial or error
+        # Handle failures
         if ollama_down:
-            if batches_completed > 0:
-                log.info("Saving %d/%d partial batches for upload %s", batches_completed, total_batches, upload_id)
+            if reels_completed > 0:
                 _update_status(
                     upload_id, "partial",
-                    f"Generated {batches_completed}/{total_batches} batches before Ollama became unavailable. "
+                    f"Generated {reels_completed}/{len(topics)} reels before Ollama became unavailable. "
                     "Partial reels are available. Re-upload to retry.",
                 )
                 _update_progress(upload_id, 70, "partial")
@@ -227,17 +242,15 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
                 _update_status(upload_id, "error", "Ollama is unavailable. Please try again later.")
             return
 
-        # If some batches failed but others succeeded, mark as partial and continue
-        if failed_batches and batches_completed > 0:
-            skipped = ", ".join(str(b) for b in failed_batches)
-            log.info("Upload %s: %d batches succeeded, batches %s failed", upload_id, batches_completed, skipped)
+        if reels_failed and reels_completed > 0:
+            log.info("Upload %s: %d/%d topics succeeded", upload_id, reels_completed, len(topics))
             _update_status(
                 upload_id, "partial",
-                f"Generated {batches_completed}/{total_batches} batches. "
-                f"Batches {skipped} timed out and were skipped. Partial reels are available.",
+                f"Generated {reels_completed}/{len(topics)} reels. "
+                f"{reels_failed} topics failed and were skipped.",
             )
-        elif failed_batches and batches_completed == 0:
-            _update_status(upload_id, "error", "All batches failed. Please try again later.")
+        elif reels_failed and reels_completed == 0:
+            _update_status(upload_id, "error", "All topic reels failed. Please try again later.")
             return
 
         # Step 4: Embed chunks for RAG / Chat Q&A

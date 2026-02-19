@@ -24,8 +24,11 @@ except ImportError:
     HAS_DSPY = False
 
 from config import OLLAMA_HOST, LLM_MODEL, CLASSIFICATION_MODEL, REEL_MODEL
-from llm import generate_reels, detect_doc_type, detect_subject_category
-from eval_fixtures import TEST_DOCS, EVAL_COMBOS, QUICK_EVAL_PAIRS
+from llm import (
+    generate_reels, detect_doc_type, detect_subject_category,
+    extract_topics, gather_topic_content, generate_topic_reel,
+)
+from eval_fixtures import TEST_DOCS, EVAL_COMBOS, QUICK_EVAL_PAIRS, QUICK_TOPIC_REEL_PAIRS
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -247,10 +250,6 @@ def metric_narration_quality(parsed: dict, **_) -> tuple[float, dict]:
     if not reels:
         return 0.0, {"reason": "no reels"}
 
-    checks = {}
-    total = 0
-    passed = 0
-
     for i, reel in enumerate(reels):
         narration = reel.get("narration", "") or ""
         words = narration.split()
@@ -316,16 +315,7 @@ def metric_narration_quality(parsed: dict, **_) -> tuple[float, dict]:
 
 
 def score_reel(reel_dict: dict, source_text: str, prefs: dict = None) -> dict:
-    """Composite scorer: returns 0-1 score + per-metric breakdown.
-
-    Args:
-        reel_dict: {"reels": [...], "flashcards": [...]}
-        source_text: original input text chunk
-        prefs: user preferences dict (for depth/style matching)
-
-    Returns:
-        {"composite_score": float, "metrics": {name: {score, pass, weight}}}
-    """
+    """Composite scorer: returns 0-1 score + per-metric breakdown."""
     if prefs is None:
         prefs = {
             "learning_style": "mixed",
@@ -337,40 +327,202 @@ def score_reel(reel_dict: dict, source_text: str, prefs: dict = None) -> dict:
     raw_str = json.dumps(reel_dict) if isinstance(reel_dict, dict) else str(reel_dict)
     results = {}
 
-    # Metric 1: JSON validity (weight 1.0)
     ok, _ = metric_json_valid(raw_str)
     results["json_valid"] = {"score": 1.0 if ok else 0.0, "pass": ok, "weight": 1.0}
 
-    # Metric 2: Schema complete (weight 1.0)
     ok, _ = metric_schema_complete(reel_dict)
     results["schema_complete"] = {"score": 1.0 if ok else 0.0, "pass": ok, "weight": 1.0}
 
-    # Metric 3: Depth match (weight 1.0)
     ok, _ = metric_depth_match(reel_dict, prefs)
     results["depth_match"] = {"score": 1.0 if ok else 0.0, "pass": ok, "weight": 1.0}
 
-    # Metric 4: Style match (weight 1.0)
     ok, _ = metric_style_match(reel_dict, prefs)
     results["style_match"] = {"score": 1.0 if ok else 0.0, "pass": ok, "weight": 1.0}
 
-    # Metric 5: Content quality (weight 1.5)
     score, _ = metric_content_quality(reel_dict, source_text)
     results["content_quality"] = {"score": score, "pass": score >= 0.75, "weight": 1.5}
 
-    # Metric 6: Flashcard quality (weight 1.0)
     score, _ = metric_flashcard_quality(reel_dict)
     results["flashcard_quality"] = {"score": score, "pass": score >= 0.75, "weight": 1.0}
 
-    # Metric 7: Narration quality (weight 1.5)
     score, _ = metric_narration_quality(reel_dict)
     results["narration_quality"] = {"score": score, "pass": score >= 0.6, "weight": 1.5}
 
-    # Weighted composite
     total_weight = sum(m["weight"] for m in results.values())
     weighted_sum = sum(m["score"] * m["weight"] for m in results.values())
     composite = weighted_sum / total_weight if total_weight else 0.0
 
     return {"composite_score": round(composite, 3), "metrics": results}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Topic-based Metrics (new pipeline)
+# ═══════════════════════════════════════════════════════════════════════════
+
+def metric_topic_extraction(topics: list, source_text: str, num_requested: int, **_) -> tuple[float, dict]:
+    """Topic extraction quality score (0-1). Checks structure, count, distinctness, relevance."""
+    checks = {}
+    total = 0
+    passed = 0
+
+    # Check 1: Got at least 1 topic
+    total += 1
+    checks["has_topics"] = len(topics) > 0
+    passed += int(checks["has_topics"])
+    if not topics:
+        return passed / total, checks
+
+    # Check 2: Each topic has required fields (topic + keywords)
+    total += 1
+    fields_ok = all("topic" in t and "keywords" in t and t["topic"] and t["keywords"] for t in topics)
+    checks["fields_complete"] = fields_ok
+    passed += int(fields_ok)
+
+    # Check 3: Reasonable count (at least half of requested)
+    total += 1
+    count_ok = len(topics) >= max(1, num_requested // 2)
+    checks["count_ok"] = count_ok
+    checks["found"] = len(topics)
+    checks["requested"] = num_requested
+    passed += int(count_ok)
+
+    # Check 4: Topics are distinct (no near-duplicate names)
+    total += 1
+    names = [t["topic"].lower() for t in topics]
+    distinct = True
+    for i in range(len(names)):
+        for j in range(i + 1, len(names)):
+            if SequenceMatcher(None, names[i], names[j]).ratio() > 0.8:
+                distinct = False
+                break
+    checks["distinct"] = distinct
+    passed += int(distinct)
+
+    # Check 5: Topics are relevant to source text (keywords appear in text)
+    total += 1
+    src = source_text.lower()
+    relevant = 0
+    for t in topics:
+        words = set(re.findall(r'\b\w{4,}\b', (t["topic"] + " " + t.get("keywords", "")).lower()))
+        if any(w in src for w in words):
+            relevant += 1
+    checks["relevant"] = f"{relevant}/{len(topics)}"
+    checks["relevant_ok"] = relevant >= max(1, len(topics) // 2)
+    passed += int(checks["relevant_ok"])
+
+    return passed / total, checks
+
+
+def run_topic_extraction_eval(doc: dict, dry_run: bool = False) -> dict:
+    """Test extract_topics + gather_topic_content on a single document."""
+    text = doc["text"]
+    num_topics = 3
+
+    if dry_run:
+        topics = [
+            {"topic": "Key Concept One", "keywords": "test, concept, example"},
+            {"topic": "Key Concept Two", "keywords": "another, topic, here"},
+        ]
+        gather_len = 200
+    else:
+        topics = extract_topics(text, num_topics=num_topics)
+        if topics:
+            content = gather_topic_content(topics[0], text)
+            gather_len = len(content)
+        else:
+            gather_len = 0
+
+    score, details = metric_topic_extraction(topics or [], text, num_topics)
+
+    return {
+        "doc": doc["name"],
+        "topics": [t.get("topic", "") for t in (topics or [])],
+        "gather_len": gather_len,
+        "gather_ok": gather_len > 50,
+        "score": score,
+        "pass": score >= 0.6,
+        "details": details,
+    }
+
+
+def run_topic_reel_eval(doc: dict, prefs: dict, topics: list = None, dry_run: bool = False) -> dict:
+    """Run eval on topic-based reel generation (new pipeline).
+    Pre-extracted topics can be passed to avoid redundant LLM calls."""
+    text = doc["text"]
+    doc_type = doc["doc_type"]
+
+    if dry_run:
+        raw = {
+            "reels": [{"title": "Topic Reel", "summary": "Test summary for topic-based reel generation eval.", "narration": "Test narration here.", "category": "general", "keywords": "test, topic"}],
+            "flashcards": [{"question": "What is this?", "answer": "This is a dry run test of the topic reel generation pipeline."}],
+        }
+    else:
+        if topics is None:
+            topics = extract_topics(text, num_topics=3)
+        if not topics:
+            return {
+                "doc": doc["name"], "doc_type": doc_type, "prefs": prefs["label"],
+                "output": None,
+                "metrics": {n: {"pass": False, "error": "no topics extracted"} for n in
+                            ["json_valid", "schema_complete", "depth_match", "style_match", "content_quality", "flashcard_quality"]},
+            }
+        topic = topics[0]
+        topic_text = gather_topic_content(topic, text)
+        raw = generate_topic_reel(topic["topic"], topic_text, doc_type, prefs)
+
+    raw_str = json.dumps(raw) if isinstance(raw, dict) else str(raw)
+
+    # Score with the same 6 metrics as old reel eval
+    results = {}
+
+    ok, details = metric_json_valid(raw_str)
+    results["json_valid"] = {"pass": ok, **details}
+
+    parsed = raw if isinstance(raw, dict) else {}
+    try:
+        parsed = json.loads(raw_str) if isinstance(raw_str, str) else raw
+    except (json.JSONDecodeError, TypeError):
+        parsed = {"reels": [], "flashcards": []}
+
+    ok, details = metric_schema_complete(parsed)
+    results["schema_complete"] = {"pass": ok, **details}
+
+    ok, details = metric_depth_match(parsed, prefs)
+    results["depth_match"] = {"pass": ok, **details}
+
+    ok, details = metric_style_match(parsed, prefs)
+    results["style_match"] = {"pass": ok, **details}
+
+    score, details = metric_content_quality(parsed, text)
+    results["content_quality"] = {"score": score, "pass": score >= 0.75, **details}
+
+    score, details = metric_flashcard_quality(parsed)
+    results["flashcard_quality"] = {"score": score, "pass": score >= 0.75, **details}
+
+    return {
+        "doc": doc["name"],
+        "doc_type": doc_type,
+        "prefs": prefs["label"],
+        "output": raw,
+        "metrics": results,
+    }
+
+
+def print_topic_extraction_scorecard(results: list[dict]):
+    """Print topic extraction eval results."""
+    print()
+    print("-" * 60)
+    print("TOPIC EXTRACTION EVAL")
+    print("-" * 60)
+
+    for r in results:
+        symbol = "+" if r["pass"] else "-"
+        topics_str = ", ".join(r.get("topics", [])[:3])
+        gather_str = f"gather={r.get('gather_len', 0)} chars" if r.get("gather_ok") else "gather=FAIL"
+        print(f"  {r['doc']:<25s}  {symbol} {r['score']:.0%}  [{len(r.get('topics', []))} topics: {topics_str}]  {gather_str}")
+
+    te_passed = sum(1 for r in results if r["pass"])
+    print(f"\n  Topic extraction: {te_passed}/{len(results)} passed ({te_passed/len(results)*100:.0f}%)")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -451,14 +603,14 @@ def run_single_eval(doc: dict, prefs: dict, dry_run: bool = False) -> dict:
 # Scorecard Printer
 # ═══════════════════════════════════════════════════════════════════════════
 
-def print_scorecard(all_results: list[dict]):
+def print_scorecard(all_results: list[dict], title: str = "VERSO PROMPT EVAL"):
     """Print a formatted scorecard from eval results."""
     total_tests = len(all_results)
     metric_names = ["json_valid", "schema_complete", "depth_match", "style_match", "content_quality", "flashcard_quality"]
 
     print()
     print("=" * 60)
-    print(f" VERSO PROMPT EVAL")
+    print(f" {title}")
     print(f" Reel model: {REEL_MODEL}  |  Classification: {CLASSIFICATION_MODEL}")
     print(f" Chat model: {LLM_MODEL}  |  Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print(f" Tests: {total_tests}")
@@ -580,7 +732,7 @@ def print_classification_scorecard(results: list[dict]):
     """Print classification accuracy results."""
     print()
     print("-" * 60)
-    print("CLASSIFICATION EVAL (qwen3:0.6b)")
+    print(f"CLASSIFICATION EVAL ({CLASSIFICATION_MODEL})")
     print("-" * 60)
 
     doc_type_correct = 0
@@ -654,6 +806,23 @@ def main():
         print(f"\nResults saved to: {output_path}")
         return
 
+    # ── Topic Extraction Eval (5 docs — always runs) ──────────────────────
+    print(f"\n--- Topic Extraction Eval ({len(TEST_DOCS)} docs) ---\n")
+    topic_extract_results = []
+    for i, doc in enumerate(TEST_DOCS):
+        print(f"  [{i+1}/{len(TEST_DOCS)}] {doc['name']}...", end=" ", flush=True)
+        try:
+            result = run_topic_extraction_eval(doc, dry_run=dry_run)
+            symbol = "+" if result["pass"] else "-"
+            topics_preview = ", ".join(result.get("topics", [])[:3])
+            print(f"{symbol} {result['score']:.0%} [{len(result.get('topics', []))} topics: {topics_preview}]")
+            topic_extract_results.append(result)
+        except Exception as e:
+            print(f"ERROR: {e}")
+            topic_extract_results.append({"doc": doc["name"], "pass": False, "score": 0, "topics": [], "gather_len": 0, "gather_ok": False, "details": {"error": str(e)}})
+    print_topic_extraction_scorecard(topic_extract_results)
+
+    # ── Legacy Reel Eval (generate_reels — old chunk-based pipeline) ──────
     if quick:
         pairs = []
         for doc_name, combo_label in QUICK_EVAL_PAIRS:
@@ -664,7 +833,7 @@ def main():
         pairs = [(doc, combo) for doc in TEST_DOCS for combo in EVAL_COMBOS]
 
     total = len(pairs)
-    print(f"\nRunning {total} eval tests {'(quick mode)' if quick else f'({len(TEST_DOCS)} docs x {len(EVAL_COMBOS)} combos)'}...\n")
+    print(f"\n--- Legacy Reel Eval ({total} tests {'- quick' if quick else f'- {len(TEST_DOCS)} docs x {len(EVAL_COMBOS)} combos'}) ---\n")
 
     all_results = []
     for doc, combo in pairs:
@@ -687,8 +856,80 @@ def main():
                              "style_match", "content_quality", "flashcard_quality"]},
             })
 
-    # Print scorecard
-    print_scorecard(all_results)
+    print_scorecard(all_results, title="LEGACY REEL EVAL (generate_reels)")
+
+    # ── Topic Reel Eval (new pipeline: extract_topics → generate_topic_reel) ──
+    if quick:
+        topic_pairs = []
+        for doc_name, combo_label in QUICK_TOPIC_REEL_PAIRS:
+            doc = next(d for d in TEST_DOCS if d["name"] == doc_name)
+            combo = next(c for c in EVAL_COMBOS if c["label"] == combo_label)
+            topic_pairs.append((doc, combo))
+    else:
+        topic_pairs = [(doc, combo) for doc in TEST_DOCS for combo in EVAL_COMBOS]
+
+    total_topic = len(topic_pairs)
+    print(f"\n--- Topic Reel Eval ({total_topic} tests {'- quick' if quick else f'- {len(TEST_DOCS)} docs x {len(EVAL_COMBOS)} combos'}) ---\n")
+
+    # Pre-extract topics per doc to avoid redundant LLM calls in full mode
+    doc_topics_cache = {}
+    if not dry_run:
+        unique_docs = {doc["name"]: doc for doc, _ in topic_pairs}
+        for name, doc in unique_docs.items():
+            print(f"  Pre-extracting topics for {name}...", end=" ", flush=True)
+            try:
+                topics = extract_topics(doc["text"], num_topics=3)
+                doc_topics_cache[name] = topics
+                print(f"{len(topics)} topics")
+            except Exception as e:
+                print(f"FAILED: {e}")
+                doc_topics_cache[name] = []
+
+    topic_reel_results = []
+    for doc, combo in topic_pairs:
+        label = combo["label"]
+        print(f"  [{len(topic_reel_results)+1}/{total_topic}] {doc['name']} + {label}...", end=" ", flush=True)
+        try:
+            cached_topics = doc_topics_cache.get(doc["name"])
+            result = run_topic_reel_eval(doc, combo, topics=cached_topics, dry_run=dry_run)
+            passed = sum(1 for m in result["metrics"].values() if m.get("pass", False))
+            print(f"{passed}/6 passed")
+            topic_reel_results.append(result)
+        except Exception as e:
+            print(f"ERROR: {e}")
+            topic_reel_results.append({
+                "doc": doc["name"],
+                "doc_type": doc["doc_type"],
+                "prefs": label,
+                "output": None,
+                "metrics": {n: {"pass": False, "error": str(e)} for n in
+                            ["json_valid", "schema_complete", "depth_match",
+                             "style_match", "content_quality", "flashcard_quality"]},
+            })
+
+    print_scorecard(topic_reel_results, title="TOPIC REEL EVAL (new pipeline)")
+
+    # ── Combined Summary ──────────────────────────────────────────────────
+    total_evals = len(all_results) + len(topic_reel_results) + len(topic_extract_results)
+    print()
+    print("=" * 60)
+    print(f" COMBINED SUMMARY")
+    print(f" Total eval tests: {total_evals}")
+    print("=" * 60)
+
+    te_pass = sum(1 for r in topic_extract_results if r["pass"])
+    legacy_pass = sum(sum(1 for m in r["metrics"].values() if m.get("pass", False)) for r in all_results)
+    legacy_total = len(all_results) * 6
+    topic_pass = sum(sum(1 for m in r["metrics"].values() if m.get("pass", False)) for r in topic_reel_results)
+    topic_total = len(topic_reel_results) * 6
+
+    print(f"  Topic Extraction:  {te_pass}/{len(topic_extract_results)} ({te_pass/max(1,len(topic_extract_results))*100:.0f}%)")
+    print(f"  Legacy Reels:      {legacy_pass}/{legacy_total} ({legacy_pass/max(1,legacy_total)*100:.0f}%)")
+    print(f"  Topic Reels:       {topic_pass}/{topic_total} ({topic_pass/max(1,topic_total)*100:.0f}%)")
+    combined_pass = te_pass + legacy_pass + topic_pass
+    combined_total = len(topic_extract_results) + legacy_total + topic_total
+    print(f"  OVERALL:           {combined_pass}/{combined_total} ({combined_pass/max(1,combined_total)*100:.0f}%)")
+    print("=" * 60)
 
     # Save results
     output_path = os.path.join(os.path.dirname(__file__), "eval_results.json")
@@ -699,18 +940,21 @@ def main():
         "date": datetime.now().isoformat(),
         "dry_run": dry_run,
         "classification": classify_results,
-        "total_tests": len(all_results),
-        "results": [],
+        "topic_extraction": topic_extract_results,
+        "legacy_reel_tests": len(all_results),
+        "topic_reel_tests": len(topic_reel_results),
+        "total_tests": total_evals,
+        "legacy_results": [],
+        "topic_results": [],
     }
     for r in all_results:
-        entry = {
-            "doc": r["doc"],
-            "doc_type": r["doc_type"],
-            "prefs": r["prefs"],
-            "metrics": r["metrics"],
-        }
-        # Don't save full LLM output to keep file small
-        save_data["results"].append(entry)
+        save_data["legacy_results"].append({
+            "doc": r["doc"], "doc_type": r["doc_type"], "prefs": r["prefs"], "metrics": r["metrics"],
+        })
+    for r in topic_reel_results:
+        save_data["topic_results"].append({
+            "doc": r["doc"], "doc_type": r.get("doc_type", ""), "prefs": r.get("prefs", ""), "metrics": r["metrics"],
+        })
 
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(save_data, f, indent=2, ensure_ascii=False, default=str)

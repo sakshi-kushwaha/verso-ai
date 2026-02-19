@@ -131,3 +131,15 @@ QUICK_EVAL_PAIRS = [
     ("api_documentation",  "visual+brief+exam"),
     ("api_documentation",  "reading+detailed+research"),
 ]
+
+# ---------------------------------------------------------------------------
+# Quick topic reel eval pairs — 5 tests (one per doc, varied combos)
+# ---------------------------------------------------------------------------
+
+QUICK_TOPIC_REEL_PAIRS = [
+    ("biology_textbook",   "mixed+balanced+learning"),
+    ("ml_research_paper",  "auditory+balanced+exam"),
+    ("quarterly_report",   "mixed+brief+work"),
+    ("short_story",        "mixed+detailed+research"),
+    ("api_documentation",  "visual+brief+exam"),
+]
