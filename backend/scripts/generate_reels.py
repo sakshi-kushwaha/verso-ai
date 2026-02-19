@@ -34,7 +34,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from config import STOCK_VIDEOS_DIR, SOUND_EFFECTS_DIR, VIDEO_CACHE_DIR, AUDIO_CACHE_DIR
 from database import get_db, init_db
 from tts.engine import generate_audio
-from video import compose_reel_video
+from llm import generate_mixed_reel_script
+from video import compose_reel_video, compose_multi_clip_reel, get_clips_for_category, get_images_for_category
 
 DEFAULT_VIDEOS_CSV = os.path.join(os.path.dirname(__file__), "..", "data", "videos.csv")
 DEFAULT_SOUNDS_CSV = os.path.join(os.path.dirname(__file__), "..", "data", "sound_effects.csv")
@@ -227,17 +228,55 @@ def process_single_reel(entry: dict, sound_effects: list[dict], upload_id: int) 
     finally:
         conn.close()
 
-    # 5. Compose MP4
+    # 5. Compose MP4 — LLM decides segment layout (videos + images)
     try:
-        video_path = compose_reel_video(
-            reel_id=reel_id,
-            title=title,
-            summary=summary,
-            stock_video_path=stock_video_path,
-            sound_effect_path=sound_effect_path,
-            tts_audio_path=str(tts_path) if tts_path else None,
-            category=category,
-        )
+        cat_clips = get_clips_for_category(category)
+        cat_images = get_images_for_category(category)
+
+        script = None
+        if len(cat_clips) >= 2:
+            try:
+                script = generate_mixed_reel_script(
+                    text=description,
+                    category=category,
+                    clips=cat_clips,
+                    images=cat_images,
+                )
+            except Exception as e:
+                print(f"  LLM script failed ({e}), using single-clip fallback")
+
+        if script and script.get("segments"):
+            # Use LLM-generated title/narration if available
+            script_title = script.get("title") or title
+            script_narration = script.get("narration") or narration
+
+            # Re-generate TTS if LLM produced a different narration
+            script_tts = tts_path
+            if script_narration != narration and script_narration:
+                try:
+                    script_tts = generate_audio(script_narration)
+                except Exception:
+                    script_tts = tts_path
+
+            video_path = compose_multi_clip_reel(
+                reel_id=reel_id,
+                title=script_title,
+                narration=script_narration,
+                segments=script["segments"],
+                category=category,
+                tts_audio_path=str(script_tts) if script_tts else None,
+                sound_effect_path=sound_effect_path,
+            )
+        else:
+            video_path = compose_reel_video(
+                reel_id=reel_id,
+                title=title,
+                summary=summary,
+                stock_video_path=stock_video_path,
+                sound_effect_path=sound_effect_path,
+                tts_audio_path=str(tts_path) if tts_path else None,
+                category=category,
+            )
 
         conn = get_db()
         try:
