@@ -146,6 +146,20 @@ Input: "Photosynthesis is the process by which plants convert light energy into 
 Output: {{"reels":[{{"title":"How Plants Make Food","summary":"Photosynthesis converts light energy into chemical energy using chlorophyll. Plants absorb CO2 and water to produce glucose and oxygen, powering life on Earth.","narration":"Here's the thing about plants — they're basically solar-powered food factories. Chlorophyll in their leaves grabs sunlight... then the plant pulls in carbon dioxide from the air and water from the soil. Mix those together with light energy, and you get glucose for food and oxygen for us to breathe. Without this one reaction, life as we know it simply wouldn't exist.","category":"Biology","keywords":"photosynthesis, chlorophyll, glucose, oxygen"}}],"flashcards":[{{"question":"What are the inputs and outputs of photosynthesis?","answer":"Inputs: light energy, CO2, and water. Outputs: glucose and oxygen."}}]}}"""
 
 # ---------------------------------------------------------------------------
+# System prompt for reel model (critical rules get highest attention here)
+# ---------------------------------------------------------------------------
+
+REEL_SYSTEM_PROMPT = """You are Verso, a learning content creator who teaches through short reels.
+You are NOT a textbook. You explain like a friend.
+
+CRITICAL RULES YOU MUST FOLLOW:
+1. You MUST use at least 3 contractions (don't, isn't, you're, it's, here's) in every narration.
+2. You MUST use "..." at least once and "—" at least once in every narration.
+3. You must NEVER use these phrases: "is defined as", "refers to the process", "plays a crucial role", "it is important to note", "furthermore", "moreover".
+4. Narration MUST be 40-60 words. Count carefully.
+5. Always output valid JSON with "reels" and "flashcards" arrays."""
+
+# ---------------------------------------------------------------------------
 # Main reel generation prompt
 # ---------------------------------------------------------------------------
 
@@ -198,7 +212,7 @@ Text to create a reel about:
 
 JSON:"""
 
-REEL_GENERATION_PROMPT = """You are a learning content creator for Verso. Generate reels and flashcards from the text below.
+REEL_GENERATION_PROMPT = """Generate reels and flashcards from the text below.
 
 DOCUMENT TYPE: {doc_type}
 {doc_type_instruction}
@@ -217,15 +231,15 @@ RULES:
 4. Every flashcard answer MUST be at least 10 words long.
 5. Reel titles must be under 60 characters.
 6. "narration" MUST follow these spoken-audio rules:
-   - Write as if explaining to a curious friend, NOT reading from a textbook.
-   - Use contractions: "don't", "isn't", "you're", "it's", "here's".
-   - Mix short punchy sentences (5-8 words) with longer explanations (12-18 words).
-   - Start at least one sentence with "Here's the thing", "Think about it", "Now", or "So".
-   - Use "..." for natural pauses and "—" for pivots. Example: "Water evaporates... rises up... and forms clouds."
-   - NEVER use passive voice in the first sentence. Start with something engaging.
-   - Narration MUST be 40-60 words long (~15-20 seconds when spoken). Never shorter than 40 words.
-   - End with a memorable takeaway or a reflective thought — not a dry fact.
-   - No bullet points, no special symbols, no abbreviations, no parentheses.
+   – Write as if explaining to a curious friend, NOT reading from a textbook.
+   – Use contractions: "don't", "isn't", "you're", "it's", "here's".
+   – Mix short punchy sentences (5-8 words) with longer explanations (12-18 words).
+   – Start at least one sentence with "Here's the thing", "Think about", "Now", or "So".
+   – Use "..." for natural pauses and "—" for pivots. Example: "Water isn't just H2O... it's the molecule that — quite literally — makes life possible."
+   – NEVER use passive voice in the first sentence. Start with something that grabs attention.
+   – Narration MUST be 40-60 words long (~15-20 seconds when spoken).
+   – End with a memorable takeaway or a reflective thought — not a dry summary.
+   – No bullet points, no special symbols, no abbreviations, no parentheses.
 
 Schema: {{"reels":[{{"title":"short catchy title","summary":"key idea summary","narration":"spoken version of summary","category":"topic","keywords":"comma separated"}}],"flashcards":[{{"question":"question about content?","answer":"detailed answer at least 10 words long"}}]}}
 

@@ -8,6 +8,7 @@ from prompts import (
     DOC_TYPE_PROMPT,
     SUBJECT_CATEGORY_PROMPT,
     REEL_GENERATION_PROMPT,
+    REEL_SYSTEM_PROMPT,
     REEL_SCRIPT_PROMPT,
     REEL_MIXED_SCRIPT_PROMPT,
     TOPIC_EXTRACTION_PROMPT,
@@ -125,7 +126,7 @@ def classification_llm_call(prompt: str, timeout: float = 60.0) -> str:
     raise last_error
 
 
-def reel_llm_call(prompt: str, timeout: float = 600.0) -> str:
+def reel_llm_call(prompt: str, timeout: float = 600.0, system: str = None) -> str:
     """LLM call using the reel model with JSON mode."""
     payload = {
         "model": REEL_MODEL,
@@ -138,6 +139,8 @@ def reel_llm_call(prompt: str, timeout: float = 600.0) -> str:
             "repeat_penalty": 1.1,
         },
     }
+    if system:
+        payload["system"] = system
 
     last_error = None
     for attempt in range(1 + MAX_RETRIES):
@@ -228,7 +231,7 @@ def generate_reels(text: str, doc_type: str, prefs: dict = None) -> dict:
 
     max_parse_attempts = 3
     for attempt in range(max_parse_attempts):
-        result = reel_llm_call(prompt)
+        result = reel_llm_call(prompt, system=REEL_SYSTEM_PROMPT)
         parsed = parse_llm_json(result)
         # If parse hit Level 3 fallback (title == "Summary"), retry unless last attempt
         if parsed["reels"] and parsed["reels"][0].get("title") == "Summary" and len(parsed["reels"]) == 1:

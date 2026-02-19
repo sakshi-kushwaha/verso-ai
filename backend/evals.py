@@ -227,6 +227,135 @@ def metric_flashcard_quality(parsed: dict, **_) -> tuple[float, dict]:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Metric 7: Narration quality (prompt-rule-aligned)
+# ═══════════════════════════════════════════════════════════════════════════
+
+CONTRACTIONS = ["don't", "isn't", "you're", "it's", "here's", "can't",
+                "won't", "doesn't", "couldn't", "wouldn't", "they're", "we're"]
+
+CONVERSATION_STARTERS = ["here's the thing", "think about it", "now ", "now,",
+                         "so ", "so,", "imagine", "you know", "let's"]
+
+TEXTBOOK_PHRASES = [
+    "is defined as", "refers to the process", "is characterized by",
+    "plays a crucial role", "it is important to note", "in conclusion",
+    "furthermore", "moreover", "thus,", "hence,", "therefore,",
+    "one can observe", "it should be noted",
+]
+
+
+def metric_narration_quality(parsed: dict, **_) -> tuple[float, dict]:
+    """Metric 7: Narration follows the spoken-audio rules from REEL_GENERATION_PROMPT."""
+    reels = parsed.get("reels", [])
+    if not reels:
+        return 0.0, {"reason": "no reels"}
+
+    for i, reel in enumerate(reels):
+        narration = reel.get("narration", "") or ""
+        words = narration.split()
+        word_count = len(words)
+        sentences = [s.strip() for s in re.split(r'[.!?]', narration) if s.strip()]
+
+        # Check 1: Word count in 40-70 range
+        total += 1
+        length_ok = 30 <= word_count <= 75  # generous tolerance
+        checks[f"reel_{i}_word_count"] = word_count
+        checks[f"reel_{i}_word_count_ok"] = length_ok
+        passed += int(length_ok)
+
+        # Check 2: Has at least 1 contraction
+        total += 1
+        contraction_count = sum(1 for c in CONTRACTIONS if c in narration.lower())
+        has_contraction = contraction_count >= 1
+        checks[f"reel_{i}_contractions"] = contraction_count
+        passed += int(has_contraction)
+
+        # Check 3: Has conversational starter
+        total += 1
+        lower_narr = narration.lower()
+        has_starter = any(s in lower_narr for s in CONVERSATION_STARTERS)
+        checks[f"reel_{i}_has_starter"] = has_starter
+        passed += int(has_starter)
+
+        # Check 4: No passive voice in first sentence
+        total += 1
+        first_sentence = sentences[0] if sentences else ""
+        passive_starts = ["is ", "are ", "was ", "were ", "has been", "it is", "there is", "there are"]
+        active_start = not any(first_sentence.lower().startswith(p) for p in passive_starts)
+        checks[f"reel_{i}_active_start"] = active_start
+        passed += int(active_start)
+
+        # Check 5: Uses pause markers (... or —)
+        total += 1
+        has_pauses = "..." in narration or "—" in narration or " -- " in narration
+        checks[f"reel_{i}_has_pauses"] = has_pauses
+        passed += int(has_pauses)
+
+        # Check 6: No textbook phrases
+        total += 1
+        textbook_count = sum(1 for p in TEXTBOOK_PHRASES if p in lower_narr)
+        no_textbook = textbook_count == 0
+        checks[f"reel_{i}_textbook_phrases"] = textbook_count
+        passed += int(no_textbook)
+
+        # Check 7: Sentence length variety (has short AND long sentences)
+        total += 1
+        if len(sentences) >= 2:
+            lengths = [len(s.split()) for s in sentences]
+            has_short = any(l <= 8 for l in lengths)
+            has_long = any(l >= 12 for l in lengths)
+            has_variety = has_short and has_long
+        else:
+            has_variety = False
+        checks[f"reel_{i}_sentence_variety"] = has_variety
+        passed += int(has_variety)
+
+    score = passed / total if total else 0.0
+    return score, checks
+
+
+def score_reel(reel_dict: dict, source_text: str, prefs: dict = None) -> dict:
+    """Composite scorer: returns 0-1 score + per-metric breakdown."""
+    if prefs is None:
+        prefs = {
+            "learning_style": "mixed",
+            "content_depth": "balanced",
+            "use_case": "learning",
+            "flashcard_difficulty": "medium",
+        }
+
+    raw_str = json.dumps(reel_dict) if isinstance(reel_dict, dict) else str(reel_dict)
+    results = {}
+
+    ok, _ = metric_json_valid(raw_str)
+    results["json_valid"] = {"score": 1.0 if ok else 0.0, "pass": ok, "weight": 1.0}
+
+    ok, _ = metric_schema_complete(reel_dict)
+    results["schema_complete"] = {"score": 1.0 if ok else 0.0, "pass": ok, "weight": 1.0}
+
+    ok, _ = metric_depth_match(reel_dict, prefs)
+    results["depth_match"] = {"score": 1.0 if ok else 0.0, "pass": ok, "weight": 1.0}
+
+    ok, _ = metric_style_match(reel_dict, prefs)
+    results["style_match"] = {"score": 1.0 if ok else 0.0, "pass": ok, "weight": 1.0}
+
+    score, _ = metric_content_quality(reel_dict, source_text)
+    results["content_quality"] = {"score": score, "pass": score >= 0.75, "weight": 1.5}
+
+    score, _ = metric_flashcard_quality(reel_dict)
+    results["flashcard_quality"] = {"score": score, "pass": score >= 0.75, "weight": 1.0}
+
+    score, _ = metric_narration_quality(reel_dict)
+    results["narration_quality"] = {"score": score, "pass": score >= 0.6, "weight": 1.5}
+
+    total_weight = sum(m["weight"] for m in results.values())
+    weighted_sum = sum(m["score"] * m["weight"] for m in results.values())
+    composite = weighted_sum / total_weight if total_weight else 0.0
+
+    return {"composite_score": round(composite, 3), "metrics": results}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Topic-based Metrics (new pipeline)
 # ═══════════════════════════════════════════════════════════════════════════
 
