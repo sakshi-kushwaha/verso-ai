@@ -7,7 +7,8 @@ from database import get_db
 import httpx
 from parser import parse_document, EmptyDocumentError, ScannedPDFError
 from llm import (
-    detect_doc_type, detect_subject_category, generate_reels, generate_reel_script,
+    detect_doc_type, detect_subject_category, generate_doc_summary,
+    generate_reels, generate_reel_script,
     extract_topics, gather_topic_content, generate_topic_reel,
     OllamaUnavailableError,
 )
@@ -165,6 +166,15 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
         # Step 2b: Detect subject category for background images
         subject_category = detect_subject_category(full_text)
         _update_subject_category(upload_id, subject_category)
+
+        # Step 2c: Generate document-level summary
+        _update_progress(upload_id, 18, "summarizing")
+        doc_summary = generate_doc_summary(full_text)
+        if doc_summary:
+            _save_doc_summary(upload_id, doc_summary)
+            log.info("Upload %s: doc summary generated (%d chars)", upload_id, len(doc_summary))
+        else:
+            log.warning("Upload %s: doc summary generation failed or skipped", upload_id)
 
         # Step 3: Extract topics and generate one reel per topic
         _update_progress(upload_id, 20, "extracting")
@@ -361,5 +371,12 @@ def _save_flashcard(upload_id: int, fc: dict):
         "INSERT INTO flashcards (upload_id, question, answer) VALUES (?, ?, ?)",
         (upload_id, fc.get("question", ""), fc.get("answer", "")),
     )
+    conn.commit()
+    conn.close()
+
+
+def _save_doc_summary(upload_id: int, summary: str):
+    conn = get_db()
+    conn.execute("UPDATE uploads SET doc_summary = ? WHERE id = ?", (summary, upload_id))
     conn.commit()
     conn.close()

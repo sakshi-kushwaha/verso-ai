@@ -7,6 +7,31 @@ from database import get_db
 router = APIRouter(tags=["audio"])
 
 
+@router.get("/audio/summary/{upload_id}")
+async def serve_summary_audio(upload_id: int):
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT doc_summary FROM uploads WHERE id = ?", (upload_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+
+    if not row or not row["doc_summary"]:
+        raise HTTPException(status_code=404, detail="Summary not found for this upload")
+
+    try:
+        path = await asyncio.to_thread(generate_audio, row["doc_summary"], reel_index=0)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    return FileResponse(
+        path=str(path),
+        media_type="audio/wav",
+        filename=f"summary_{upload_id}.wav",
+    )
+
+
 def get_reel_text(reel_id: int) -> str | None:
     conn = get_db()
     try:

@@ -7,6 +7,7 @@ from config import OLLAMA_HOST, LLM_MODEL, CLASSIFICATION_MODEL, REEL_MODEL, LLM
 from prompts import (
     DOC_TYPE_PROMPT,
     SUBJECT_CATEGORY_PROMPT,
+    DOC_SUMMARY_PROMPT,
     REEL_GENERATION_PROMPT,
     REEL_SYSTEM_PROMPT,
     REEL_SCRIPT_PROMPT,
@@ -203,6 +204,25 @@ def detect_subject_category(text: str) -> str:
         if v in result:
             return v
     return "general"
+
+
+def generate_doc_summary(full_text: str) -> str | None:
+    """Generate a document-level summary (~10 sentences) for the uploads table.
+
+    Uses LLM_MODEL (qwen2.5:3b) in plain text mode — no JSON formatting.
+    Returns the summary string, or None if generation fails.
+    """
+    prompt = DOC_SUMMARY_PROMPT.format(text=full_text[:6000])
+    try:
+        result = llm_call(prompt, json_mode=False, timeout=120.0)
+        summary = result.strip()
+        if summary and len(summary) > 50 and len(summary) < 3000:
+            return summary
+        log.warning("Doc summary output looks malformed (%d chars), discarding", len(summary) if summary else 0)
+        return None
+    except (OllamaUnavailableError, httpx.TimeoutException) as e:
+        log.warning("Doc summary generation failed: %s", e)
+        return None
 
 
 def generate_reels(text: str, doc_type: str, prefs: dict = None) -> dict:
