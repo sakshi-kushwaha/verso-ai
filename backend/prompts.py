@@ -41,6 +41,63 @@ Text:
 
 Category:"""
 
+TOPIC_EXTRACTION_PROMPT = """You are an expert at analyzing documents. Read the text below and identify the {num_topics} most important distinct topics covered.
+
+For each topic, provide:
+- "topic": A clear, specific topic name (3-8 words)
+- "keywords": 3-5 keywords that would appear in text about this topic
+
+Rules:
+1. Return ONLY valid JSON, no extra text.
+2. Topics must be distinct — no overlapping or redundant topics.
+3. Order topics by importance (most important first).
+4. Each topic should be specific enough to make one focused reel.
+
+Schema: {{"topics":[{{"topic":"specific topic name","keywords":"word1, word2, word3"}}]}}
+
+Text:
+{text}
+
+JSON:"""
+
+TOPIC_REEL_PROMPT = """You are a learning content creator for Verso. Generate exactly ONE reel and 1-2 flashcards about the specific topic below.
+
+TOPIC: {topic}
+DOCUMENT TYPE: {doc_type}
+{doc_type_instruction}
+
+STYLE: {style_instruction}
+LENGTH: {depth_instruction}
+FOCUS: {use_case_instruction}
+DIFFICULTY: {difficulty_instruction}
+
+{few_shot}
+
+RULES:
+1. Return ONLY valid JSON matching this exact schema — no extra text before or after.
+2. Generate exactly 1 reel focused ONLY on the topic "{topic}". Do not cover other topics.
+3. Generate 1-2 flashcards about this topic.
+4. Every flashcard question MUST end with a question mark (?).
+5. Every flashcard answer MUST be at least 10 words long.
+6. Reel title must be under 60 characters.
+7. "narration" MUST follow these spoken-audio rules:
+   - Write as if explaining to a curious friend, NOT reading from a textbook.
+   - Use contractions: "don't", "isn't", "you're", "it's", "here's".
+   - Mix short punchy sentences (5-8 words) with longer explanations (12-18 words).
+   - Start at least one sentence with "Here's the thing", "Think about it", "Now", or "So".
+   - Use "..." for natural pauses and "—" for pivots.
+   - NEVER use passive voice in the first sentence. Start with something engaging.
+   - Narration MUST be 40-60 words long (~15-20 seconds when spoken). Never shorter than 40 words.
+   - End with a memorable takeaway or a reflective thought — not a dry fact.
+   - No bullet points, no special symbols, no abbreviations, no parentheses.
+
+Schema: {{"reels":[{{"title":"short catchy title","summary":"key idea summary","narration":"spoken version of summary","category":"topic area","keywords":"comma separated"}}],"flashcards":[{{"question":"question about content?","answer":"detailed answer at least 10 words long"}}]}}
+
+Relevant text about "{topic}":
+{text}
+
+JSON:"""
+
 # ---------------------------------------------------------------------------
 # Personalization dicts
 # ---------------------------------------------------------------------------

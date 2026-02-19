@@ -10,6 +10,8 @@ from prompts import (
     REEL_GENERATION_PROMPT,
     REEL_SCRIPT_PROMPT,
     REEL_MIXED_SCRIPT_PROMPT,
+    TOPIC_EXTRACTION_PROMPT,
+    TOPIC_REEL_PROMPT,
     REEL_STYLE_INSTRUCTIONS,
     REEL_DEPTH_INSTRUCTIONS,
     REEL_USE_CASE_INSTRUCTIONS,
@@ -288,6 +290,107 @@ def parse_llm_json(text: str) -> dict:
     parsed["flashcards"] = validated_fcs
 
     return parsed
+
+
+def extract_topics(full_text: str, num_topics: int = 5) -> list[dict]:
+    """Extract key topics from document text using LLM.
+
+    Returns list of {"topic": "...", "keywords": "..."} dicts.
+    """
+    prompt = TOPIC_EXTRACTION_PROMPT.format(
+        text=full_text[:4000],
+        num_topics=num_topics,
+    )
+
+    try:
+        result = reel_llm_call(prompt, timeout=120.0)
+    except (OllamaUnavailableError, httpx.TimeoutException):
+        log.warning("Topic extraction failed — LLM unavailable")
+        return []
+
+    parsed = None
+    try:
+        parsed = json.loads(result)
+    except json.JSONDecodeError:
+        match = re.search(r"\{[\s\S]*\}", result)
+        if match:
+            try:
+                parsed = json.loads(match.group())
+            except json.JSONDecodeError:
+                pass
+
+    if not parsed or "topics" not in parsed:
+        log.warning("Topic extraction returned invalid JSON")
+        return []
+
+    topics = []
+    for t in parsed["topics"]:
+        if isinstance(t, dict) and "topic" in t:
+            topics.append({
+                "topic": str(t["topic"])[:100],
+                "keywords": str(t.get("keywords", "")),
+            })
+
+    log.info("Extracted %d topics from document", len(topics))
+    return topics[:num_topics]
+
+
+def gather_topic_content(topic: dict, full_text: str, max_chars: int = 3000) -> str:
+    """Gather text relevant to a topic from the full document.
+
+    Scores each paragraph by keyword overlap and returns the most relevant ones.
+    """
+    keywords = [k.strip().lower() for k in topic["keywords"].split(",") if k.strip()]
+    topic_words = topic["topic"].lower().split()
+    all_keywords = set(keywords + topic_words)
+
+    paragraphs = [p.strip() for p in full_text.split("\n") if len(p.strip()) > 30]
+    if not paragraphs:
+        return full_text[:max_chars]
+
+    scored = []
+    for para in paragraphs:
+        lower = para.lower()
+        score = sum(1 for kw in all_keywords if kw in lower)
+        if score > 0:
+            scored.append((score, para))
+
+    scored.sort(key=lambda x: -x[0])
+
+    # Take top paragraphs up to max_chars
+    collected = []
+    total = 0
+    for _, para in scored:
+        if total + len(para) > max_chars:
+            break
+        collected.append(para)
+        total += len(para)
+
+    if not collected:
+        return full_text[:max_chars]
+
+    return "\n".join(collected)
+
+
+def generate_topic_reel(topic: str, topic_text: str, doc_type: str, prefs: dict) -> dict:
+    """Generate a single reel + flashcards for one topic.
+
+    Returns parsed dict with "reels" and "flashcards" arrays.
+    """
+    prompt = TOPIC_REEL_PROMPT.format(
+        topic=topic,
+        text=topic_text[:3000],
+        doc_type=doc_type,
+        doc_type_instruction=DOC_TYPE_INSTRUCTIONS.get(doc_type, DOC_TYPE_INSTRUCTIONS["general"]),
+        style_instruction=REEL_STYLE_INSTRUCTIONS.get(prefs.get("learning_style", "mixed"), REEL_STYLE_INSTRUCTIONS["mixed"]),
+        depth_instruction=REEL_DEPTH_INSTRUCTIONS.get(prefs.get("content_depth", "balanced"), REEL_DEPTH_INSTRUCTIONS["balanced"]),
+        use_case_instruction=REEL_USE_CASE_INSTRUCTIONS.get(prefs.get("use_case", "learning"), REEL_USE_CASE_INSTRUCTIONS["learning"]),
+        difficulty_instruction=FLASHCARD_DIFFICULTY_INSTRUCTIONS.get(prefs.get("flashcard_difficulty", "medium"), FLASHCARD_DIFFICULTY_INSTRUCTIONS["medium"]),
+        few_shot=REEL_FEW_SHOT,
+    )
+
+    result = reel_llm_call(prompt)
+    return parse_llm_json(result)
 
 
 def generate_reel_script(text: str, category: str, clips: list[dict]) -> dict | None:
