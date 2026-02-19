@@ -38,7 +38,7 @@ def llm_call(prompt: str, json_mode: bool = False, timeout: float = None) -> str
 
     payload = {
         "model": LLM_MODEL,
-        "prompt": prompt,
+        "messages": [{"role": "user", "content": prompt}],
         "stream": False,
         "options": {
             "temperature": 0.3,
@@ -53,12 +53,12 @@ def llm_call(prompt: str, json_mode: bool = False, timeout: float = None) -> str
     for attempt in range(1 + MAX_RETRIES):
         try:
             resp = httpx.post(
-                f"{OLLAMA_HOST}/api/generate",
+                f"{OLLAMA_HOST}/api/chat",
                 json=payload,
                 timeout=timeout,
             )
             resp.raise_for_status()
-            return resp.json()["response"]
+            return resp.json()["message"]["content"]
         except httpx.ConnectError as e:
             last_error = e
             log.warning("Ollama connection failed (attempt %d/%d): %s", attempt + 1, 1 + MAX_RETRIES, e)
@@ -87,7 +87,7 @@ def classification_llm_call(prompt: str, timeout: float = 60.0) -> str:
     """LLM call using the lightweight classification model (thinking disabled)."""
     payload = {
         "model": CLASSIFICATION_MODEL,
-        "prompt": prompt,
+        "messages": [{"role": "user", "content": prompt}],
         "stream": False,
         "think": False,
         "options": {
@@ -101,12 +101,12 @@ def classification_llm_call(prompt: str, timeout: float = 60.0) -> str:
     for attempt in range(1 + MAX_RETRIES):
         try:
             resp = httpx.post(
-                f"{OLLAMA_HOST}/api/generate",
+                f"{OLLAMA_HOST}/api/chat",
                 json=payload,
                 timeout=timeout,
             )
             resp.raise_for_status()
-            return resp.json()["response"]
+            return resp.json()["message"]["content"]
         except httpx.ConnectError as e:
             last_error = e
             log.warning("Ollama connection failed (attempt %d/%d): %s", attempt + 1, 1 + MAX_RETRIES, e)
@@ -127,7 +127,7 @@ def reel_llm_call(prompt: str, timeout: float = 600.0) -> str:
     """LLM call using the reel model with JSON mode."""
     payload = {
         "model": REEL_MODEL,
-        "prompt": prompt,
+        "messages": [{"role": "user", "content": prompt}],
         "stream": False,
         "format": "json",
         "options": {
@@ -141,12 +141,12 @@ def reel_llm_call(prompt: str, timeout: float = 600.0) -> str:
     for attempt in range(1 + MAX_RETRIES):
         try:
             resp = httpx.post(
-                f"{OLLAMA_HOST}/api/generate",
+                f"{OLLAMA_HOST}/api/chat",
                 json=payload,
                 timeout=timeout,
             )
             resp.raise_for_status()
-            result = resp.json()["response"]
+            result = resp.json()["message"]["content"]
             return result
         except httpx.ConnectError as e:
             last_error = e

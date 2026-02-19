@@ -162,17 +162,17 @@ ANSWER:"""
 async def _generate(prompt: str) -> str:
     async with httpx.AsyncClient() as client:
         resp = await client.post(
-            f"{OLLAMA_HOST}/api/generate",
+            f"{OLLAMA_HOST}/api/chat",
             json={
                 "model": LLM_MODEL,
-                "prompt": prompt,
+                "messages": [{"role": "user", "content": prompt}],
                 "stream": False,
                 "options": {"num_ctx": 4096},
             },
             timeout=LLM_TIMEOUT,
         )
         resp.raise_for_status()
-        return resp.json()["response"].strip()
+        return resp.json()["message"]["content"].strip()
 
 
 async def _generate_stream(prompt: str):
@@ -180,10 +180,10 @@ async def _generate_stream(prompt: str):
     async with httpx.AsyncClient() as client:
         async with client.stream(
             "POST",
-            f"{OLLAMA_HOST}/api/generate",
+            f"{OLLAMA_HOST}/api/chat",
             json={
                 "model": LLM_MODEL,
-                "prompt": prompt,
+                "messages": [{"role": "user", "content": prompt}],
                 "stream": True,
                 "options": {"num_ctx": 4096},
             },
@@ -195,7 +195,7 @@ async def _generate_stream(prompt: str):
                     continue
                 try:
                     data = json.loads(line)
-                    token = data.get("response", "")
+                    token = data.get("message", {}).get("content", "")
                     if token:
                         yield token
                     if data.get("done"):
