@@ -113,6 +113,34 @@ Text to create a reel about:
 
 JSON:"""
 
+REEL_MIXED_SCRIPT_PROMPT = """You are a video editor for short educational reels. Create a script that mixes video clips and images.
+
+Available video clips:
+{clip_list}
+
+Available images (shown as still frames with text overlay):
+{image_list}
+
+Rules:
+1. Return ONLY valid JSON, no extra text.
+2. Create exactly {num_segments} segments. Each is either a video clip OR an image with text.
+3. Use at most 1-2 image segments for key facts or concepts. The rest MUST be video clips.
+4. Do NOT put images back-to-back. Always separate them with a video clip.
+5. Start and end with a video clip for a dynamic feel.
+6. For video segments: {{"type":"video","clip":"filename.mp4","duration":5}}
+7. For image segments: {{"type":"image","image":"filename.jpg","text":"short key fact max 10 words","duration":4}}
+8. Image "text" should be a punchy standalone fact — NOT a repeat of the narration.
+9. Durations MUST sum to exactly {total_duration}. Each duration must be at least 2 seconds.
+10. "narration" is one continuous spoken paragraph (40-60 words) for text-to-speech. Natural, conversational, engaging. No bullet points or special characters.
+11. "title" is a catchy title under 50 characters.
+
+Schema: {{"title":"catchy title","narration":"full spoken narration paragraph","segments":[{{"type":"video","clip":"filename.mp4","duration":5}},{{"type":"image","image":"filename.jpg","text":"key fact","duration":4}}]}}
+
+Text to create a reel about:
+{text}
+
+JSON:"""
+
 REEL_GENERATION_PROMPT = """You are a learning content creator for Verso. Generate reels and flashcards from the text below.
 
 DOCUMENT TYPE: {doc_type}

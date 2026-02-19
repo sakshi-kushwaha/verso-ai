@@ -9,6 +9,7 @@ from prompts import (
     SUBJECT_CATEGORY_PROMPT,
     REEL_GENERATION_PROMPT,
     REEL_SCRIPT_PROMPT,
+    REEL_MIXED_SCRIPT_PROMPT,
     REEL_STYLE_INSTRUCTIONS,
     REEL_DEPTH_INSTRUCTIONS,
     REEL_USE_CASE_INSTRUCTIONS,
@@ -369,4 +370,123 @@ def generate_reel_script(text: str, category: str, clips: list[dict]) -> dict | 
     parsed.setdefault("narration", "")
 
     log.info("Generated reel script: %d segments, title=%r", len(validated_segments), parsed["title"][:40])
+    return parsed
+
+
+def generate_mixed_reel_script(
+    text: str, category: str, clips: list[dict], images: list[dict],
+) -> dict | None:
+    """Generate a reel script with mixed video clips and images.
+
+    The LLM decides which segments use video clips (for action/motion) and
+    which use images with text overlays (for key facts/concepts).
+    Returns parsed dict with title, narration, segments — or None on failure.
+    Falls back to video-only generate_reel_script() if images unavailable.
+    """
+    if not clips:
+        return None
+    if not images:
+        return generate_reel_script(text, category, clips)
+
+    # Build numbered clip list
+    clip_list_lines = []
+    for i, c in enumerate(clips, 1):
+        desc = c.get("description", "stock footage")
+        clip_list_lines.append(f"{i}. {c['file']} — {desc}")
+    clip_list = "\n".join(clip_list_lines)
+
+    # Build numbered image list
+    image_list_lines = []
+    for i, img in enumerate(images[:6], 1):  # Cap at 6 to keep prompt short
+        image_list_lines.append(f"{i}. {img['file']}")
+    image_list = "\n".join(image_list_lines)
+
+    num_segments = 3 if len(text) < 800 else 4
+    total_duration = 15
+
+    prompt = REEL_MIXED_SCRIPT_PROMPT.format(
+        clip_list=clip_list,
+        image_list=image_list,
+        num_segments=num_segments,
+        total_duration=total_duration,
+        text=text[:2000],
+    )
+
+    try:
+        result = reel_llm_call(prompt, timeout=300.0)
+    except (OllamaUnavailableError, httpx.TimeoutException):
+        log.warning("Mixed reel script generation failed, falling back to video-only")
+        return generate_reel_script(text, category, clips)
+
+    # Parse JSON
+    parsed = None
+    try:
+        parsed = json.loads(result)
+    except json.JSONDecodeError:
+        match = re.search(r"\{[\s\S]*\}", result)
+        if match:
+            try:
+                parsed = json.loads(match.group())
+            except json.JSONDecodeError:
+                pass
+
+    if not parsed or "segments" not in parsed:
+        log.warning("Mixed reel script returned invalid JSON, falling back to video-only")
+        return generate_reel_script(text, category, clips)
+
+    # Validate segments — accept both video and image types
+    valid_clip_files = {c["file"] for c in clips}
+    valid_image_files = {img["file"] for img in images}
+    image_path_map = {img["file"]: img["path"] for img in images}
+
+    validated_segments = []
+    for seg in parsed["segments"]:
+        if not isinstance(seg, dict):
+            continue
+
+        seg_type = seg.get("type", "video")
+        dur = seg.get("duration", 5)
+        if not isinstance(dur, (int, float)) or dur < 2:
+            dur = max(2, dur if isinstance(dur, (int, float)) else 5)
+
+        if seg_type == "image":
+            img_file = seg.get("image", "")
+            if img_file not in valid_image_files:
+                continue
+            validated_segments.append({
+                "type": "image",
+                "image": img_file,
+                "image_path": image_path_map[img_file],
+                "text": str(seg.get("text", ""))[:80],
+                "duration": float(dur),
+            })
+        else:
+            clip_file = seg.get("clip", "")
+            if clip_file not in valid_clip_files:
+                continue
+            validated_segments.append({
+                "type": "video",
+                "clip": clip_file,
+                "duration": float(dur),
+            })
+
+    if len(validated_segments) < 2:
+        log.warning("Mixed script has too few valid segments (%d), falling back", len(validated_segments))
+        return generate_reel_script(text, category, clips)
+
+    # Normalize durations to sum to total_duration
+    dur_sum = sum(s["duration"] for s in validated_segments)
+    if dur_sum > 0 and abs(dur_sum - total_duration) > 0.5:
+        scale = total_duration / dur_sum
+        for s in validated_segments:
+            s["duration"] = round(s["duration"] * scale, 1)
+
+    parsed["segments"] = validated_segments
+    parsed.setdefault("title", "")
+    parsed.setdefault("narration", "")
+
+    n_vid = sum(1 for s in validated_segments if s.get("type") == "video")
+    n_img = sum(1 for s in validated_segments if s.get("type") == "image")
+    log.info("Generated mixed reel script: %d segments (%d video, %d image), title=%r",
+             len(validated_segments), n_vid, n_img, parsed["title"][:40])
     return parsed

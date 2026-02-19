@@ -10,6 +10,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from PIL import Image, ImageDraw, ImageFont
+
 from config import VIDEO_CACHE_DIR, STOCK_VIDEOS_DIR
 
 # Output dimensions — 1080p vertical
@@ -82,20 +84,130 @@ def get_clips_for_category(category: str) -> list[dict]:
     return clips
 
 
-# Transition types cycled across xfade joins
-_XFADE_TRANSITIONS = ["fade", "fadeblack", "dissolve", "wipeleft", "slideup", "smoothleft"]
+# ---------------------------------------------------------------------------
+# Image segment helpers
+# ---------------------------------------------------------------------------
+
+_BG_IMAGES_DIR = Path(__file__).parent / "static" / "bg-images"
 
 
-def _resolve_font() -> str:
-    """Find a usable font path for drawtext overlays."""
+def get_images_for_category(category: str) -> list[dict]:
+    """Return background images for a category, falling back to 'general'."""
+    folder = _BG_IMAGES_DIR / category
+    if not folder.is_dir():
+        folder = _BG_IMAGES_DIR / "general"
+    if not folder.is_dir():
+        return []
+    return [
+        {"file": f.name, "path": str(f)}
+        for f in sorted(folder.iterdir())
+        if f.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp")
+    ]
+
+
+def _resolve_pillow_font(size: int = 48) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    """Find a usable font for Pillow text rendering."""
     candidates = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",  # Linux (Docker)
-        "/System/Library/Fonts/Helvetica.ttc",                    # macOS
+        "/System/Library/Fonts/Helvetica.ttc",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
     ]
     for path in candidates:
         if os.path.exists(path):
-            return path
-    return "Sans"
+            try:
+                return ImageFont.truetype(path, size)
+            except Exception:
+                continue
+    return ImageFont.load_default()
+
+
+def _wrap_text(text: str, font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+               max_width: int) -> list[str]:
+    """Word-wrap text to fit within max_width pixels."""
+    words = text.split()
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        test = f"{current} {word}".strip()
+        bbox = font.getbbox(test)
+        if bbox[2] <= max_width:
+            current = test
+        else:
+            if current:
+                lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+    return lines or [""]
+
+
+def _prepare_image_segment(image_path: str, text: str, width: int, height: int,
+                           tmpdir: str, index: int = 0) -> str:
+    """Compose text onto an image using Pillow.
+
+    Opens the image, crops/resizes to width x height, draws a semi-transparent
+    dark gradient bar at the bottom, and renders white text on it.
+    Returns path to the composited image in tmpdir.
+    """
+    img = Image.open(image_path).convert("RGB")
+
+    # Resize to cover then center-crop
+    img_ratio = img.width / img.height
+    target_ratio = width / height
+    if img_ratio > target_ratio:
+        new_h = height
+        new_w = int(height * img_ratio)
+    else:
+        new_w = width
+        new_h = int(width / img_ratio)
+    img = img.resize((new_w, new_h), Image.LANCZOS)
+
+    left = (new_w - width) // 2
+    top = (new_h - height) // 2
+    img = img.crop((left, top, left + width, top + height))
+
+    if text:
+        # Draw dark gradient overlay at bottom 30% of image
+        overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        draw_overlay = ImageDraw.Draw(overlay)
+        gradient_top = int(height * 0.55)
+        for y in range(gradient_top, height):
+            alpha = int(180 * (y - gradient_top) / (height - gradient_top))
+            draw_overlay.line([(0, y), (width, y)], fill=(0, 0, 0, alpha))
+
+        img = img.convert("RGBA")
+        img = Image.alpha_composite(img, overlay)
+        img = img.convert("RGB")
+
+        # Draw text
+        draw = ImageDraw.Draw(img)
+        font_large = _resolve_pillow_font(56)
+        margin = 60
+        max_text_width = width - margin * 2
+        lines = _wrap_text(text, font_large, max_text_width)
+
+        # Position text in the gradient area
+        line_height = 70
+        total_text_height = len(lines) * line_height
+        text_y = int(height * 0.72) - total_text_height // 2
+
+        for line in lines:
+            bbox = font_large.getbbox(line)
+            text_w = bbox[2] - bbox[0]
+            text_x = (width - text_w) // 2
+            # Shadow
+            draw.text((text_x + 2, text_y + 2), line, font=font_large, fill=(0, 0, 0, 200))
+            # Main text
+            draw.text((text_x, text_y), line, font=font_large, fill=(255, 255, 255))
+            text_y += line_height
+
+    out = os.path.join(tmpdir, f"img_seg_{index}.jpg")
+    img.save(out, "JPEG", quality=92)
+    return out
+
+
+# Transition types cycled across xfade joins
+_XFADE_TRANSITIONS = ["fade", "fadeblack", "dissolve", "wipeleft", "slideup", "smoothleft"]
 
 
 def _get_tts_duration(tts_audio_path: str | None) -> float:
@@ -249,11 +361,15 @@ def compose_multi_clip_reel(
     tts_audio_path: str | None = None,
     sound_effect_path: str | None = None,
 ) -> str:
-    """Compose a multi-clip video reel with transitions and text overlays.
+    """Compose a multi-clip video reel with transitions.
 
-    Each segment specifies a clip filename, overlay text, and duration.
-    Clips are joined with xfade transitions, text overlays are drawn per segment,
-    and audio (TTS + background music) is mixed on top.
+    Segments can be video clips or images (with text overlays via Pillow).
+    Segment format:
+        {"type": "video", "clip": "01.mp4", "duration": 3.0}
+        {"type": "image", "image": "03.jpg", "image_path": "/abs/path", "text": "...", "duration": 3.0}
+
+    Clips are joined with xfade transitions, audio (TTS + background music)
+    is mixed on top. Image segments get a Ken Burns slow-zoom effect.
 
     Video duration adapts to TTS narration length (10-30s).
     Memory budget: ~200-300MB per encode at 1080x1920 with 2 threads.
@@ -267,18 +383,15 @@ def compose_multi_clip_reel(
 
     n = len(segments)
     TRANSITION_DUR = 0.5
+    FPS = 25
     TOTAL_DURATION = _get_tts_duration(tts_audio_path)
-    font = _resolve_font()
 
-    # Scale segment durations so output = 15s accounting for xfade overlaps
-    # Each xfade eats TRANSITION_DUR from total, so raw clip sum must be longer
+    # Scale segment durations so output matches TTS, accounting for xfade overlaps
     raw_durations = [s["duration"] for s in segments]
     raw_sum = sum(raw_durations)
-    # Target raw sum = TOTAL_DURATION + (n-1) * TRANSITION_DUR
     target_raw = TOTAL_DURATION + (n - 1) * TRANSITION_DUR
     scale = target_raw / raw_sum if raw_sum > 0 else 1.0
     durations = [max(2.0, d * scale) for d in raw_durations]
-    # Re-normalize after clamping
     actual_sum = sum(durations)
     if abs(actual_sum - target_raw) > 0.1:
         adjust = target_raw / actual_sum
@@ -286,30 +399,49 @@ def compose_multi_clip_reel(
 
     bg_freq, bg_type = AUDIO_PROFILES.get(category or "", DEFAULT_PROFILE)
 
+    # Build clip path lookup for video segments
     catalog = load_video_catalog()
     cat_clips = catalog.get(category, catalog.get("general", []))
     clip_map = {c["file"]: c["path"] for c in cat_clips}
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        # Build ffmpeg inputs — each clip looped and trimmed to its duration
+        # Build ffmpeg inputs — video clips or composited images
         inputs = []
-        for i, seg in enumerate(segments):
-            clip_path = clip_map.get(seg["clip"])
-            if not clip_path or not os.path.exists(clip_path):
-                raise FileNotFoundError(f"Clip not found: {seg['clip']}")
-            inputs.extend(["-stream_loop", "-1", "-t", f"{durations[i]:.2f}", "-i", clip_path])
-
         filter_parts = []
 
-        # Scale each clip to 720x1280
-        for i in range(n):
-            filter_parts.append(
-                f"[{i}:v]scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase:flags=lanczos,"
-                f"crop={WIDTH}:{HEIGHT},setsar=1,setpts=PTS-STARTPTS[v{i}]"
-            )
+        for i, seg in enumerate(segments):
+            seg_type = seg.get("type", "video")
+            dur = durations[i]
+
+            if seg_type == "image":
+                # Prepare image with Pillow text overlay
+                img_path = seg.get("image_path", "")
+                if not img_path or not os.path.exists(img_path):
+                    raise FileNotFoundError(f"Image not found: {seg.get('image', '')}")
+                comp_path = _prepare_image_segment(
+                    img_path, seg.get("text", ""), WIDTH, HEIGHT, tmpdir, index=i,
+                )
+                # Still image input: loop for duration
+                inputs.extend(["-loop", "1", "-t", f"{dur:.2f}", "-i", comp_path])
+                # Ken Burns slow zoom (1.0 → 1.08) on image segments
+                num_frames = int(dur * FPS)
+                filter_parts.append(
+                    f"[{i}:v]zoompan=z='min(zoom+0.001,1.08)'"
+                    f":d={num_frames}:s={WIDTH}x{HEIGHT}:fps={FPS},"
+                    f"setpts=PTS-STARTPTS[v{i}]"
+                )
+            else:
+                # Video clip input: loop and trim
+                clip_path = clip_map.get(seg.get("clip", ""))
+                if not clip_path or not os.path.exists(clip_path):
+                    raise FileNotFoundError(f"Clip not found: {seg.get('clip', '')}")
+                inputs.extend(["-stream_loop", "-1", "-t", f"{dur:.2f}", "-i", clip_path])
+                filter_parts.append(
+                    f"[{i}:v]scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase"
+                    f":flags=lanczos,crop={WIDTH}:{HEIGHT},setsar=1,setpts=PTS-STARTPTS[v{i}]"
+                )
 
         # Chain xfade transitions
-        # offset[i] = sum(durations[0..i]) - (i+1)*TRANSITION_DUR
         if n == 1:
             last_label = "v0"
         else:
@@ -324,53 +456,25 @@ def compose_multi_clip_reel(
                 )
                 last_label = out_label
 
-        # Text overlays — title at top for first 3s, per-segment overlay at bottom
-        drawtext_filters = []
-        font_escaped = font.replace(":", "\\:")
-        # Title overlay
-        drawtext_filters.append(
-            f"drawtext=fontfile='{font_escaped}':text='{_escape_drawtext(title)}':"
-            f"fontsize=36:fontcolor=white:shadowcolor=black:shadowx=2:shadowy=2:"
-            f"x=(w-text_w)/2:y=80:enable='between(t,0,3)'"
-        )
+        # Final video output label
+        filter_parts.append(f"[{last_label}]null[vout]")
 
-        # Per-segment overlays
-        seg_start = 0.0
-        for i, seg in enumerate(segments):
-            seg_end = seg_start + durations[i] - (TRANSITION_DUR if i < n - 1 else 0)
-            overlay_text = seg.get("overlay", "")
-            if overlay_text:
-                drawtext_filters.append(
-                    f"drawtext=fontfile='{font_escaped}':text='{_escape_drawtext(overlay_text)}':"
-                    f"fontsize=30:fontcolor=white:shadowcolor=black:shadowx=2:shadowy=2:"
-                    f"x=(w-text_w)/2:y=h-120:enable='between(t,{seg_start:.2f},{seg_end:.2f})'"
-                )
-            seg_start = seg_end
-
-        if drawtext_filters:
-            filter_parts.append(f"[{last_label}]{','.join(drawtext_filters)}[vout]")
-        else:
-            filter_parts.append(f"[{last_label}]null[vout]")
-
-        # Audio pipeline — same as single-clip
+        # Audio pipeline
         audio_layers = []
-        audio_idx = n  # video inputs used indices 0..n-1
+        audio_idx = n  # video/image inputs used indices 0..n-1
 
-        # TTS narration
         if tts_audio_path and os.path.exists(tts_audio_path):
             inputs.extend(["-i", tts_audio_path])
             filter_parts.append(f"[{audio_idx}:a]volume=1.2[tts]")
             audio_layers.append("[tts]")
             audio_idx += 1
 
-        # Sound effect
         if sound_effect_path and os.path.exists(sound_effect_path):
             inputs.extend(["-i", sound_effect_path])
             filter_parts.append(f"[{audio_idx}:a]volume=0.25[sfx]")
             audio_layers.append("[sfx]")
             audio_idx += 1
 
-        # Background music
         bg_music_path = os.path.join(tmpdir, "bg_music.wav")
         _generate_background_music(bg_music_path, bg_freq, bg_type, duration=TOTAL_DURATION + 1)
         inputs.extend(["-i", bg_music_path])
@@ -378,7 +482,6 @@ def compose_multi_clip_reel(
         audio_layers.append("[bgm]")
         audio_idx += 1
 
-        # Mix audio
         if len(audio_layers) > 1:
             filter_parts.append(
                 f"{''.join(audio_layers)}amix=inputs={len(audio_layers)}:duration=longest:normalize=0[aout]"
@@ -411,13 +514,3 @@ def compose_multi_clip_reel(
         subprocess.run(cmd, check=True, capture_output=True, timeout=FFMPEG_ENCODE_TIMEOUT)
 
     return out_path
-
-
-def _escape_drawtext(text: str) -> str:
-    """Escape special characters for ffmpeg drawtext filter."""
-    # Must escape: ' \ : %
-    text = text.replace("\\", "\\\\")
-    text = text.replace("'", "\u2019")  # Replace apostrophe with unicode right single quote
-    text = text.replace(":", "\\:")
-    text = text.replace("%", "%%")
-    return text
