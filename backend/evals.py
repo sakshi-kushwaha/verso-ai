@@ -24,7 +24,7 @@ except ImportError:
     HAS_DSPY = False
 
 from config import OLLAMA_HOST, LLM_MODEL, CLASSIFICATION_MODEL, REEL_MODEL
-from llm import generate_reels
+from llm import generate_reels, detect_doc_type, detect_subject_category
 from eval_fixtures import TEST_DOCS, EVAL_COMBOS, QUICK_EVAL_PAIRS
 
 
@@ -392,6 +392,67 @@ def print_scorecard(all_results: list[dict]):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Classification Eval
+# ═══════════════════════════════════════════════════════════════════════════
+
+def run_classification_eval(dry_run: bool = False) -> list[dict]:
+    """Test detect_doc_type() and detect_subject_category() on all test docs."""
+    results = []
+    for doc in TEST_DOCS:
+        name = doc["name"]
+        text = doc["text"]
+        expected_doc_type = doc["doc_type"]
+        expected_subject = doc.get("subject_category", "general")
+
+        if dry_run:
+            predicted_doc_type = expected_doc_type
+            predicted_subject = expected_subject
+        else:
+            print(f"  {name}: doc_type...", end=" ", flush=True)
+            predicted_doc_type = detect_doc_type(text)
+            print(f"{predicted_doc_type}", end="  subject...", flush=True)
+            predicted_subject = detect_subject_category(text)
+            print(f"{predicted_subject}")
+
+        results.append({
+            "doc": name,
+            "doc_type_expected": expected_doc_type,
+            "doc_type_predicted": predicted_doc_type,
+            "doc_type_pass": predicted_doc_type == expected_doc_type,
+            "subject_expected": expected_subject,
+            "subject_predicted": predicted_subject,
+            "subject_pass": predicted_subject == expected_subject,
+        })
+    return results
+
+
+def print_classification_scorecard(results: list[dict]):
+    """Print classification accuracy results."""
+    print()
+    print("-" * 60)
+    print("CLASSIFICATION EVAL (qwen3:0.6b)")
+    print("-" * 60)
+
+    doc_type_correct = 0
+    subject_correct = 0
+
+    for r in results:
+        dt_symbol = "+" if r["doc_type_pass"] else "-"
+        sc_symbol = "+" if r["subject_pass"] else "-"
+        dt_detail = f"{r['doc_type_predicted']}" if r["doc_type_pass"] else f"{r['doc_type_predicted']} (expected {r['doc_type_expected']})"
+        sc_detail = f"{r['subject_predicted']}" if r["subject_pass"] else f"{r['subject_predicted']} (expected {r['subject_expected']})"
+        print(f"  {r['doc']:<25s}  doc_type {dt_symbol} {dt_detail:<20s}  subject {sc_symbol} {sc_detail}")
+        doc_type_correct += int(r["doc_type_pass"])
+        subject_correct += int(r["subject_pass"])
+
+    total = len(results)
+    print()
+    print(f"  doc_type accuracy:  {doc_type_correct}/{total}  ({doc_type_correct/total*100:.0f}%)")
+    print(f"  subject accuracy:   {subject_correct}/{total}  ({subject_correct/total*100:.0f}%)")
+    print(f"  overall:            {doc_type_correct + subject_correct}/{total * 2}  ({(doc_type_correct + subject_correct) / (total * 2) * 100:.0f}%)")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Main
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -417,7 +478,31 @@ def main():
         else:
             print("DSPy not installed — using direct generate_reels() calls")
 
+    classify_only = "--classify" in sys.argv
     quick = "--quick" in sys.argv
+
+    # Run classification eval first (fast — ~3-7s per doc)
+    if not classify_only:
+        print(f"\n--- Classification Eval ({len(TEST_DOCS)} docs) ---\n")
+    else:
+        print(f"\nRunning classification eval only ({len(TEST_DOCS)} docs)...\n")
+    classify_results = run_classification_eval(dry_run=dry_run)
+    print_classification_scorecard(classify_results)
+
+    if classify_only:
+        output_path = os.path.join(os.path.dirname(__file__), "eval_results.json")
+        save_data = {
+            "reel_model": REEL_MODEL,
+            "classification_model": CLASSIFICATION_MODEL,
+            "chat_model": LLM_MODEL,
+            "date": datetime.now().isoformat(),
+            "dry_run": dry_run,
+            "classification": classify_results,
+        }
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(save_data, f, indent=2, ensure_ascii=False, default=str)
+        print(f"\nResults saved to: {output_path}")
+        return
 
     if quick:
         pairs = []
@@ -463,6 +548,7 @@ def main():
         "chat_model": LLM_MODEL,
         "date": datetime.now().isoformat(),
         "dry_run": dry_run,
+        "classification": classify_results,
         "total_tests": len(all_results),
         "results": [],
     }

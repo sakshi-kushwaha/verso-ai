@@ -11,6 +11,7 @@ TEST_DOCS = [
     {
         "name": "biology_textbook",
         "doc_type": "textbook",
+        "subject_category": "science",
         "text": (
             "Photosynthesis is the process by which green plants and certain other "
             "organisms transform light energy into chemical energy. During photosynthesis, "
@@ -27,6 +28,7 @@ TEST_DOCS = [
     {
         "name": "ml_research_paper",
         "doc_type": "research_paper",
+        "subject_category": "technology",
         "text": (
             "Abstract: This study investigates the effectiveness of transformer-based "
             "architectures for low-resource language classification. We propose a novel "
@@ -45,6 +47,7 @@ TEST_DOCS = [
     {
         "name": "quarterly_report",
         "doc_type": "business",
+        "subject_category": "business",
         "text": (
             "Q3 2025 Financial Summary: Total revenue reached $142.3M, representing a "
             "18% year-over-year increase driven primarily by enterprise subscription "
@@ -61,6 +64,7 @@ TEST_DOCS = [
     {
         "name": "short_story",
         "doc_type": "fiction",
+        "subject_category": "literature",
         "text": (
             "The old lighthouse keeper climbed the spiral staircase one last time, each "
             "step groaning beneath his weight like a familiar complaint. Thirty-seven "
@@ -78,6 +82,7 @@ TEST_DOCS = [
     {
         "name": "api_documentation",
         "doc_type": "technical",
+        "subject_category": "technology",
         "text": (
             "POST /api/v2/users — Creates a new user account. Request body must include "
             "email (string, required, must be valid email format), password (string, "
