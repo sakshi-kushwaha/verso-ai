@@ -131,6 +131,10 @@ def init_db():
     if "video_path" not in reel_cols:
         conn.execute("ALTER TABLE reels ADD COLUMN video_path TEXT")
 
+    # Migration: add source_text to reels (for self-learning pipeline)
+    if "source_text" not in reel_cols:
+        conn.execute("ALTER TABLE reels ADD COLUMN source_text TEXT")
+
     # Seed a default user (placeholder until auth is implemented)
     conn.execute(
         "INSERT OR IGNORE INTO users (id, name, password_hash) VALUES (1, 'default', 'placeholder')"
