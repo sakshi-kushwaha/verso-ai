@@ -2,12 +2,13 @@
 """Download royalty-free stock videos from Pixabay organized by category.
 
 Creates:
-  static/stock-videos/{category}/01.mp4 … 05.mp4
+  static/stock-videos/{category}/01.mp4 … 10.mp4
   data/videos.csv — master CSV with all downloaded videos
 
 Existing videos (01–03.mp4, originally from Pexels) are kept as-is.
-New videos (04–05.mp4) are fetched via the Pixabay API at the smallest
-available resolution to save disk space — ffmpeg scales to 720x1280 in video.py.
+Videos 04–05 use the first set of Pixabay queries.
+Videos 06–10 use a second set of queries for variety.
+All fetched at smallest available resolution — ffmpeg scales to 720x1280 in video.py.
 
 Usage:
   export PIXABAY_API_KEY="your-key-here"
@@ -26,7 +27,7 @@ CSV_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "videos.csv")
 
 API_KEY = os.environ.get("PIXABAY_API_KEY", "")
 
-VIDEOS_PER_CATEGORY = 5
+VIDEOS_PER_CATEGORY = 10
 
 # Descriptions for the existing 3 videos per category (already downloaded from Pexels).
 # These are kept so the CSV stays accurate even if the script only downloads new ones.
@@ -88,7 +89,8 @@ EXISTING_VIDEOS = {
     ],
 }
 
-# Pixabay search queries per category for downloading new videos (04, 05).
+# Pixabay search queries per category — two rounds for variety.
+# Round 1 was used for videos 04-05.  Round 2 adds videos 06-10.
 SEARCH_QUERIES = {
     "science": "science laboratory experiment",
     "math": "mathematics equations blackboard",
@@ -101,6 +103,20 @@ SEARCH_QUERIES = {
     "arts": "painting artist canvas",
     "engineering": "engineering construction building",
     "general": "classroom students education",
+}
+
+SEARCH_QUERIES_ROUND2 = {
+    "science": "space planets astronomy",
+    "math": "geometry shapes numbers",
+    "history": "old maps world war",
+    "literature": "writing pen typewriter",
+    "business": "stock market finance chart",
+    "technology": "robot artificial intelligence",
+    "medicine": "pharmacy pills medicine bottles",
+    "law": "court trial lawyer judge",
+    "arts": "sculpture museum gallery",
+    "engineering": "robotics factory automation",
+    "general": "university campus lecture hall",
 }
 
 
@@ -164,12 +180,8 @@ def main():
         print("  export PIXABAY_API_KEY='your-key-here'")
         sys.exit(1)
 
-    existing_count = sum(len(v) for v in EXISTING_VIDEOS.values())
-    new_per_cat = VIDEOS_PER_CATEGORY - len(next(iter(EXISTING_VIDEOS.values())))
-    new_total = len(SEARCH_QUERIES) * new_per_cat
-    print(f"Existing videos: {existing_count} ({len(next(iter(EXISTING_VIDEOS.values())))}/category)")
-    print(f"Downloading {new_total} new videos ({new_per_cat}/category) from Pixabay...")
-    print(f"Target: static/stock-videos/{{category}}/01.mp4 … {VIDEOS_PER_CATEGORY:02d}.mp4\n")
+    print(f"Target: static/stock-videos/{{category}}/01.mp4 … {VIDEOS_PER_CATEGORY:02d}.mp4")
+    print(f"Downloading up to {VIDEOS_PER_CATEGORY} videos per category from Pixabay...\n")
 
     os.makedirs(STOCK_DIR, exist_ok=True)
     os.makedirs(os.path.dirname(CSV_PATH), exist_ok=True)
@@ -178,12 +190,12 @@ def main():
     fail = 0
     seen_ids = set()
 
-    for category, query in SEARCH_QUERIES.items():
+    for category in SEARCH_QUERIES:
         cat_dir = os.path.join(STOCK_DIR, category)
         os.makedirs(cat_dir, exist_ok=True)
         print(f"\n=== {category} ===")
 
-        # --- Existing videos (01–03) ---
+        # --- Existing Pexels videos (01–03) ---
         existing = EXISTING_VIDEOS.get(category, [])
         for idx, description in enumerate(existing):
             filename = f"{idx + 1:02d}.mp4"
@@ -198,13 +210,28 @@ def main():
                 print(f"  [{idx + 1}] MISSING existing file: {rel_path}")
                 fail += 1
 
-        # --- New videos from Pixabay (04–05) ---
-        start_idx = len(existing)
-        needed = VIDEOS_PER_CATEGORY - start_idx
-        if needed <= 0:
-            continue
+        # --- Keep existing Pixabay videos (04–05) ---
+        for idx in range(len(existing) + 1, 6):  # 04, 05
+            filename = f"{idx:02d}.mp4"
+            filepath = os.path.join(cat_dir, filename)
+            rel_path = f"{category}/{filename}"
+            if os.path.exists(filepath) and os.path.getsize(filepath) > 50000:
+                size_kb = os.path.getsize(filepath) / 1024
+                print(f"  [{idx}] Already exists: {rel_path} ({size_kb:.0f}KB)")
+                csv_rows.append({"video_file": rel_path, "description": category})
+                ok += 1
+            else:
+                print(f"  [{idx}] MISSING: {rel_path}")
+                fail += 1
 
-        hits = search_videos(query, per_page=needed + 3)
+        # --- New Pixabay downloads (06–10) using round 2 query ---
+        query = SEARCH_QUERIES_ROUND2.get(category, "")
+        if not query:
+            continue
+        needed = 5  # 06, 07, 08, 09, 10
+        next_idx = 6
+
+        hits = search_videos(query, per_page=needed + 5)
         if not hits:
             print(f"  No results from Pixabay API for '{query}'")
             fail += needed
@@ -224,29 +251,31 @@ def main():
             if not video_url:
                 continue
 
-            idx = start_idx + downloaded + 1
-            filename = f"{idx:02d}.mp4"
+            filename = f"{next_idx:02d}.mp4"
             filepath = os.path.join(cat_dir, filename)
             rel_path = f"{category}/{filename}"
             description = hit.get("tags", category)
 
             if os.path.exists(filepath) and os.path.getsize(filepath) > 50000:
                 size_kb = os.path.getsize(filepath) / 1024
-                print(f"  [{idx}] Already exists: {rel_path} ({size_kb:.0f}KB)")
+                print(f"  [{next_idx}] Already exists: {rel_path} ({size_kb:.0f}KB)")
                 csv_rows.append({"video_file": rel_path, "description": description})
                 ok += 1
                 downloaded += 1
+                next_idx += 1
                 continue
 
-            print(f"  [{idx}] Pixabay #{pixabay_id} ({w}x{h})...", end=" ", flush=True)
+            print(f"  [{next_idx}] Pixabay #{pixabay_id} ({w}x{h})...", end=" ", flush=True)
             if download_video(video_url, filepath):
                 size_kb = os.path.getsize(filepath) / 1024
                 print(f"OK ({size_kb:.0f}KB)")
                 csv_rows.append({"video_file": rel_path, "description": description})
                 ok += 1
                 downloaded += 1
+                next_idx += 1
             else:
                 print("FAILED")
+                next_idx += 1
 
             time.sleep(0.5)
 
