@@ -111,6 +111,21 @@ export async function getChatStatus(uploadId) {
   return data // { qa_ready, exchange_count, limit, remaining }
 }
 
+// --- Document Summary ---
+export async function getDocSummary(uploadId) {
+  const { data } = await api.get(`/upload/${uploadId}/summary`, {
+    timeout: 120000,
+  })
+  return data // { summary, generated }
+}
+
+export async function getSummaryAudio(uploadId) {
+  const { data } = await api.get(`/audio/summary/${uploadId}`, {
+    responseType: 'blob',
+  })
+  return URL.createObjectURL(data)
+}
+
 // --- Bookmarks ---
 export async function getBookmarks() {
   const { data } = await api.get('/bookmarks')

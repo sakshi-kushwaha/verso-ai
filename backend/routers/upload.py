@@ -51,6 +51,7 @@ def list_uploads(user: dict = Depends(get_current_user)):
     conn = get_db()
     rows = conn.execute(
         """SELECT u.id, u.filename, u.status, u.doc_type, u.total_pages, u.qa_ready, u.created_at,
+                  u.doc_summary,
                   (SELECT COUNT(*) FROM reels WHERE upload_id = u.id) AS reel_count,
                   (SELECT COUNT(*) FROM flashcards WHERE upload_id = u.id) AS flashcard_count
            FROM uploads u
@@ -88,6 +89,60 @@ def get_upload_status(upload_id: int, user: dict = Depends(get_current_user)):
         "qa_ready": bool(row["qa_ready"]),
         "error_message": row["error_message"] if "error_message" in row.keys() else None,
     }
+
+
+@router.get("/upload/{upload_id}/summary")
+def get_or_generate_summary(upload_id: int, user: dict = Depends(get_current_user)):
+    conn = get_db()
+    row = conn.execute(
+        "SELECT doc_summary FROM uploads WHERE id = ? AND user_id = ?",
+        (upload_id, user["id"]),
+    ).fetchone()
+    conn.close()
+
+    if not row:
+        raise HTTPException(404, "Upload not found")
+
+    if row["doc_summary"]:
+        return {"summary": row["doc_summary"], "generated": False}
+
+    # On-demand generation for legacy books — try source_text first, fall back to reel summaries
+    conn = get_db()
+    reel_rows = conn.execute(
+        "SELECT source_text, summary, narration FROM reels WHERE upload_id = ? ORDER BY id LIMIT 10",
+        (upload_id,),
+    ).fetchall()
+    conn.close()
+
+    if not reel_rows:
+        raise HTTPException(404, "No content available to generate summary")
+
+    # Prefer source_text, fall back to summary + narration from reels
+    source_texts = [r["source_text"] for r in reel_rows if r["source_text"]]
+    if source_texts:
+        combined_text = "\n\n".join(source_texts)[:6000]
+    else:
+        parts = []
+        for r in reel_rows:
+            parts.append(r["summary"] or "")
+            if r["narration"]:
+                parts.append(r["narration"])
+        combined_text = "\n\n".join(p for p in parts if p)[:6000]
+
+    if not combined_text.strip():
+        raise HTTPException(404, "No content available to generate summary")
+
+    from llm import generate_doc_summary
+    summary = generate_doc_summary(combined_text)
+    if not summary:
+        raise HTTPException(503, "Summary generation failed. Please try again.")
+
+    conn = get_db()
+    conn.execute("UPDATE uploads SET doc_summary = ? WHERE id = ?", (summary, upload_id))
+    conn.commit()
+    conn.close()
+
+    return {"summary": summary, "generated": True}
 
 
 @router.websocket("/ws/upload/{upload_id}")

@@ -212,6 +212,21 @@ Text to create a reel about:
 
 JSON:"""
 
+DOC_SUMMARY_PROMPT = """You are a study assistant. Read the document text below and write a short summary.
+
+Rules:
+1. Write exactly 3-5 sentences. No more, no less.
+2. Cover the main topic and key takeaways only.
+3. Write in plain prose — no bullet points, no headers, no numbered lists.
+4. Write at a level a student can understand.
+5. Do NOT start with "this document" or "this text". Start directly with the subject.
+6. Return ONLY the summary text. No preamble, no labels.
+
+Document text:
+{text}
+
+Summary:"""
+
 REEL_GENERATION_PROMPT = """Generate reels and flashcards from the text below.
 
 DOCUMENT TYPE: {doc_type}

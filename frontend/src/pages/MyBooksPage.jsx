@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getUploads, getFeed, getFlashcards } from '../api'
+import { getUploads, getFeed, getFlashcards, getDocSummary, getSummaryAudio } from '../api'
 import Button from '../components/Button'
 import Tag from '../components/Tag'
-import { File, Upload, ArrowL, Cards, Chat } from '../components/Icons'
+import { File, Upload, ArrowL, Cards, Chat, Volume, Pause } from '../components/Icons'
 import { Spinner, ErrorState, EmptyState } from '../components/StateScreens'
 
 const ACCENTS = ['#6366F1', '#8B5CF6', '#EC4899', '#F59E0B', '#10B981', '#3B82F6']
@@ -57,6 +57,147 @@ function BookCard({ book, onClick }) {
   )
 }
 
+function BookSummary({ bookId, initialSummary }) {
+  const [summary, setSummary] = useState(initialSummary || null)
+  const [expanded, setExpanded] = useState(false)
+  const [summaryLoading, setSummaryLoading] = useState(!initialSummary)
+  const [summaryError, setSummaryError] = useState(false)
+  const [audioState, setAudioState] = useState('idle')
+  const audioRef = useRef(null)
+
+  const fetchSummary = () => {
+    setSummaryLoading(true)
+    setSummaryError(false)
+    getDocSummary(bookId)
+      .then(d => {
+        setSummary(d.summary)
+        setSummaryLoading(false)
+      })
+      .catch(() => {
+        setSummaryError(true)
+        setSummaryLoading(false)
+      })
+  }
+
+  useEffect(() => {
+    if (initialSummary) return
+    fetchSummary()
+  }, [bookId, initialSummary])
+
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current = null
+      }
+    }
+  }, [])
+
+  const handleAudio = async () => {
+    if (audioState === 'playing' && audioRef.current) {
+      audioRef.current.pause()
+      setAudioState('idle')
+      return
+    }
+    if (audioState === 'loading') return
+
+    setAudioState('loading')
+    try {
+      const url = await getSummaryAudio(bookId)
+      const audio = new Audio(url)
+      audioRef.current = audio
+      audio.onended = () => setAudioState('idle')
+      audio.onerror = () => setAudioState('error')
+      await audio.play()
+      setAudioState('playing')
+    } catch {
+      setAudioState('error')
+    }
+  }
+
+  if (summaryLoading) {
+    return (
+      <div className="bg-surface rounded-xl border border-border p-4 mb-6">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-sm font-semibold">Summary</span>
+        </div>
+        <div className="flex gap-1.5 items-center">
+          <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+          <div className="w-2 h-2 rounded-full bg-primary animate-pulse" style={{ animationDelay: '0.2s' }} />
+          <div className="w-2 h-2 rounded-full bg-primary animate-pulse" style={{ animationDelay: '0.4s' }} />
+          <span className="text-xs text-text-muted ml-2">Generating summary...</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (summaryError) {
+    return (
+      <div className="bg-surface rounded-xl border border-border p-4 mb-6">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-semibold">Summary</span>
+          <button
+            onClick={fetchSummary}
+            className="text-xs text-primary hover:opacity-80 transition-opacity cursor-pointer font-medium"
+          >
+            Retry
+          </button>
+        </div>
+        <p className="text-xs text-text-muted mt-2">Summary generation timed out. Click retry to try again.</p>
+      </div>
+    )
+  }
+
+  if (!summary) return null
+
+  return (
+    <div className="bg-surface rounded-xl border border-border p-4 mb-6">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-sm font-semibold">Summary</span>
+        <button
+          onClick={handleAudio}
+          disabled={audioState === 'loading'}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer
+            ${audioState === 'playing'
+              ? 'bg-primary text-white'
+              : 'bg-surface-alt text-text-muted hover:text-text hover:bg-surface-alt/80'
+            }
+            ${audioState === 'loading' ? 'opacity-60' : ''}
+          `}
+        >
+          {audioState === 'loading' ? (
+            <div className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+          ) : audioState === 'playing' ? (
+            <Pause />
+          ) : (
+            <Volume />
+          )}
+          {audioState === 'playing' ? 'Stop' : 'Listen'}
+        </button>
+      </div>
+
+      <div className="relative">
+        <p
+          className="text-sm text-text-secondary leading-relaxed overflow-hidden transition-[max-height] duration-300 ease-in-out"
+          style={{ maxHeight: expanded ? '500px' : '4.5em' }}
+        >
+          {summary}
+        </p>
+        {!expanded && (
+          <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-surface to-transparent pointer-events-none" />
+        )}
+      </div>
+
+      <button
+        onClick={() => setExpanded(e => !e)}
+        className="mt-2 text-xs text-primary hover:opacity-80 transition-opacity cursor-pointer font-medium"
+      >
+        {expanded ? 'See less' : 'See more'}
+      </button>
+    </div>
+  )
+}
+
 function BookDetail({ book, onBack }) {
   const navigate = useNavigate()
   const [tab, setTab] = useState('reels')
@@ -101,6 +242,9 @@ function BookDetail({ book, onBack }) {
           </div>
         </div>
       </div>
+
+      {/* Summary */}
+      <BookSummary bookId={book.id} initialSummary={book.doc_summary || null} />
 
       {/* Tabs */}
       <div className="flex gap-1 bg-surface-alt rounded-lg p-1 mb-6">

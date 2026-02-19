@@ -135,6 +135,10 @@ def init_db():
     if "source_text" not in reel_cols:
         conn.execute("ALTER TABLE reels ADD COLUMN source_text TEXT")
 
+    # Migration: add doc_summary to uploads (document-level summary)
+    if "doc_summary" not in upload_cols:
+        conn.execute("ALTER TABLE uploads ADD COLUMN doc_summary TEXT")
+
     # Seed a default user (placeholder until auth is implemented)
     conn.execute(
         "INSERT OR IGNORE INTO users (id, name, password_hash) VALUES (1, 'default', 'placeholder')"
