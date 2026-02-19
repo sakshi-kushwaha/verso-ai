@@ -2,7 +2,7 @@ import json
 import logging
 import re
 import httpx
-from config import OLLAMA_HOST, LLM_MODEL, LLM_TIMEOUT
+from config import OLLAMA_HOST, LLM_MODEL, CLASSIFICATION_MODEL, LLM_TIMEOUT
 from prompts import (
     DOC_TYPE_PROMPT,
     SUBJECT_CATEGORY_PROMPT,
@@ -68,11 +68,54 @@ def llm_call(prompt: str, json_mode: bool = False, timeout: float = None) -> str
     raise last_error
 
 
+def clean_classification_response(text: str) -> str:
+    """Clean qwen3 response — remove think tags and extract single word."""
+    text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+    text = text.strip()
+    first_word = text.split()[0].lower().rstrip('.,;:') if text else ""
+    return first_word
+
+
+def classification_llm_call(prompt: str, timeout: float = 60.0) -> str:
+    """LLM call using the lightweight classification model with /no_think."""
+    payload = {
+        "model": CLASSIFICATION_MODEL,
+        "prompt": "/no_think " + prompt,
+        "stream": False,
+        "options": {
+            "temperature": 0.1,
+            "num_ctx": 2048,
+        },
+    }
+
+    last_error = None
+    for attempt in range(1 + MAX_RETRIES):
+        try:
+            resp = httpx.post(
+                f"{OLLAMA_HOST}/api/generate",
+                json=payload,
+                timeout=timeout,
+            )
+            resp.raise_for_status()
+            return resp.json()["response"]
+        except httpx.ConnectError as e:
+            last_error = e
+            log.warning("Ollama connection failed (attempt %d/%d): %s", attempt + 1, 1 + MAX_RETRIES, e)
+        except httpx.TimeoutException as e:
+            last_error = e
+            log.warning("Classification call timed out after %ss (attempt %d/%d)", timeout, attempt + 1, 1 + MAX_RETRIES)
+
+    if isinstance(last_error, httpx.ConnectError):
+        raise OllamaUnavailableError(f"Cannot reach Ollama at {OLLAMA_HOST}") from last_error
+    raise last_error
+
+
 def detect_doc_type(text: str) -> str:
-    """Detect document type from first 2000 chars."""
+    """Detect document type from first 2000 chars using classification model."""
     try:
         prompt = DOC_TYPE_PROMPT.format(text=text[:2000])
-        result = llm_call(prompt, timeout=120.0).strip().lower()
+        raw = classification_llm_call(prompt)
+        result = clean_classification_response(raw)
     except (OllamaUnavailableError, httpx.TimeoutException):
         log.warning("Doc type detection failed, defaulting to 'general'")
         return "general"
@@ -88,10 +131,11 @@ VALID_CATEGORIES = {"science", "math", "history", "literature", "business", "tec
 
 
 def detect_subject_category(text: str) -> str:
-    """Detect subject category from first 2000 chars."""
+    """Detect subject category from first 2000 chars using classification model."""
     try:
         prompt = SUBJECT_CATEGORY_PROMPT.format(text=text[:2000])
-        result = llm_call(prompt, timeout=120.0).strip().lower()
+        raw = classification_llm_call(prompt)
+        result = clean_classification_response(raw)
     except (OllamaUnavailableError, httpx.TimeoutException):
         log.warning("Subject category detection failed, defaulting to 'general'")
         return "general"

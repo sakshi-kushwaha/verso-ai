@@ -15,7 +15,7 @@ Rules:
 - engineering: Mechanical, Electrical, Civil, Chemical Engineering
 - general: Anything that doesn't fit above
 
-Respond with ONLY the single category word, nothing else.
+Respond with ONLY a single category word from the list above. No explanation, no punctuation, just the word.
 
 Text:
 {text}
@@ -33,6 +33,8 @@ Rules:
 - fiction: narrative, characters, dialogue, plot
 - technical: API docs, manuals, specifications, code
 - general: anything that doesn't fit above
+
+Respond with ONLY a single category word from the list above. No explanation, no punctuation, just the word.
 
 Text:
 {text}
