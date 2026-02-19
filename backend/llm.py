@@ -3,7 +3,7 @@ import logging
 import re
 import time
 import httpx
-from config import OLLAMA_HOST, LLM_MODEL, LLM_TIMEOUT
+from config import OLLAMA_HOST, LLM_MODEL, CLASSIFICATION_MODEL, REEL_MODEL, LLM_TIMEOUT
 from prompts import (
     DOC_TYPE_PROMPT,
     SUBJECT_CATEGORY_PROMPT,
@@ -74,11 +74,101 @@ def llm_call(prompt: str, json_mode: bool = False, timeout: float = None) -> str
     raise last_error
 
 
+def clean_classification_response(text: str) -> str:
+    """Clean qwen3 response — remove think tags and extract single word."""
+    text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+    text = text.strip()
+    first_word = text.split()[0].lower().rstrip('.,;:') if text else ""
+    return first_word
+
+
+def classification_llm_call(prompt: str, timeout: float = 60.0) -> str:
+    """LLM call using the lightweight classification model (thinking disabled)."""
+    payload = {
+        "model": CLASSIFICATION_MODEL,
+        "prompt": prompt,
+        "stream": False,
+        "think": False,
+        "options": {
+            "temperature": 0.1,
+            "num_ctx": 2048,
+            "num_predict": 20,
+        },
+    }
+
+    last_error = None
+    for attempt in range(1 + MAX_RETRIES):
+        try:
+            resp = httpx.post(
+                f"{OLLAMA_HOST}/api/generate",
+                json=payload,
+                timeout=timeout,
+            )
+            resp.raise_for_status()
+            return resp.json()["response"]
+        except httpx.ConnectError as e:
+            last_error = e
+            log.warning("Ollama connection failed (attempt %d/%d): %s", attempt + 1, 1 + MAX_RETRIES, e)
+            if attempt < MAX_RETRIES:
+                time.sleep(min(2 ** attempt, 10))
+        except httpx.TimeoutException as e:
+            last_error = e
+            log.warning("Classification call timed out after %ss (attempt %d/%d)", timeout, attempt + 1, 1 + MAX_RETRIES)
+            if attempt < MAX_RETRIES:
+                time.sleep(min(2 ** attempt, 10))
+
+    if isinstance(last_error, httpx.ConnectError):
+        raise OllamaUnavailableError(f"Cannot reach Ollama at {OLLAMA_HOST}") from last_error
+    raise last_error
+
+
+def reel_llm_call(prompt: str, timeout: float = 600.0) -> str:
+    """LLM call using the reel model with JSON mode."""
+    payload = {
+        "model": REEL_MODEL,
+        "prompt": prompt,
+        "stream": False,
+        "format": "json",
+        "options": {
+            "temperature": 0.3,
+            "num_ctx": 4096,
+            "repeat_penalty": 1.1,
+        },
+    }
+
+    last_error = None
+    for attempt in range(1 + MAX_RETRIES):
+        try:
+            resp = httpx.post(
+                f"{OLLAMA_HOST}/api/generate",
+                json=payload,
+                timeout=timeout,
+            )
+            resp.raise_for_status()
+            result = resp.json()["response"]
+            return result
+        except httpx.ConnectError as e:
+            last_error = e
+            log.warning("Ollama connection failed (attempt %d/%d): %s", attempt + 1, 1 + MAX_RETRIES, e)
+            if attempt < MAX_RETRIES:
+                time.sleep(min(2 ** attempt, 10))
+        except httpx.TimeoutException as e:
+            last_error = e
+            log.warning("Reel LLM call timed out after %ss (attempt %d/%d)", timeout, attempt + 1, 1 + MAX_RETRIES)
+            if attempt < MAX_RETRIES:
+                time.sleep(min(2 ** attempt, 10))
+
+    if isinstance(last_error, httpx.ConnectError):
+        raise OllamaUnavailableError(f"Cannot reach Ollama at {OLLAMA_HOST}") from last_error
+    raise last_error
+
+
 def detect_doc_type(text: str) -> str:
-    """Detect document type from first 2000 chars."""
+    """Detect document type from first 2000 chars using classification model."""
     try:
         prompt = DOC_TYPE_PROMPT.format(text=text[:2000])
-        result = llm_call(prompt, timeout=120.0).strip().lower()
+        raw = classification_llm_call(prompt)
+        result = clean_classification_response(raw)
     except (OllamaUnavailableError, httpx.TimeoutException):
         log.warning("Doc type detection failed, defaulting to 'general'")
         return "general"
@@ -94,10 +184,11 @@ VALID_CATEGORIES = {"science", "math", "history", "literature", "business", "tec
 
 
 def detect_subject_category(text: str) -> str:
-    """Detect subject category from first 2000 chars."""
+    """Detect subject category from first 2000 chars using classification model."""
     try:
         prompt = SUBJECT_CATEGORY_PROMPT.format(text=text[:2000])
-        result = llm_call(prompt, timeout=120.0).strip().lower()
+        raw = classification_llm_call(prompt)
+        result = clean_classification_response(raw)
     except (OllamaUnavailableError, httpx.TimeoutException):
         log.warning("Subject category detection failed, defaulting to 'general'")
         return "general"
@@ -134,7 +225,7 @@ def generate_reels(text: str, doc_type: str, prefs: dict = None) -> dict:
 
     max_parse_attempts = 3
     for attempt in range(max_parse_attempts):
-        result = llm_call(prompt, json_mode=True, timeout=600.0)
+        result = reel_llm_call(prompt)
         parsed = parse_llm_json(result)
         # If parse hit Level 3 fallback (title == "Summary"), retry unless last attempt
         if parsed["reels"] and parsed["reels"][0].get("title") == "Summary" and len(parsed["reels"]) == 1:
@@ -223,7 +314,7 @@ def generate_reel_script(text: str, category: str, clips: list[dict]) -> dict | 
     )
 
     try:
-        result = llm_call(prompt, json_mode=True, timeout=300.0)
+        result = reel_llm_call(prompt, timeout=300.0)
     except (OllamaUnavailableError, httpx.TimeoutException):
         log.warning("Reel script generation failed (LLM error)")
         return None

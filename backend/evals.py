@@ -23,7 +23,7 @@ try:
 except ImportError:
     HAS_DSPY = False
 
-from config import OLLAMA_HOST, LLM_MODEL
+from config import OLLAMA_HOST, LLM_MODEL, CLASSIFICATION_MODEL, REEL_MODEL
 from llm import generate_reels
 from eval_fixtures import TEST_DOCS, EVAL_COMBOS, QUICK_EVAL_PAIRS
 
@@ -309,7 +309,8 @@ def print_scorecard(all_results: list[dict]):
     print()
     print("=" * 60)
     print(f" VERSO PROMPT EVAL")
-    print(f" Model: {LLM_MODEL}  |  Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    print(f" Reel model: {REEL_MODEL}  |  Classification: {CLASSIFICATION_MODEL}")
+    print(f" Chat model: {LLM_MODEL}  |  Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print(f" Tests: {total_tests}")
     print("=" * 60)
 
@@ -400,7 +401,8 @@ def main():
     if dry_run:
         print("DRY RUN MODE — testing metrics with dummy outputs (no Ollama needed)")
     else:
-        print(f"Connecting to Ollama at {OLLAMA_HOST} with model {LLM_MODEL}...")
+        print(f"Connecting to Ollama at {OLLAMA_HOST}...")
+        print(f"  Reel model: {REEL_MODEL}  |  Classification: {CLASSIFICATION_MODEL}  |  Chat: {LLM_MODEL}")
         if HAS_DSPY:
             try:
                 lm = dspy.LM(
@@ -456,7 +458,9 @@ def main():
     # Save results
     output_path = os.path.join(os.path.dirname(__file__), "eval_results.json")
     save_data = {
-        "model": LLM_MODEL,
+        "reel_model": REEL_MODEL,
+        "classification_model": CLASSIFICATION_MODEL,
+        "chat_model": LLM_MODEL,
         "date": datetime.now().isoformat(),
         "dry_run": dry_run,
         "total_tests": len(all_results),
