@@ -10,9 +10,9 @@ The codebase already has evaluation infrastructure (`evals.py`, `eval_fixtures.p
 
 ## Implementation Status
 
-### Member 1 (Pranav) — ALL CODE COMPLETE
+### Member 1 (Sakshi) — ALL CODE COMPLETE
 
-Member 1 implemented **all 9 phases** (both Member A and Member B tasks). All code is written, tested, committed, and pushed to the `self-learning-backend` branch.
+Sakshi implemented **all 9 phases** (both Member A and Member B tasks). All code is written, tested, committed, and pushed to the `self-learning-backend` branch.
 
 | Phase | Task | Status | Files |
 |-------|------|--------|-------|
@@ -48,13 +48,13 @@ Member 1 implemented **all 9 phases** (both Member A and Member B tasks). All co
 
 ---
 
-### Member 2 — MANUAL STEPS REMAINING
+### Member 2 (Esha) — MANUAL STEPS REMAINING
 
-All scripts and infrastructure are ready. Member 2 needs to **run the pipeline** and perform the manual fine-tuning steps that require Google Colab and human judgment.
+All scripts and infrastructure are ready. Esha needs to **run the pipeline** and perform the manual fine-tuning steps that require Google Colab and human judgment.
 
 ---
 
-## Member 2: Step-by-Step Guide
+## Esha's Step-by-Step Guide
 
 ### Prerequisites
 
@@ -116,27 +116,49 @@ This will:
 - OOM crash → Restart runtime, re-run from Cell 1
 - Slow/disconnects → Use "Prevent disconnection" browser extension
 
-### Step 4: Deploy to Ollama (Manual)
+### Step 4: Deploy Fine-Tuned Model to EC2
 
+The project has CI/CD via GitHub Actions (`.github/workflows/deploy.yml`). On push to `main`, it auto-deploys to EC2. But the fine-tuned GGUF model needs to be deployed separately since it's too large for git.
+
+**Option A: SCP the GGUF directly to EC2**
 ```bash
-# Create the directory and move the GGUF file
+# From your local machine
+scp ~/Downloads/verso-qwen2.5-1.5b.Q4_K_M.gguf <EC2_USER>@<EC2_HOST>:/root/verso-ai/scripts/verso-qwen2.5-1.5b_gguf/
+
+# SSH into EC2 and create the Ollama model
+ssh <EC2_USER>@<EC2_HOST>
+cd /root/verso-ai/scripts
+mkdir -p verso-qwen2.5-1.5b_gguf
+ollama create verso-reel-v2 -f Modelfile.v2
+ollama run verso-reel-v2 "Say hello"  # verify it responds
+```
+
+**Option B: Test locally first, then deploy**
+```bash
+# Local test
 mkdir -p scripts/verso-qwen2.5-1.5b_gguf/
 mv ~/Downloads/verso-qwen2.5-1.5b.Q4_K_M.gguf scripts/verso-qwen2.5-1.5b_gguf/
-
-# Create the Ollama model
-cd scripts
-ollama create verso-reel-v2 -f Modelfile.v2
-
-# Verify it loaded
+cd scripts && ollama create verso-reel-v2 -f Modelfile.v2
 ollama run verso-reel-v2 "Say hello"
+# If good, SCP to EC2 (Option A)
 ```
 
 **What to check:** The model should respond. If `ollama create` fails, check the GGUF file path matches what's in `Modelfile.v2`.
 
-### Step 5: A/B Evaluate Models (Manual)
+### Step 5: A/B Evaluate Models
+
+Run on EC2 (where production reels are generated):
 
 ```bash
-cd backend && python ../scripts/ab_eval_models.py
+ssh <EC2_USER>@<EC2_HOST>
+cd /root/verso-ai/backend
+source venv/bin/activate
+python ../scripts/ab_eval_models.py
+```
+
+Or locally via Docker:
+```bash
+docker compose exec backend python /scripts/ab_eval_models.py
 ```
 
 This compares `qwen2.5:1.5b` (base) vs `verso-reel-v2` (fine-tuned) on 8 test cases.
@@ -145,14 +167,30 @@ This compares `qwen2.5:1.5b` (base) vs `verso-reel-v2` (fine-tuned) on 8 test ca
 - JSON validity >= 89%
 - Fine-tuned model composite score > base model composite score
 
-**If the gate PASSES:**
-```bash
-# Switch production to the fine-tuned model
-export REEL_MODEL=verso-reel-v2
+**If the gate PASSES — switch production to v2:**
 
-# Or update docker-compose.yml to persist:
-# environment:
-#   - REEL_MODEL=verso-reel-v2
+On EC2, update the systemd override or the uvicorn start command to set the env var:
+```bash
+ssh <EC2_USER>@<EC2_HOST>
+# Add to the server startup (update ec2-setup.sh or the nohup command in deploy.yml)
+export REEL_MODEL=verso-reel-v2
+# Restart the server
+pkill -f "uvicorn main:app"
+cd /root/verso-ai/backend && source venv/bin/activate
+nohup uvicorn main:app --host 0.0.0.0 --port 8000 > /root/verso-ai/server.log 2>&1 &
+```
+
+To make this permanent across CI/CD deploys, update `ec2-setup.sh` to add:
+```bash
+# After Ollama model pulls, also create fine-tuned model if GGUF exists
+if [ -f "${APP_DIR}/scripts/verso-qwen2.5-1.5b_gguf/verso-qwen2.5-1.5b.Q4_K_M.gguf" ]; then
+    ollama create verso-reel-v2 -f "${APP_DIR}/scripts/Modelfile.v2"
+fi
+```
+
+And update the restart step in `deploy.yml` to include the env var:
+```yaml
+REEL_MODEL=verso-reel-v2 nohup uvicorn main:app --host 0.0.0.0 --port 8000 ...
 ```
 
 **If the gate FAILS:**
@@ -167,7 +205,7 @@ After deploying v2, new uploads will generate reels with the improved model **an
 
 ```
 v2 generates better reels (with source_text saved)
-    → Score them: python scripts/score_reels.py
+    → Score them: python scripts/score_reels.py  (on EC2)
     → Generate best-of-N from weak areas
     → Fine-tune → verso-reel-v3
     → A/B eval → deploy if better
@@ -176,18 +214,32 @@ v2 generates better reels (with source_text saved)
 
 Each cycle improves the model. Expect diminishing returns after 2-3 cycles for 1.5B.
 
+### CI/CD Integration Notes
+
+The existing CI/CD pipeline (`.github/workflows/deploy.yml`) handles:
+- Build frontend → SCP static files to EC2
+- `git pull` + `bash ec2-setup.sh --deploy` on EC2
+- Restart uvicorn
+
+**What CI/CD does NOT handle (manual steps for Esha):**
+- GGUF model files (too large for git — SCP directly to EC2)
+- `ollama create` for the fine-tuned model (run once on EC2)
+- Setting `REEL_MODEL` env var (update deploy.yml or ec2-setup.sh)
+- Running the self-learning loop (run on EC2 where Ollama + models are available)
+
 ---
 
-## Member 2: Research Checklist
+## Esha's Research Checklist
 
-These are things Member 2 should investigate/decide:
+These are things Esha should investigate/decide:
 
 - [ ] **Sample documents:** Curate 5-10 diverse .txt files covering biology, business, tech, history, fiction, etc. Quality of training data directly impacts model quality.
 - [ ] **Gold data threshold:** Default min-score is 0.6. After reviewing `training_data_gold.jsonl`, decide if this should be raised (stricter = fewer but better examples) or lowered (more examples but noisier).
 - [ ] **Training hyperparameters:** The notebook uses 3 epochs, lr=2e-4, batch_size=2. If the model overfits (test output looks memorized), reduce epochs to 2. If underfits (output still bad), increase to 5.
 - [ ] **GGUF quantization:** Default is Q4_K_M (~900MB). If quality is borderline, try Q5_K_M (~1.1GB) for slightly better quality at the cost of more RAM.
-- [ ] **Production deployment:** After A/B eval passes, decide whether to update `docker-compose.yml` with `REEL_MODEL=verso-reel-v2` or keep it as an env override.
-- [ ] **EC2 deployment:** On the 8GB EC2 instance, verify peak RAM stays under 5.5GB ceiling after model swap. Run `docker stats --no-stream` during a test upload.
+- [ ] **CI/CD integration:** After A/B eval passes, decide how to persist `REEL_MODEL=verso-reel-v2` across deploys. Options: (a) update the `nohup` command in `deploy.yml` to include the env var, (b) add it to `ec2-setup.sh`, or (c) create a `/root/.env` file sourced at startup.
+- [ ] **EC2 RAM check:** On the 8GB EC2 instance, verify peak RAM stays under 5.5GB ceiling after model swap. SSH in and run `free -h` during a test upload. The fine-tuned 1.5B Q4_K_M model should use roughly the same RAM as the base qwen2.5:1.5b.
+- [ ] **GGUF storage:** The GGUF file (~900MB) is too large for git. Decide on a permanent storage strategy: (a) keep on EC2 only, (b) upload to a private S3 bucket and pull during setup, or (c) store in Google Drive alongside the Colab notebook.
 
 ---
 
