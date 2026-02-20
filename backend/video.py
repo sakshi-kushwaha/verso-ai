@@ -106,14 +106,21 @@ def get_images_for_category(category: str) -> list[dict]:
     ]
 
 
-def _resolve_pillow_font(size: int = 48) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    """Find a usable font for Pillow text rendering."""
-    candidates = [
+def _resolve_pillow_font(size: int = 48, font_path: str | None = None) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    """Load a specific font or fall back to a usable system font."""
+    if font_path and os.path.exists(font_path):
+        try:
+            return ImageFont.truetype(font_path, size)
+        except Exception:
+            pass
+    # Fallback chain
+    fallbacks = [
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
         "/System/Library/Fonts/Helvetica.ttc",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
     ]
-    for path in candidates:
+    for path in fallbacks:
         if os.path.exists(path):
             try:
                 return ImageFont.truetype(path, size)
@@ -207,43 +214,271 @@ def _prepare_image_segment(image_path: str, text: str, width: int, height: int,
     return out
 
 
-def _create_segment_overlay(text: str, width: int, height: int,
-                             tmpdir: str, index: int = 0) -> str:
-    """Create a transparent PNG overlay with gradient + centered text for a video segment.
+# ---------------------------------------------------------------------------
+# Text style presets — each reel gets a unique look (font, color, effects)
+# like different Instagram creators. Rotated by reel_id.
+# ---------------------------------------------------------------------------
+_TEXT_STYLES = [
+    {   # 0: Impact — classic viral reel, big white caps
+        "font": "/System/Library/Fonts/Supplemental/Impact.ttf",
+        "font_linux": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "font_size": 92, "uppercase": True,
+        "text_color": (255, 255, 255, 255),
+        "stroke_color": (0, 0, 0, 255), "stroke_r": 4,
+        "shadow": None, "glow": None, "pill": None,
+    },
+    {   # 1: Georgia Bold — elegant serif, warm yellow, drop shadow
+        "font": "/System/Library/Fonts/Supplemental/Georgia Bold.ttf",
+        "font_linux": "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf",
+        "font_size": 78, "uppercase": False,
+        "text_color": (255, 235, 60, 255),
+        "stroke_color": (0, 0, 0, 255), "stroke_r": 3,
+        "shadow": (5, 5, (0, 0, 0, 200)), "glow": None, "pill": None,
+    },
+    {   # 2: DIN Condensed Bold — modern tight caps, white on dark pill
+        "font": "/System/Library/Fonts/Supplemental/DIN Condensed Bold.ttf",
+        "font_linux": "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "font_size": 88, "uppercase": True,
+        "text_color": (255, 255, 255, 255),
+        "stroke_color": None, "stroke_r": 0,
+        "shadow": None, "glow": None,
+        "pill": (20, 14, 12, (0, 0, 0, 190)),
+    },
+    {   # 3: Futura — clean sans-serif, cyan glow, mixed case
+        "font": "/System/Library/Fonts/Supplemental/Futura.ttc",
+        "font_linux": "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "font_size": 76, "uppercase": False,
+        "text_color": (255, 255, 255, 255),
+        "stroke_color": (0, 0, 0, 255), "stroke_r": 3,
+        "shadow": None, "glow": (0, 220, 255, 110), "pill": None,
+    },
+    {   # 4: Arial Black — heavy sans, red/orange, bold caps
+        "font": "/System/Library/Fonts/Supplemental/Arial Black.ttf",
+        "font_linux": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "font_size": 82, "uppercase": True,
+        "text_color": (255, 75, 45, 255),
+        "stroke_color": (0, 0, 0, 255), "stroke_r": 4,
+        "shadow": None, "glow": None, "pill": None,
+    },
+    {   # 5: Trebuchet Bold — friendly rounded, green neon glow
+        "font": "/System/Library/Fonts/Supplemental/Trebuchet MS Bold.ttf",
+        "font_linux": "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "font_size": 78, "uppercase": False,
+        "text_color": (0, 255, 140, 255),
+        "stroke_color": (0, 0, 0, 255), "stroke_r": 4,
+        "shadow": None, "glow": (0, 255, 140, 80), "pill": None,
+    },
+    {   # 6: Gill Sans — refined sans, white on red pill
+        "font": "/System/Library/Fonts/Supplemental/GillSans.ttc",
+        "font_linux": "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "font_size": 76, "uppercase": True,
+        "text_color": (255, 255, 255, 255),
+        "stroke_color": None, "stroke_r": 0,
+        "shadow": None, "glow": None,
+        "pill": (22, 16, 20, (200, 25, 25, 210)),
+    },
+    {   # 7: Rockwell — slab serif, purple glow, lowercase
+        "font": "/System/Library/Fonts/Supplemental/Rockwell.ttc",
+        "font_linux": "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf",
+        "font_size": 78, "uppercase": False,
+        "text_color": (255, 255, 255, 255),
+        "stroke_color": (0, 0, 0, 255), "stroke_r": 3,
+        "shadow": None, "glow": (180, 80, 255, 100), "pill": None,
+    },
+    {   # 8: Verdana Bold — wide readable, gold text, heavy shadow
+        "font": "/System/Library/Fonts/Supplemental/Verdana Bold.ttf",
+        "font_linux": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "font_size": 72, "uppercase": False,
+        "text_color": (255, 215, 0, 255),
+        "stroke_color": (0, 0, 0, 255), "stroke_r": 3,
+        "shadow": (4, 4, (0, 0, 0, 220)), "glow": None, "pill": None,
+    },
+    {   # 9: Arial Rounded — soft friendly, white on blue pill
+        "font": "/System/Library/Fonts/Supplemental/Arial Rounded Bold.ttf",
+        "font_linux": "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "font_size": 76, "uppercase": False,
+        "text_color": (255, 255, 255, 255),
+        "stroke_color": None, "stroke_r": 0,
+        "shadow": None, "glow": None,
+        "pill": (20, 14, 22, (30, 100, 220, 210)),
+    },
+    {   # 10: Tahoma Bold — compact clean, hot pink, caps
+        "font": "/System/Library/Fonts/Supplemental/Tahoma Bold.ttf",
+        "font_linux": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "font_size": 80, "uppercase": True,
+        "text_color": (255, 50, 150, 255),
+        "stroke_color": (0, 0, 0, 255), "stroke_r": 4,
+        "shadow": None, "glow": (255, 50, 150, 80), "pill": None,
+    },
+]
 
-    Returns path to the overlay PNG in tmpdir.
+
+def _create_word_group_png(text: str, width: int, height: int,
+                            tmpdir: str, index: int = 0,
+                            style_idx: int = 0) -> str:
+    """Create a transparent PNG with styled centered text — Instagram reel style.
+
+    Different style presets rotate across reels for visual variety.
     """
+    style = _TEXT_STYLES[style_idx % len(_TEXT_STYLES)]
     img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    # Dark gradient at bottom 35% of frame
-    gradient_top = int(height * 0.55)
-    for y in range(gradient_top, height):
-        alpha = int(180 * (y - gradient_top) / (height - gradient_top))
-        draw.line([(0, y), (width, y)], fill=(0, 0, 0, alpha))
-
-    # Render text
-    font = _resolve_pillow_font(52)
-    margin = 60
+    # Pick font: try macOS path first, then Linux, then fallback
+    font_path = style.get("font", "")
+    if not font_path or not os.path.exists(font_path):
+        font_path = style.get("font_linux", "")
+    font = _resolve_pillow_font(style["font_size"], font_path=font_path)
+    margin = 50
     max_text_width = width - margin * 2
-    lines = _wrap_text(text, font, max_text_width)
+    display = text.upper() if style["uppercase"] else text
+    lines = _wrap_text(display, font, max_text_width)
 
-    line_height = 66
+    line_height = style["font_size"] + 22
     total_text_height = len(lines) * line_height
-    text_y = int(height * 0.75) - total_text_height // 2
+    text_y_start = (height - total_text_height) // 2
 
+    # Measure max line width for pill background
+    max_line_w = 0
+    for line in lines:
+        bbox = font.getbbox(line)
+        lw = bbox[2] - bbox[0]
+        if lw > max_line_w:
+            max_line_w = lw
+
+    # Optional pill/tag background
+    pill = style.get("pill")
+    if pill:
+        px, py, radius, pill_color = pill
+        box_x1 = (width - max_line_w) // 2 - px
+        box_y1 = text_y_start - py
+        box_x2 = (width + max_line_w) // 2 + px
+        box_y2 = text_y_start + total_text_height + py
+        draw.rounded_rectangle([box_x1, box_y1, box_x2, box_y2],
+                                radius=radius, fill=pill_color)
+
+    text_y = text_y_start
     for line in lines:
         bbox = font.getbbox(line)
         text_w = bbox[2] - bbox[0]
         text_x = (width - text_w) // 2
-        # Shadow
-        draw.text((text_x + 2, text_y + 2), line, font=font, fill=(0, 0, 0, 200))
+
+        # Optional glow (drawn first, behind everything)
+        glow = style.get("glow")
+        if glow:
+            for r in (8, 6, 4):
+                for dx in range(-r, r + 1):
+                    for dy in range(-r, r + 1):
+                        if dx * dx + dy * dy <= r * r:
+                            draw.text((text_x + dx, text_y + dy), line,
+                                      font=font, fill=glow)
+
+        # Optional drop shadow
+        shadow = style.get("shadow")
+        if shadow:
+            sx, sy, s_color = shadow
+            draw.text((text_x + sx, text_y + sy), line, font=font, fill=s_color)
+
+        # Black stroke outline
+        stroke_r = style.get("stroke_r", 0)
+        stroke_color = style.get("stroke_color")
+        if stroke_color and stroke_r > 0:
+            for r in range(stroke_r, 0, -1):
+                for dx in range(-r, r + 1):
+                    for dy in range(-r, r + 1):
+                        if dx * dx + dy * dy <= r * r:
+                            draw.text((text_x + dx, text_y + dy), line,
+                                      font=font, fill=stroke_color)
+
         # Main text
-        draw.text((text_x, text_y), line, font=font, fill=(255, 255, 255, 255))
+        draw.text((text_x, text_y), line, font=font, fill=style["text_color"])
         text_y += line_height
 
-    out = os.path.join(tmpdir, f"overlay_{index}.png")
+    out = os.path.join(tmpdir, f"wordgroup_{index}.png")
     img.save(out, "PNG")
+    return out
+
+
+def _burn_word_sync(video_path: str, narration: str, duration: float,
+                     tmpdir: str, reel_id: int = 0) -> str:
+    """Second-pass: burn word-synced text onto composed video using Pillow PNGs.
+
+    Each reel gets a different text style (rotated from _TEXT_STYLES) so every
+    reel looks unique — like different Instagram creators.
+    Returns path to the output video with text overlaid.
+    """
+    words = narration.split()
+    if not words:
+        return video_path
+
+    words_per_group = 4
+    groups = []
+    for i in range(0, len(words), words_per_group):
+        groups.append(" ".join(words[i:i + words_per_group]))
+
+    if not groups:
+        return video_path
+
+    # Pick a style for this reel (rotate through styles)
+    style_idx = reel_id % len(_TEXT_STYLES)
+
+    # Calculate timing
+    total_words = len(words)
+    start_pad = 0.3
+    end_pad = 0.5
+    usable = duration - start_pad - end_pad
+    if usable < 1:
+        usable = duration
+        start_pad = 0
+    time_per_word = usable / total_words
+
+    # Generate PNGs and build overlay filter chain
+    inputs = ["-i", video_path]
+    filter_parts = []
+    current_label = "0:v"
+    word_offset = 0
+
+    for idx, group in enumerate(groups):
+        group_word_count = len(group.split())
+        t_start = start_pad + word_offset * time_per_word
+        t_end = start_pad + (word_offset + group_word_count) * time_per_word
+
+        # Render PNG for this word group with the reel's style
+        png_path = _create_word_group_png(group, WIDTH, HEIGHT, tmpdir, idx,
+                                           style_idx=style_idx)
+        input_idx = idx + 1  # input 0 is the video
+        inputs.extend(["-i", png_path])
+
+        out_label = f"wg{idx}"
+        filter_parts.append(
+            f"[{current_label}][{input_idx}:v]overlay=0:0"
+            f":enable='between(t,{t_start:.3f},{t_end:.3f})'"
+            f":format=auto[{out_label}]"
+        )
+        current_label = out_label
+        word_offset += group_word_count
+
+    filter_complex = ";".join(filter_parts)
+    out = os.path.join(tmpdir, "reel_with_text.mp4")
+    cmd = [
+        "ffmpeg", "-y",
+        *inputs,
+        "-filter_complex", filter_complex,
+        "-map", f"[{current_label}]",
+        "-map", "0:a",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "26",
+        "-c:a", "copy",
+        "-threads", FFMPEG_THREADS,
+        "-movflags", "+faststart",
+        "-pix_fmt", "yuv420p",
+        out,
+    ]
+    result = subprocess.run(cmd, capture_output=True, timeout=FFMPEG_ENCODE_TIMEOUT)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"word-sync burn failed (rc={result.returncode}):\n"
+            f"STDERR: {result.stderr.decode(errors='replace')[-2000:]}"
+        )
     return out
 
 
@@ -449,8 +684,6 @@ def compose_multi_clip_reel(
         # Build ffmpeg inputs — video clips or composited images
         inputs = []
         filter_parts = []
-        # Track overlay PNGs to add as inputs after all video/image inputs
-        overlay_inputs: list[tuple[int, str]] = []  # (segment_index, png_path)
 
         for i, seg in enumerate(segments):
             seg_type = seg.get("type", "video")
@@ -479,34 +712,12 @@ def compose_multi_clip_reel(
                 if not clip_path or not os.path.exists(clip_path):
                     raise FileNotFoundError(f"Clip not found: {seg.get('clip', '')}")
                 inputs.extend(["-stream_loop", "-1", "-t", f"{dur:.2f}", "-i", clip_path])
+                filter_parts.append(
+                    f"[{i}:v]scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase"
+                    f":flags=lanczos,crop={WIDTH}:{HEIGHT},setsar=1,fps={FPS},setpts=PTS-STARTPTS[v{i}]"
+                )
 
-                overlay_text = seg.get("overlay", "")
-                if overlay_text:
-                    # Render overlay PNG; composite after scaling
-                    png_path = _create_segment_overlay(
-                        overlay_text, WIDTH, HEIGHT, tmpdir, index=i,
-                    )
-                    overlay_inputs.append((i, png_path))
-                    filter_parts.append(
-                        f"[{i}:v]scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase"
-                        f":flags=lanczos,crop={WIDTH}:{HEIGHT},setsar=1,fps={FPS},"
-                        f"setpts=PTS-STARTPTS[v{i}_raw]"
-                    )
-                else:
-                    filter_parts.append(
-                        f"[{i}:v]scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase"
-                        f":flags=lanczos,crop={WIDTH}:{HEIGHT},setsar=1,fps={FPS},setpts=PTS-STARTPTS[v{i}]"
-                    )
-
-        # Add overlay PNG inputs and composite filters
         next_input_idx = n  # video/image inputs used indices 0..n-1
-        for seg_i, png_path in overlay_inputs:
-            ov_idx = next_input_idx
-            inputs.extend(["-loop", "1", "-t", f"{durations[seg_i]:.2f}", "-i", png_path])
-            filter_parts.append(
-                f"[v{seg_i}_raw][{ov_idx}:v]overlay=0:0:format=auto[v{seg_i}]"
-            )
-            next_input_idx += 1
 
         # Chain xfade transitions
         if n == 1:
@@ -579,5 +790,13 @@ def compose_multi_clip_reel(
         ]
 
         subprocess.run(cmd, check=True, capture_output=True, timeout=FFMPEG_ENCODE_TIMEOUT)
+
+        # Second pass: burn word-synced narration text onto the video
+        if narration:
+            text_video = _burn_word_sync(out_path, narration, TOTAL_DURATION, tmpdir,
+                                                reel_id=reel_id)
+            if text_video != out_path:
+                import shutil
+                shutil.move(text_video, out_path)
 
     return out_path
