@@ -416,10 +416,11 @@ def generate_topic_reel(topic: str, topic_text: str, doc_type: str, prefs: dict)
     return parse_llm_json(result)
 
 
-def generate_reel_script(text: str, category: str, clips: list[dict]) -> dict | None:
+def generate_reel_script(text: str, category: str, clips: list[dict], images: list[dict] | None = None) -> dict | None:
     """Generate a multi-segment reel script using the LLM.
 
     Returns parsed dict with title, narration, segments — or None on failure.
+    If images are provided, uses mixed prompt (video + image segments with text overlays).
     """
     if not clips:
         return None
@@ -427,18 +428,33 @@ def generate_reel_script(text: str, category: str, clips: list[dict]) -> dict | 
     # Build numbered clip list for the prompt
     clip_list_lines = []
     for i, c in enumerate(clips, 1):
-        clip_list_lines.append(f"{i}. {c['file']} — {c['description']}")
+        clip_list_lines.append(f"{i}. {c['file']} — {c.get('description', c['file'])}")
     clip_list = "\n".join(clip_list_lines)
 
     num_segments = 3 if len(text) < 800 else 4
     total_duration = 15
 
-    prompt = REEL_SCRIPT_PROMPT.format(
-        clip_list=clip_list,
-        num_segments=num_segments,
-        total_duration=total_duration,
-        text=text[:2000],
-    )
+    # Use mixed prompt when images are available
+    if images:
+        image_list_lines = []
+        for i, img in enumerate(images, 1):
+            image_list_lines.append(f"{i}. {img['file']}")
+        image_list = "\n".join(image_list_lines)
+
+        prompt = REEL_MIXED_SCRIPT_PROMPT.format(
+            clip_list=clip_list,
+            image_list=image_list,
+            num_segments=num_segments,
+            total_duration=total_duration,
+            text=text[:2000],
+        )
+    else:
+        prompt = REEL_SCRIPT_PROMPT.format(
+            clip_list=clip_list,
+            num_segments=num_segments,
+            total_duration=total_duration,
+            text=text[:2000],
+        )
 
     try:
         result = reel_llm_call(prompt, timeout=300.0)
@@ -462,23 +478,41 @@ def generate_reel_script(text: str, category: str, clips: list[dict]) -> dict | 
         log.warning("Reel script generation returned invalid JSON")
         return None
 
-    # Validate segments
-    valid_filenames = {c["file"] for c in clips}
+    # Validate segments — support both video and image types
+    valid_clip_files = {c["file"] for c in clips}
+    valid_image_files = {img["file"] for img in (images or [])}
+    image_path_map = {img["file"]: img["path"] for img in (images or [])}
+
     validated_segments = []
     for seg in parsed["segments"]:
         if not isinstance(seg, dict):
             continue
-        clip_file = seg.get("clip", "")
-        if clip_file not in valid_filenames:
-            continue
+        seg_type = seg.get("type", "video")
         dur = seg.get("duration", 5)
         if not isinstance(dur, (int, float)) or dur < 2:
             dur = max(2, dur if isinstance(dur, (int, float)) else 5)
-        validated_segments.append({
-            "clip": clip_file,
-            "overlay": str(seg.get("overlay", ""))[:60],
-            "duration": float(dur),
-        })
+
+        if seg_type == "image":
+            image_file = seg.get("image", "")
+            if image_file not in valid_image_files:
+                continue
+            validated_segments.append({
+                "type": "image",
+                "image": image_file,
+                "image_path": image_path_map.get(image_file, ""),
+                "text": str(seg.get("text", ""))[:60],
+                "duration": float(dur),
+            })
+        else:
+            clip_file = seg.get("clip", "")
+            if clip_file not in valid_clip_files:
+                continue
+            validated_segments.append({
+                "type": "video",
+                "clip": clip_file,
+                "overlay": str(seg.get("overlay", ""))[:60],
+                "duration": float(dur),
+            })
 
     if len(validated_segments) < 2:
         log.warning("Reel script has too few valid segments (%d)", len(validated_segments))

@@ -250,6 +250,10 @@ def metric_narration_quality(parsed: dict, **_) -> tuple[float, dict]:
     if not reels:
         return 0.0, {"reason": "no reels"}
 
+    total = 0
+    passed = 0
+    checks = {}
+
     for i, reel in enumerate(reels):
         narration = reel.get("narration", "") or ""
         words = narration.split()

@@ -74,7 +74,8 @@ const useStore = create((set, get) => ({
   reels: [],
   feedPage: 1,
   hasMore: true,
-  setReels: (reels) => set({ reels, feedPage: 1, hasMore: true }),
+  feedStale: false,
+  setReels: (reels) => set({ reels, feedPage: 1, hasMore: true, feedStale: false }),
   appendReels: (newReels) =>
     set((state) => ({
       reels: [...state.reels, ...newReels],
@@ -94,7 +95,12 @@ const useStore = create((set, get) => ({
     set((state) => ({
       bgUpload: state.bgUpload ? { ...state.bgUpload, ...updates } : null,
     })),
-  clearBgUpload: () => set({ bgUpload: null, reels: [] }),
+  appendStreamedReel: (reel) =>
+    set((state) => {
+      if (state.reels.some((r) => r.id === reel.id)) return state
+      return { reels: [...state.reels, reel] }
+    }),
+  clearBgUpload: () => set({ bgUpload: null, feedStale: true }),
 
 }));
 

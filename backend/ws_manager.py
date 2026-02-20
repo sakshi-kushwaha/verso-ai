@@ -52,4 +52,16 @@ class ConnectionManager:
                 log.debug("Failed to send WS message for upload %s", upload_id)
 
 
+    async def broadcast_new_reel(self, upload_id: int, reel_data: dict):
+        """Push a newly-generated reel to subscribed clients."""
+        async with self._lock:
+            clients = list(self._subs.get(upload_id, []))
+        msg = json.dumps({"type": "new_reel", "upload_id": upload_id, "reel": reel_data})
+        for ws in clients:
+            try:
+                await ws.send_text(msg)
+            except Exception:
+                log.debug("Failed to send new_reel WS message for upload %s", upload_id)
+
+
 manager = ConnectionManager()

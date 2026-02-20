@@ -1,7 +1,24 @@
 import { useEffect, useRef } from 'react'
-import { getUploadStatus } from '../api'
+import api, { getUploadStatus } from '../api'
 import { getWsBaseUrl, getAuthToken } from '../api/ws'
 import useStore from '../store/useStore'
+
+const ACCENTS = ['#6366F1', '#8B5CF6', '#EC4899', '#F59E0B', '#10B981', '#3B82F6']
+
+function mapReelFromWs(r) {
+  return {
+    id: r.id,
+    title: r.title,
+    category: r.category || 'General',
+    pages: r.page_ref || '—',
+    body: r.summary || '',
+    narration: r.narration || r.summary || '',
+    keywords: r.keywords ? r.keywords.split(',').map((k) => k.trim()).filter(Boolean) : [],
+    accent: ACCENTS[r.id % ACCENTS.length],
+    bgImage: r.bg_image ? `${api.defaults.baseURL}/${r.bg_image}` : null,
+    videoUrl: r.video_path ? `${api.defaults.baseURL}/video/${r.id}` : null,
+  }
+}
 
 const STAGE_LABELS = {
   uploading: 'Uploading...',
@@ -54,6 +71,10 @@ export default function UploadTracker() {
             const msg = JSON.parse(evt.data)
             if (msg.type === 'progress') {
               handleUpdate(msg.progress ?? 0, msg.stage || 'uploading', msg.status)
+            } else if (msg.type === 'new_reel' && msg.reel) {
+              const mapped = mapReelFromWs(msg.reel)
+              useStore.getState().appendStreamedReel(mapped)
+              updateBgUpload({ reelCount: (useStore.getState().bgUpload?.reelCount || 0) + 1 })
             }
           } catch {}
         }
@@ -95,7 +116,10 @@ export default function UploadTracker() {
     <div className={`fixed top-0 left-0 right-0 z-50 md:left-16 ${isDone ? 'bg-green-500/90' : isError ? 'bg-danger/90' : 'bg-primary/90'} text-white px-4 py-2 flex items-center gap-3 text-sm backdrop-blur-sm`}>
       <div className="flex-1 min-w-0">
         <span className="font-medium truncate block">{bgUpload.filename}</span>
-        <span className="text-white/80 text-xs">{isError ? 'Processing failed' : label}</span>
+        <span className="text-white/80 text-xs">
+          {isError ? 'Processing failed' : label}
+          {!isDone && !isError && bgUpload.reelCount > 0 && ` · ${bgUpload.reelCount} bite${bgUpload.reelCount > 1 ? 's' : ''} ready`}
+        </span>
       </div>
       {!isDone && !isError && (
         <div className="flex items-center gap-2">
