@@ -2,6 +2,7 @@
 
 Memory-conscious: uses 1080p output and ffmpeg thread limits to stay under ~250MB per encode.
 """
+from __future__ import annotations
 
 import csv
 import json
