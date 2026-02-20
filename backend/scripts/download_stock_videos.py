@@ -2,12 +2,13 @@
 """Download royalty-free stock videos from Pixabay organized by category.
 
 Creates:
-  static/stock-videos/{category}/01.mp4 … 10.mp4
+  static/stock-videos/{category}/01.mp4 … 20.mp4
   data/videos.csv — master CSV with all downloaded videos
 
 Existing videos (01–03.mp4, originally from Pexels) are kept as-is.
 Videos 04–05 use the first set of Pixabay queries.
 Videos 06–10 use a second set of queries for variety.
+Videos 11–20 use a third set of queries for even more variety.
 All fetched at smallest available resolution — ffmpeg scales to 720x1280 in video.py.
 
 Usage:
@@ -27,10 +28,9 @@ CSV_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "videos.csv")
 
 API_KEY = os.environ.get("PIXABAY_API_KEY", "")
 
-VIDEOS_PER_CATEGORY = 10
+VIDEOS_PER_CATEGORY = 20
 
 # Descriptions for the existing 3 videos per category (already downloaded from Pexels).
-# These are kept so the CSV stays accurate even if the script only downloads new ones.
 EXISTING_VIDEOS = {
     "science": [
         "Scientist working in a laboratory examining samples under controlled lighting",
@@ -89,8 +89,8 @@ EXISTING_VIDEOS = {
     ],
 }
 
-# Pixabay search queries per category — two rounds for variety.
-# Round 1 was used for videos 04-05.  Round 2 adds videos 06-10.
+# Pixabay search queries per category — three rounds for variety.
+# Round 1 was used for videos 04-05.
 SEARCH_QUERIES = {
     "science": "science laboratory experiment",
     "math": "mathematics equations blackboard",
@@ -105,6 +105,7 @@ SEARCH_QUERIES = {
     "general": "classroom students education",
 }
 
+# Round 2 adds videos 06-10.
 SEARCH_QUERIES_ROUND2 = {
     "science": "space planets astronomy",
     "math": "geometry shapes numbers",
@@ -117,6 +118,102 @@ SEARCH_QUERIES_ROUND2 = {
     "arts": "sculpture museum gallery",
     "engineering": "robotics factory automation",
     "general": "university campus lecture hall",
+}
+
+# Round 3 adds videos 11-20 — fresh queries for maximum variety.
+SEARCH_QUERIES_ROUND3 = {
+    "science": [
+        ("chemistry beaker reaction", 5),
+        ("biology cells microscope", 5),
+    ],
+    "math": [
+        ("calculator statistics data", 5),
+        ("fractal abstract pattern", 5),
+    ],
+    "history": [
+        ("castle medieval fortress", 5),
+        ("ancient egypt pyramids", 5),
+    ],
+    "literature": [
+        ("bookshelf library shelves", 5),
+        ("poetry scroll parchment", 5),
+    ],
+    "business": [
+        ("startup entrepreneur laptop", 5),
+        ("handshake deal partnership", 5),
+    ],
+    "technology": [
+        ("server data center cloud", 5),
+        ("smartphone mobile app", 5),
+    ],
+    "medicine": [
+        ("stethoscope heartbeat checkup", 5),
+        ("laboratory blood test", 5),
+    ],
+    "law": [
+        ("police crime investigation", 5),
+        ("prison jail cell bars", 5),
+    ],
+    "arts": [
+        ("pottery clay hands craft", 5),
+        ("dance ballet performance stage", 5),
+    ],
+    "engineering": [
+        ("bridge architecture steel", 5),
+        ("3d printing prototype", 5),
+    ],
+    "general": [
+        ("library books study", 5),
+        ("graduation ceremony diploma", 5),
+    ],
+}
+
+# Pre-written descriptions for videos 04-05 (previously just had category name).
+DESCRIPTIONS_04_05 = {
+    "science": [
+        "Scientist conducting an experiment in a research laboratory",
+        "Scientific instruments and equipment in a modern lab setting",
+    ],
+    "math": [
+        "Mathematical formulas and equations written on a chalkboard",
+        "Abstract mathematical concepts visualized on a board",
+    ],
+    "history": [
+        "Historic landmarks and architecture from a bygone era",
+        "Ancient historical site with weathered stone structures",
+    ],
+    "literature": [
+        "Books arranged on shelves in a cozy reading environment",
+        "Pages of a book fluttering in soft ambient light",
+    ],
+    "business": [
+        "Business professionals collaborating in a modern office space",
+        "Corporate meeting with team members discussing strategy",
+    ],
+    "technology": [
+        "Computer screen showing software development environment",
+        "Technology workspace with multiple screens and digital interfaces",
+    ],
+    "medicine": [
+        "Medical professional examining patient records in a hospital",
+        "Healthcare setting with medical equipment and instruments",
+    ],
+    "law": [
+        "Legal documents and gavel on a courtroom desk",
+        "Scales of justice and legal books in a law office setting",
+    ],
+    "arts": [
+        "Art gallery with colorful paintings and creative installations",
+        "Creative art studio with brushes and canvases in warm light",
+    ],
+    "engineering": [
+        "Engineering blueprints and construction planning in progress",
+        "Heavy machinery and structural framework at a building site",
+    ],
+    "general": [
+        "Students engaged in a group study session on campus",
+        "Classroom setting with students listening to an educational lecture",
+    ],
 }
 
 
@@ -152,6 +249,19 @@ def get_smallest_video_url(hit):
     return None, 0, 0
 
 
+def make_description(tags):
+    """Convert raw Pixabay tags into a clean sentence-style description."""
+    if not tags:
+        return ""
+    tag_list = [t.strip() for t in tags.split(",")][:6]
+    # Capitalize first tag, join with commas
+    if len(tag_list) == 1:
+        return tag_list[0].capitalize() + " footage"
+    main = tag_list[0].capitalize()
+    rest = ", ".join(tag_list[1:])
+    return f"{main} with {rest}"
+
+
 def download_video(url, out_path):
     """Download a video from URL to out_path."""
     try:
@@ -171,6 +281,63 @@ def download_video(url, out_path):
         if os.path.exists(out_path):
             os.unlink(out_path)
     return False
+
+
+def download_round(category, cat_dir, query, needed, start_idx, seen_ids, csv_rows):
+    """Download a batch of videos for a given query. Returns (ok, fail) counts."""
+    ok = 0
+    fail = 0
+    next_idx = start_idx
+
+    hits = search_videos(query, per_page=needed + 5)
+    if not hits:
+        print(f"  No results from Pixabay API for '{query}'")
+        return 0, needed
+
+    downloaded = 0
+    for hit in hits:
+        if downloaded >= needed:
+            break
+
+        pixabay_id = hit.get("id")
+        if pixabay_id in seen_ids:
+            continue
+        seen_ids.add(pixabay_id)
+
+        video_url, w, h = get_smallest_video_url(hit)
+        if not video_url:
+            continue
+
+        filename = f"{next_idx:02d}.mp4"
+        filepath = os.path.join(cat_dir, filename)
+        rel_path = f"{category}/{filename}"
+        description = make_description(hit.get("tags", category))
+
+        if os.path.exists(filepath) and os.path.getsize(filepath) > 50000:
+            size_kb = os.path.getsize(filepath) / 1024
+            print(f"  [{next_idx}] Already exists: {rel_path} ({size_kb:.0f}KB)")
+            csv_rows.append({"video_file": rel_path, "description": description})
+            ok += 1
+            downloaded += 1
+            next_idx += 1
+            continue
+
+        print(f"  [{next_idx}] Pixabay #{pixabay_id} ({w}x{h})...", end=" ", flush=True)
+        if download_video(video_url, filepath):
+            size_kb = os.path.getsize(filepath) / 1024
+            print(f"OK ({size_kb:.0f}KB)")
+            csv_rows.append({"video_file": rel_path, "description": description})
+            ok += 1
+            downloaded += 1
+            next_idx += 1
+        else:
+            print("FAILED")
+            next_idx += 1
+
+        time.sleep(0.5)
+
+    fail += needed - downloaded
+    return ok, fail
 
 
 def main():
@@ -210,76 +377,37 @@ def main():
                 print(f"  [{idx + 1}] MISSING existing file: {rel_path}")
                 fail += 1
 
-        # --- Keep existing Pixabay videos (04–05) ---
-        for idx in range(len(existing) + 1, 6):  # 04, 05
+        # --- Keep existing Pixabay videos (04–05) with proper descriptions ---
+        descs_04_05 = DESCRIPTIONS_04_05.get(category, [category, category])
+        for i, idx in enumerate(range(len(existing) + 1, 6)):  # 04, 05
             filename = f"{idx:02d}.mp4"
             filepath = os.path.join(cat_dir, filename)
             rel_path = f"{category}/{filename}"
+            desc = descs_04_05[i] if i < len(descs_04_05) else category
             if os.path.exists(filepath) and os.path.getsize(filepath) > 50000:
                 size_kb = os.path.getsize(filepath) / 1024
                 print(f"  [{idx}] Already exists: {rel_path} ({size_kb:.0f}KB)")
-                csv_rows.append({"video_file": rel_path, "description": category})
+                csv_rows.append({"video_file": rel_path, "description": desc})
                 ok += 1
             else:
                 print(f"  [{idx}] MISSING: {rel_path}")
                 fail += 1
 
-        # --- New Pixabay downloads (06–10) using round 2 query ---
+        # --- Round 2 downloads (06–10) ---
         query = SEARCH_QUERIES_ROUND2.get(category, "")
-        if not query:
-            continue
-        needed = 5  # 06, 07, 08, 09, 10
-        next_idx = 6
+        if query:
+            r_ok, r_fail = download_round(category, cat_dir, query, 5, 6, seen_ids, csv_rows)
+            ok += r_ok
+            fail += r_fail
 
-        hits = search_videos(query, per_page=needed + 5)
-        if not hits:
-            print(f"  No results from Pixabay API for '{query}'")
-            fail += needed
-            continue
-
-        downloaded = 0
-        for hit in hits:
-            if downloaded >= needed:
-                break
-
-            pixabay_id = hit.get("id")
-            if pixabay_id in seen_ids:
-                continue
-            seen_ids.add(pixabay_id)
-
-            video_url, w, h = get_smallest_video_url(hit)
-            if not video_url:
-                continue
-
-            filename = f"{next_idx:02d}.mp4"
-            filepath = os.path.join(cat_dir, filename)
-            rel_path = f"{category}/{filename}"
-            description = hit.get("tags", category)
-
-            if os.path.exists(filepath) and os.path.getsize(filepath) > 50000:
-                size_kb = os.path.getsize(filepath) / 1024
-                print(f"  [{next_idx}] Already exists: {rel_path} ({size_kb:.0f}KB)")
-                csv_rows.append({"video_file": rel_path, "description": description})
-                ok += 1
-                downloaded += 1
-                next_idx += 1
-                continue
-
-            print(f"  [{next_idx}] Pixabay #{pixabay_id} ({w}x{h})...", end=" ", flush=True)
-            if download_video(video_url, filepath):
-                size_kb = os.path.getsize(filepath) / 1024
-                print(f"OK ({size_kb:.0f}KB)")
-                csv_rows.append({"video_file": rel_path, "description": description})
-                ok += 1
-                downloaded += 1
-                next_idx += 1
-            else:
-                print("FAILED")
-                next_idx += 1
-
-            time.sleep(0.5)
-
-        fail += needed - downloaded
+        # --- Round 3 downloads (11–20) ---
+        round3_queries = SEARCH_QUERIES_ROUND3.get(category, [])
+        next_idx = 11
+        for query, count in round3_queries:
+            r_ok, r_fail = download_round(category, cat_dir, query, count, next_idx, seen_ids, csv_rows)
+            ok += r_ok
+            fail += r_fail
+            next_idx += count
 
     # Write CSV
     total = len(SEARCH_QUERIES) * VIDEOS_PER_CATEGORY
