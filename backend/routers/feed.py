@@ -31,41 +31,41 @@ def get_feed(page: int = Query(1, ge=1), limit: int = Query(5, ge=1, le=50),
         reels = conn.execute(
             """SELECT r.* FROM reels r
                JOIN uploads u ON r.upload_id = u.id
-               WHERE u.doc_type = 'seed'
+               WHERE u.doc_type = 'seed' OR u.filename = '__gold_standard__'
                ORDER BY r.created_at DESC LIMIT ? OFFSET ?""",
             (limit, offset),
         ).fetchall()
         total = conn.execute(
             """SELECT COUNT(*) FROM reels r
                JOIN uploads u ON r.upload_id = u.id
-               WHERE u.doc_type = 'seed'""",
+               WHERE u.doc_type = 'seed' OR u.filename = '__gold_standard__'""",
         ).fetchone()[0]
     elif tab == "my-docs":
         reels = conn.execute(
             """SELECT r.* FROM reels r
                JOIN uploads u ON r.upload_id = u.id
-               WHERE u.user_id = ? AND u.doc_type != 'seed'
+               WHERE u.user_id = ? AND u.doc_type != 'seed' AND u.filename != '__gold_standard__'
                ORDER BY r.created_at DESC LIMIT ? OFFSET ?""",
             (user["id"], limit, offset),
         ).fetchall()
         total = conn.execute(
             """SELECT COUNT(*) FROM reels r
                JOIN uploads u ON r.upload_id = u.id
-               WHERE u.user_id = ? AND u.doc_type != 'seed'""",
+               WHERE u.user_id = ? AND u.doc_type != 'seed' AND u.filename != '__gold_standard__'""",
             (user["id"],),
         ).fetchone()[0]
     else:
         reels = conn.execute(
             """SELECT r.* FROM reels r
                JOIN uploads u ON r.upload_id = u.id
-               WHERE u.user_id = ? OR u.doc_type = 'seed'
+               WHERE u.user_id = ? OR u.doc_type = 'seed' OR u.filename = '__gold_standard__'
                ORDER BY r.created_at DESC LIMIT ? OFFSET ?""",
             (user["id"], limit, offset),
         ).fetchall()
         total = conn.execute(
             """SELECT COUNT(*) FROM reels r
                JOIN uploads u ON r.upload_id = u.id
-               WHERE u.user_id = ? OR u.doc_type = 'seed'""",
+               WHERE u.user_id = ? OR u.doc_type = 'seed' OR u.filename = '__gold_standard__'""",
             (user["id"],),
         ).fetchone()[0]
 
