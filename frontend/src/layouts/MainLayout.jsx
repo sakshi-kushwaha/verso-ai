@@ -1,13 +1,12 @@
 import { Outlet, NavLink } from 'react-router-dom'
 import useStore from '../store/useStore'
 import UploadTracker from '../components/UploadTracker'
-import { Logo, Home, Chat, Bookmark, Upload, User, Book } from '../components/Icons'
+import { Logo, Home, Bookmark, Upload, User, Book, Help } from '../components/Icons'
 
 const navItems = [
   { to: '/', icon: Home, label: 'Feed' },
   { to: '/books', icon: Book, label: 'My Collections' },
   { to: '/upload', icon: Upload, label: 'Upload' },
-  { to: '/chat', icon: Chat, label: 'Chat' },
   { to: '/bookmarks', icon: Bookmark, label: 'Saved' },
 ]
 
@@ -39,7 +38,10 @@ export default function MainLayout() {
             </NavLink>
           ))}
         </nav>
-        <div className="mt-auto">
+        <div className="mt-auto flex flex-col gap-2 items-center">
+          <NavLink to="/help" className={linkClass} title="Help">
+            <Help />
+          </NavLink>
           <NavLink to="/profile" className={linkClass} title="Profile">
             <User />
           </NavLink>

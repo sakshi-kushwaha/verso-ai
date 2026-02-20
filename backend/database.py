@@ -103,6 +103,14 @@ def init_db():
             sources TEXT DEFAULT '[]',
             created_at TEXT DEFAULT (datetime('now'))
         );
+
+        CREATE TABLE IF NOT EXISTS chat_summaries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            upload_id INTEGER REFERENCES uploads(id),
+            summary TEXT NOT NULL,
+            session_number INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
     """)
 
     # Migration: add progress/stage/error_message columns to uploads if missing
@@ -138,6 +146,10 @@ def init_db():
     # Migration: add doc_summary to uploads (document-level summary)
     if "doc_summary" not in upload_cols:
         conn.execute("ALTER TABLE uploads ADD COLUMN doc_summary TEXT")
+
+    # Migration: add chat_summary to uploads (stores summary after 10 exchanges)
+    if "chat_summary" not in upload_cols:
+        conn.execute("ALTER TABLE uploads ADD COLUMN chat_summary TEXT")
 
     # Seed a default user (placeholder until auth is implemented)
     conn.execute(

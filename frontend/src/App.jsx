@@ -13,6 +13,7 @@ import SignupPage from './pages/SignupPage'
 import MyBooksPage from './pages/MyBooksPage'
 import ProfilePage from './pages/ProfilePage'
 import LandingPage from './pages/LandingPage'
+import HelpPage from './pages/HelpPage'
 
 function App() {
   return (
@@ -26,6 +27,7 @@ function App() {
           <Route path="/flashcards" element={<FlashcardsPage />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/books" element={<MyBooksPage />} />
+          <Route path="/help" element={<HelpPage />} />
           <Route path="/profile" element={<ProfilePage />} />
         </Route>
       </Route>

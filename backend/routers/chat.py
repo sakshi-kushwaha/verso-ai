@@ -7,7 +7,7 @@ from database import get_db
 from auth import get_current_user
 from ws_auth import ws_authenticate
 from rag import retrieve_chunks
-from config import OLLAMA_HOST, LLM_MODEL, LLM_TIMEOUT, MAX_EXCHANGES_PER_DOC
+from config import OLLAMA_HOST, CHAT_MODEL, LLM_TIMEOUT, MAX_EXCHANGES_PER_DOC
 
 log = logging.getLogger(__name__)
 
@@ -50,6 +50,7 @@ class AskResponse(BaseModel):
     sources: list[str]
     exchange_count: int
     limit: int
+    summary: str | None = None
 
 class HistoryItem(BaseModel):
     id: int
@@ -132,17 +133,126 @@ def _get_user_preferences(user_id: int) -> dict:
         db.close()
 
 
-def _build_chat_prompt(question: str, chunks: list[dict], prefs: dict) -> str:
+MAX_HISTORY_CHARS = 2000  # Hard cap on conversation history to stay within context window
+
+GREETING_PATTERNS = {
+    "hi", "hello", "hey", "hola", "greetings", "good morning",
+    "good afternoon", "good evening", "howdy", "sup", "yo",
+    "what's up", "whats up", "thank you", "thanks", "thankyou",
+    "thank u", "thx", "ty", "bye", "goodbye", "see you",
+    "ok", "okay", "cool", "got it", "nice", "great",
+}
+
+
+THANKYOU_PATTERNS = {"thank you", "thanks", "thankyou", "thank u", "thx", "ty"}
+BYE_PATTERNS = {"bye", "goodbye", "see you"}
+ACKNOWLEDGEMENT_PATTERNS = {"ok", "okay", "cool", "got it", "nice", "great"}
+
+
+def _is_greeting(text: str) -> bool:
+    """Check if the message is a simple greeting/pleasantry (should not count as an exchange)."""
+    cleaned = text.lower().strip().rstrip("!?.,:;")
+    return cleaned in GREETING_PATTERNS
+
+
+def _get_greeting_reply(text: str, name: str) -> str:
+    """Return an appropriate reply based on the type of pleasantry."""
+    cleaned = text.lower().strip().rstrip("!?.,:;")
+    if cleaned in THANKYOU_PATTERNS:
+        return f"You're welcome, {name}! Got more questions? I'm here."
+    if cleaned in BYE_PATTERNS:
+        return f"Bye {name}! Come back anytime you need help."
+    if cleaned in ACKNOWLEDGEMENT_PATTERNS:
+        return "Anything else you'd like to know about this document?"
+    return f"Hey {name}! What are your questions about this document?"
+
+
+def _get_user_name(user_id: int) -> str:
+    """Get the user's display name for greeting responses."""
+    db = get_db()
+    try:
+        row = db.execute(
+            "SELECT display_name FROM user_preferences WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()
+        if row and row["display_name"]:
+            return row["display_name"]
+        row = db.execute(
+            "SELECT name FROM users WHERE id = ?", (user_id,)
+        ).fetchone()
+        return row["name"] if row else "there"
+    finally:
+        db.close()
+
+
+def _enrich_query(question: str, prior_exchanges: list[dict]) -> str:
+    """Enrich a vague follow-up question with context from the last exchange.
+
+    If the current question is short/vague (e.g. "explain more", "what about that"),
+    prepend the last question so RAG retrieval finds relevant chunks.
+    """
+    if not prior_exchanges:
+        return question
+    # Short or vague questions likely need context
+    words = question.lower().split()
+    vague_markers = {"more", "that", "this", "it", "those", "these", "above",
+                     "explain", "elaborate", "detail", "why", "how", "what"}
+    is_vague = len(words) <= 5 and any(w in vague_markers for w in words)
+    if is_vague:
+        last_q = prior_exchanges[-1]["user"]
+        return f"{last_q} {question}"
+    return question
+
+
+def _get_recent_exchanges(upload_id: int, limit: int = 3) -> list[dict]:
+    """Return the last `limit` exchanges for this upload, oldest-first."""
+    db = get_db()
+    try:
+        rows = db.execute(
+            "SELECT user_message, ai_response FROM chat_history "
+            "WHERE upload_id = ? ORDER BY created_at DESC LIMIT ?",
+            (upload_id, limit),
+        ).fetchall()
+        return [
+            {"user": row["user_message"], "ai": row["ai_response"]}
+            for row in reversed(rows)
+        ]
+    finally:
+        db.close()
+
+
+def _build_chat_prompt(
+    question: str,
+    chunks: list[dict],
+    prefs: dict,
+    prior_exchanges: list[dict] | None = None,
+) -> str:
     context = "\n\n".join(f"[{i+1}] {c['chunk']}" for i, c in enumerate(chunks))
     style = STYLE_INSTRUCTIONS.get(prefs["learning_style"], STYLE_INSTRUCTIONS["mixed"])
     depth = DEPTH_INSTRUCTIONS.get(prefs["content_depth"], DEPTH_INSTRUCTIONS["balanced"])
     use_case = USE_CASE_INSTRUCTIONS.get(prefs["use_case"], USE_CASE_INSTRUCTIONS["learning"])
 
-    return f"""You are a helpful learning assistant for Verso. Answer the user's question based on the provided context from their uploaded document. Always be helpful — if the question is broad (like "tell me about this" or "summarize"), provide an overview of the key topics covered in the context. Only say you can't answer if the context is completely unrelated to the question.
+    # Build conversation history section
+    history_section = ""
+    if prior_exchanges:
+        history_lines = []
+        for ex in prior_exchanges:
+            history_lines.append(f"Student: {ex['user']}")
+            ai_text = ex["ai"]
+            if len(ai_text) > 300:
+                ai_text = ai_text[:300] + "..."
+            history_lines.append(f"Verso: {ai_text}")
+        history_section = "\nPRIOR CONVERSATION:\n" + "\n".join(history_lines) + "\n"
+        if len(history_section) > MAX_HISTORY_CHARS:
+            history_section = history_section[:MAX_HISTORY_CHARS] + "\n[...conversation truncated]\n"
+
+    return f"""You are a helpful learning assistant for Verso. You MUST ONLY answer questions using the provided context from the user's uploaded document. If the question is broad (like "tell me about this" or "summarize"), provide an overview of the key topics covered in the context. If the question is NOT related to or answerable from the document context, respond with: "Oops! That doesn't seem to be covered in this document. Try asking something related to what's in your uploaded file!"
+
+If the user refers to something discussed earlier, use the prior conversation to maintain continuity.
 
 CONTEXT FROM DOCUMENT:
 {context}
-
+{history_section}
 ANSWER FORMAT RULES:
 {style}
 
@@ -164,10 +274,10 @@ async def _generate(prompt: str) -> str:
         resp = await client.post(
             f"{OLLAMA_HOST}/api/generate",
             json={
-                "model": LLM_MODEL,
+                "model": CHAT_MODEL,
                 "prompt": prompt,
                 "stream": False,
-                "options": {"num_ctx": 4096},
+                "options": {"num_ctx": 2048},
             },
             timeout=LLM_TIMEOUT,
         )
@@ -182,10 +292,10 @@ async def _generate_stream(prompt: str):
             "POST",
             f"{OLLAMA_HOST}/api/generate",
             json={
-                "model": LLM_MODEL,
+                "model": CHAT_MODEL,
                 "prompt": prompt,
                 "stream": True,
-                "options": {"num_ctx": 4096},
+                "options": {"num_ctx": 2048},
             },
             timeout=LLM_TIMEOUT,
         ) as resp:
@@ -222,6 +332,74 @@ def _save_exchange(
     finally:
         db.close()
 
+async def _generate_summary(upload_id: int) -> str:
+    """Generate a conversation summary, save it, and erase detailed history."""
+    db = get_db()
+    try:
+        rows = db.execute(
+            "SELECT user_message, ai_response FROM chat_history "
+            "WHERE upload_id = ? ORDER BY created_at ASC",
+            (upload_id,),
+        ).fetchall()
+    finally:
+        db.close()
+
+    if not rows:
+        return ""
+
+    conversation_lines = []
+    for i, row in enumerate(rows, 1):
+        conversation_lines.append(f"Q{i}: {row['user_message']}")
+        ai_text = row["ai_response"]
+        if len(ai_text) > 200:
+            ai_text = ai_text[:200] + "..."
+        conversation_lines.append(f"A{i}: {ai_text}")
+    conversation_text = "\n".join(conversation_lines)
+
+    summary_prompt = f"""Summarize this Q&A conversation about a document in 3-5 bullet points. Focus on the key topics discussed and main insights the student learned. Be concise.
+
+CONVERSATION:
+{conversation_text}
+
+SUMMARY (3-5 bullet points):"""
+
+    try:
+        summary = await _generate(summary_prompt)
+    except Exception:
+        summary = "Summary could not be generated."
+
+    db = get_db()
+    try:
+        # Get next session number
+        session_num = db.execute(
+            "SELECT COALESCE(MAX(session_number), 0) + 1 as next FROM chat_summaries WHERE upload_id = ?",
+            (upload_id,),
+        ).fetchone()["next"]
+
+        # Save to chat_summaries table (permanent, survives new sessions)
+        db.execute(
+            "INSERT INTO chat_summaries (upload_id, summary, session_number) VALUES (?, ?, ?)",
+            (upload_id, summary, session_num),
+        )
+
+        # Mark current session as complete
+        db.execute(
+            "UPDATE uploads SET chat_summary = ? WHERE id = ?",
+            (summary, upload_id),
+        )
+
+        # Delete chat history for this session
+        db.execute(
+            "DELETE FROM chat_history WHERE upload_id = ?",
+            (upload_id,),
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    return summary
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -230,19 +408,40 @@ def _save_exchange(
 async def ask(req: AskRequest, user: dict = Depends(get_current_user)):
     _verify_upload_ownership(req.upload_id, user["id"])
     _check_qa_ready(req.upload_id)
+
+    # Greetings don't count as an exchange
+    if _is_greeting(req.question):
+        name = _get_user_name(user["id"])
+        db = get_db()
+        try:
+            count = db.execute(
+                "SELECT COUNT(*) as cnt FROM chat_history WHERE upload_id = ?",
+                (req.upload_id,),
+            ).fetchone()["cnt"]
+        finally:
+            db.close()
+        return AskResponse(
+            answer=_get_greeting_reply(req.question, name),
+            sources=[],
+            exchange_count=count,
+            limit=MAX_EXCHANGES_PER_DOC,
+        )
+
     current_count = _check_exchange_limit(req.upload_id)
 
     prefs = _get_user_preferences(user["id"])
+    prior = _get_recent_exchanges(req.upload_id)
+    search_query = _enrich_query(req.question, prior)
 
     try:
-        chunks = await retrieve_chunks(req.question, req.upload_id)
+        chunks = await retrieve_chunks(search_query, req.upload_id)
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
 
     if not chunks:
         raise HTTPException(status_code=404, detail="No relevant content found in document")
 
-    prompt = _build_chat_prompt(req.question, chunks, prefs)
+    prompt = _build_chat_prompt(req.question, chunks, prefs, prior_exchanges=prior)
 
     try:
         answer = await _generate(prompt)
@@ -254,11 +453,20 @@ async def ask(req: AskRequest, user: dict = Depends(get_current_user)):
     sources = _build_sources(chunks)
     _save_exchange(req.upload_id, req.question, answer, sources)
 
+    new_count = current_count + 1
+    summary = None
+    if new_count >= MAX_EXCHANGES_PER_DOC:
+        try:
+            summary = await _generate_summary(req.upload_id)
+        except Exception as e:
+            log.error(f"Summary generation failed for upload {req.upload_id}: {e}")
+
     return AskResponse(
         answer=answer,
         sources=sources,
-        exchange_count=current_count + 1,
+        exchange_count=new_count,
         limit=MAX_EXCHANGES_PER_DOC,
+        summary=summary,
     )
 
 
@@ -292,7 +500,7 @@ async def chat_status(upload_id: int, user: dict = Depends(get_current_user)):
     db = get_db()
     try:
         upload = db.execute(
-            "SELECT qa_ready FROM uploads WHERE id = ?", (upload_id,)
+            "SELECT qa_ready, chat_summary FROM uploads WHERE id = ?", (upload_id,)
         ).fetchone()
         if upload is None:
             raise HTTPException(status_code=404, detail="Upload not found")
@@ -302,12 +510,72 @@ async def chat_status(upload_id: int, user: dict = Depends(get_current_user)):
             (upload_id,),
         ).fetchone()["cnt"]
 
+        has_summary = bool(upload["chat_summary"])
+        # If summary exists, history was cleared — report full limit used
+        effective_count = MAX_EXCHANGES_PER_DOC if has_summary else count
+
+        session_count = db.execute(
+            "SELECT COUNT(*) as cnt FROM chat_summaries WHERE upload_id = ?",
+            (upload_id,),
+        ).fetchone()["cnt"]
+
         return {
             "qa_ready": bool(upload["qa_ready"]),
-            "exchange_count": count,
+            "exchange_count": effective_count,
             "limit": MAX_EXCHANGES_PER_DOC,
-            "remaining": max(0, MAX_EXCHANGES_PER_DOC - count),
+            "remaining": max(0, MAX_EXCHANGES_PER_DOC - effective_count),
+            "has_summary": has_summary,
+            "session_number": session_count + 1,
         }
+    finally:
+        db.close()
+
+
+@router.get("/chat/summary/{upload_id}")
+async def get_summary(upload_id: int, user: dict = Depends(get_current_user)):
+    _verify_upload_ownership(upload_id, user["id"])
+    db = get_db()
+    try:
+        rows = db.execute(
+            "SELECT summary, session_number, created_at FROM chat_summaries "
+            "WHERE upload_id = ? ORDER BY session_number ASC",
+            (upload_id,),
+        ).fetchall()
+        # Also check uploads.chat_summary for legacy data (before chat_summaries table existed)
+        upload = db.execute(
+            "SELECT chat_summary FROM uploads WHERE id = ?", (upload_id,)
+        ).fetchone()
+        if upload is None:
+            raise HTTPException(status_code=404, detail="Upload not found")
+
+        summaries = [
+            {"summary": r["summary"], "session": r["session_number"], "created_at": r["created_at"]}
+            for r in rows
+        ]
+        # If uploads.chat_summary exists but no chat_summaries rows, include it as session 1
+        if not summaries and upload["chat_summary"]:
+            summaries = [{"summary": upload["chat_summary"], "session": 1, "created_at": None}]
+
+        return {"summaries": summaries}
+    finally:
+        db.close()
+
+
+@router.post("/chat/new-session/{upload_id}")
+async def new_session(upload_id: int, user: dict = Depends(get_current_user)):
+    _verify_upload_ownership(upload_id, user["id"])
+    db = get_db()
+    try:
+        row = db.execute(
+            "SELECT chat_summary FROM uploads WHERE id = ?", (upload_id,)
+        ).fetchone()
+        if not row or not row["chat_summary"]:
+            raise HTTPException(status_code=400, detail="No completed session to reset")
+        db.execute(
+            "UPDATE uploads SET chat_summary = NULL WHERE id = ?", (upload_id,)
+        )
+        db.commit()
+        return {"status": "ok", "remaining": MAX_EXCHANGES_PER_DOC}
     finally:
         db.close()
 
@@ -353,6 +621,28 @@ async def ws_chat(ws: WebSocket, upload_id: int):
                 await ws.send_text(json.dumps({"type": "error", "detail": "Empty question"}))
                 continue
 
+            # Greetings don't count as an exchange
+            if _is_greeting(question):
+                name = _get_user_name(user["id"])
+                greeting_reply = _get_greeting_reply(question, name)
+                await ws.send_text(json.dumps({"type": "stream_start", "sources": []}))
+                await ws.send_text(json.dumps({"type": "token", "content": greeting_reply}))
+                db = get_db()
+                try:
+                    cnt = db.execute(
+                        "SELECT COUNT(*) as cnt FROM chat_history WHERE upload_id = ?",
+                        (upload_id,),
+                    ).fetchone()["cnt"]
+                finally:
+                    db.close()
+                await ws.send_text(json.dumps({
+                    "type": "stream_end",
+                    "exchange_count": cnt,
+                    "limit": MAX_EXCHANGES_PER_DOC,
+                    "summary": None,
+                }))
+                continue
+
             # Check exchange limit
             db = get_db()
             try:
@@ -370,9 +660,13 @@ async def ws_chat(ws: WebSocket, upload_id: int):
                 }))
                 continue
 
-            # Retrieve chunks
+            # Retrieve chunks (enrich vague follow-ups with prior context)
+            prefs = _get_user_preferences(user["id"])
+            prior = _get_recent_exchanges(upload_id)
+            search_query = _enrich_query(question, prior)
+
             try:
-                chunks = await retrieve_chunks(question, upload_id)
+                chunks = await retrieve_chunks(search_query, upload_id)
             except Exception as e:
                 await ws.send_text(json.dumps({"type": "error", "detail": str(e)}))
                 continue
@@ -381,8 +675,7 @@ async def ws_chat(ws: WebSocket, upload_id: int):
                 await ws.send_text(json.dumps({"type": "error", "detail": "No relevant content found"}))
                 continue
 
-            prefs = _get_user_preferences(user["id"])
-            prompt = _build_chat_prompt(question, chunks, prefs)
+            prompt = _build_chat_prompt(question, chunks, prefs, prior_exchanges=prior)
             sources = _build_sources(chunks)
 
             await ws.send_text(json.dumps({"type": "stream_start", "sources": sources}))
@@ -400,10 +693,20 @@ async def ws_chat(ws: WebSocket, upload_id: int):
             answer = "".join(full_answer).strip()
             _save_exchange(upload_id, question, answer, sources)
 
+            new_count = count + 1
+            summary = None
+            if new_count >= MAX_EXCHANGES_PER_DOC:
+                await ws.send_text(json.dumps({"type": "generating_summary"}))
+                try:
+                    summary = await _generate_summary(upload_id)
+                except Exception as e:
+                    log.error(f"Summary generation failed for upload {upload_id}: {e}")
+
             await ws.send_text(json.dumps({
                 "type": "stream_end",
-                "exchange_count": count + 1,
+                "exchange_count": new_count,
                 "limit": MAX_EXCHANGES_PER_DOC,
+                "summary": summary,
             }))
 
     except WebSocketDisconnect:
