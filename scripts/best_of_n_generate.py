@@ -38,10 +38,6 @@ PREFERENCE_COMBOS = [
     {"learning_style": "auditory", "content_depth": "balanced", "use_case": "exam", "flashcard_difficulty": "medium"},
     {"learning_style": "reading", "content_depth": "detailed", "use_case": "research", "flashcard_difficulty": "hard"},
     {"learning_style": "mixed", "content_depth": "brief", "use_case": "work", "flashcard_difficulty": "easy"},
-    {"learning_style": "visual", "content_depth": "detailed", "use_case": "exam", "flashcard_difficulty": "hard"},
-    {"learning_style": "auditory", "content_depth": "brief", "use_case": "learning", "flashcard_difficulty": "easy"},
-    {"learning_style": "reading", "content_depth": "balanced", "use_case": "work", "flashcard_difficulty": "medium"},
-    {"learning_style": "mixed", "content_depth": "detailed", "use_case": "research", "flashcard_difficulty": "hard"},
 ]
 
 # Temperatures to vary per attempt for diversity
@@ -78,10 +74,14 @@ def load_db_reels(min_score: float) -> list:
 
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    rows = conn.execute(
-        "SELECT title, summary, narration, category, keywords, source_text "
-        "FROM reels WHERE source_text IS NOT NULL AND source_text != ''"
-    ).fetchall()
+    try:
+        rows = conn.execute(
+            "SELECT title, summary, narration, category, keywords, source_text "
+            "FROM reels WHERE source_text IS NOT NULL AND source_text != ''"
+        ).fetchall()
+    except sqlite3.OperationalError:
+        conn.close()
+        return []
     conn.close()
 
     gold = []

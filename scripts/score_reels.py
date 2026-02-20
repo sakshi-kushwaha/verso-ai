@@ -24,10 +24,15 @@ from evals import score_reel
 
 def main():
     conn = get_db()
-    rows = conn.execute(
-        "SELECT id, upload_id, title, summary, narration, category, keywords, source_text "
-        "FROM reels"
-    ).fetchall()
+    try:
+        rows = conn.execute(
+            "SELECT id, upload_id, title, summary, narration, category, keywords, source_text "
+            "FROM reels"
+        ).fetchall()
+    except Exception:
+        print("No reels table in DB yet. Run the pipeline on a document first.")
+        conn.close()
+        return
     conn.close()
 
     if not rows:
