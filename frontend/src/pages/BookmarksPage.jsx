@@ -4,7 +4,7 @@ import Tag from '../components/Tag'
 import { Bookmark, BookmarkFill, Cards } from '../components/Icons'
 import { Spinner, EmptyState } from '../components/StateScreens'
 
-const ACCENTS = ['#6366F1', '#8B5CF6', '#EC4899', '#F59E0B', '#10B981', '#3B82F6']
+const ACCENTS = ['#3B82F6', '#06B6D4', '#F472B6', '#F59E0B', '#10B981', '#8B5CF6']
 
 export default function BookmarksPage() {
   const { bookmarkItems, loadBookmarks, toggleBookmark } = useStore()

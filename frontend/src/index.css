@@ -2,18 +2,18 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #6366F1;
-  --color-primary-light: #818CF8;
-  --color-primary-dark: #4F46E5;
-  --color-secondary: #00CEC9;
+  --color-primary: #3B82F6;
+  --color-primary-light: #60A5FA;
+  --color-primary-dark: #2563EB;
+  --color-secondary: #06B6D4;
   --color-accent: #F472B6;
-  --color-bg: #0A0E27;
-  --color-surface: #151B3B;
-  --color-surface-alt: #1E2749;
+  --color-bg: #0A0F1A;
+  --color-surface: #111827;
+  --color-surface-alt: #1E293B;
   --color-text: #F8FAFC;
   --color-text-muted: #64748B;
   --color-text-secondary: #94A3B8;
-  --color-border: rgba(99, 102, 241, 0.08);
+  --color-border: rgba(59, 130, 246, 0.08);
   --color-danger: #EF4444;
   --color-success: #10B981;
   --color-warning: #F59E0B;
@@ -90,6 +90,43 @@
   40% { transform: scale(1); opacity: 1; }
 }
 
+/* Landing page background animations */
+@keyframes orbDrift1 {
+  0%   { transform: translate(0, 0) scale(1); }
+  25%  { transform: translate(80px, -120px) scale(1.1); }
+  50%  { transform: translate(-60px, -60px) scale(0.95); }
+  75%  { transform: translate(40px, 80px) scale(1.05); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+@keyframes orbDrift2 {
+  0%   { transform: translate(0, 0) scale(1); }
+  25%  { transform: translate(-100px, 60px) scale(1.08); }
+  50%  { transform: translate(70px, 100px) scale(0.92); }
+  75%  { transform: translate(-40px, -80px) scale(1.04); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+@keyframes orbDrift3 {
+  0%   { transform: translate(0, 0) scale(1); }
+  33%  { transform: translate(60px, 90px) scale(1.12); }
+  66%  { transform: translate(-90px, -40px) scale(0.9); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+@keyframes auroraShift {
+  0%   { background-position: 0% 50%; opacity: 0.4; }
+  50%  { background-position: 100% 50%; opacity: 0.6; }
+  100% { background-position: 0% 50%; opacity: 0.4; }
+}
+@keyframes particleRise {
+  0%   { transform: translateY(0) scale(1); opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { transform: translateY(-100vh) scale(0.5); opacity: 0; }
+}
+@keyframes gridPulse {
+  0%, 100% { opacity: 0.015; }
+  50%      { opacity: 0.04; }
+}
+
 body {
   margin: 0;
   font-family: var(--font-sans);
@@ -109,9 +146,9 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(99, 102, 241, 0.2);
+  background: rgba(59, 130, 246, 0.2);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(99, 102, 241, 0.4);
+  background: rgba(59, 130, 246, 0.4);
 }

@@ -46,16 +46,16 @@ function downloadBite(reel) {
     c.height = 640
 
     // Background
-    ctx.fillStyle = '#151B3B'
+    ctx.fillStyle = '#111827'
     ctx.fillRect(0, 0, 480, 640)
 
     // Top accent bar
-    ctx.fillStyle = reel.accent || '#6366F1'
+    ctx.fillStyle = reel.accent || '#3B82F6'
     ctx.fillRect(0, 0, 480, 3)
 
     // Category
     ctx.font = 'bold 13px sans-serif'
-    ctx.fillStyle = reel.accent || '#6366F1'
+    ctx.fillStyle = reel.accent || '#3B82F6'
     ctx.fillText(reel.category, 28, 40)
 
     // Page ref
@@ -412,7 +412,7 @@ export default function FeedPage() {
   const [initialSlide, setInitialSlide] = useState(0)
   const bookNavState = useRef(location.state)
 
-  const ACCENTS = ['#6366F1', '#8B5CF6', '#EC4899', '#F59E0B', '#10B981', '#3B82F6']
+  const ACCENTS = ['#3B82F6', '#06B6D4', '#F472B6', '#F59E0B', '#10B981', '#8B5CF6']
 
   const mapReel = (r, i) => ({
     id: r.id,

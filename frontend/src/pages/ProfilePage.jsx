@@ -57,9 +57,9 @@ export default function ProfilePage() {
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4 mb-6">
           {[
-            { label: 'Uploads', value: profile.total_uploads, color: '#6366F1' },
-            { label: 'Bites', value: profile.total_reels, color: '#8B5CF6' },
-            { label: 'Flashcards', value: profile.total_flashcards, color: '#EC4899' },
+            { label: 'Uploads', value: profile.total_uploads, color: '#3B82F6' },
+            { label: 'Bites', value: profile.total_reels, color: '#06B6D4' },
+            { label: 'Flashcards', value: profile.total_flashcards, color: '#F472B6' },
           ].map((stat, i) => (
             <div
               key={i}

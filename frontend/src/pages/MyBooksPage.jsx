@@ -6,7 +6,7 @@ import Button from '../components/Button'
 import { File, Upload, ArrowL, Cards, Chat, Volume, Pause, Play, Grid } from '../components/Icons'
 import { Spinner, ErrorState, EmptyState } from '../components/StateScreens'
 
-const ACCENTS = ['#6366F1', '#8B5CF6', '#EC4899', '#F59E0B', '#10B981', '#3B82F6']
+const ACCENTS = ['#3B82F6', '#06B6D4', '#F472B6', '#F59E0B', '#10B981', '#8B5CF6']
 
 function BookCard({ book, onClick }) {
   const statusColors = {

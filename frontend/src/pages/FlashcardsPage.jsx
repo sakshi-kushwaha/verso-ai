@@ -87,8 +87,8 @@ export default function FlashcardsPage() {
             style={{
               backfaceVisibility: 'hidden',
               transform: 'rotateY(180deg)',
-              background: 'linear-gradient(135deg, #1E2749, #151B3B)',
-              border: '1px solid rgba(99,102,241,0.15)',
+              background: 'linear-gradient(135deg, #1E293B, #111827)',
+              border: '1px solid rgba(59,130,246,0.15)',
             }}
           >
             <Tag color="#10B981" className="mb-4">Answer</Tag>
