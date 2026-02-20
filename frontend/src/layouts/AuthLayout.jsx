@@ -1,28 +1,39 @@
 import { Outlet } from 'react-router-dom'
-import { Logo } from '../components/Icons'
+import './AuthLayout.css'
+
+function VersoLogo({ id = 'vga', size = 36 }) {
+  return (
+    <svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg" width={size} height={size}>
+      <defs>
+        <linearGradient id={id} x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#00e5ff" />
+          <stop offset="100%" stopColor="#7c4dff" />
+        </linearGradient>
+      </defs>
+      <ellipse cx="20" cy="20" rx="18" ry="10" fill="none" stroke={`url(#${id})`} strokeWidth="1.2" opacity="0.5" transform="rotate(-20 20 20)" />
+      <path d="M10 10L20 32L30 10" fill="none" stroke={`url(#${id})`} strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" opacity="0.85" />
+      <circle cx="30.5" cy="11" r="3" fill={`url(#${id})`} />
+    </svg>
+  )
+}
 
 export default function AuthLayout() {
   return (
-    <div className="min-h-screen bg-bg flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background effects */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-primary-light/5 rounded-full blur-3xl" />
-        <div
-          className="absolute inset-0 opacity-[0.03]"
-          style={{
-            backgroundImage: 'linear-gradient(rgba(99,102,241,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(99,102,241,0.3) 1px, transparent 1px)',
-            backgroundSize: '60px 60px',
-          }}
-        />
+    <div className="auth-page">
+      <div className="orb-container">
+        <div className="orb orb-1" />
+        <div className="orb orb-2" />
+        <div className="orb orb-3" />
       </div>
+      <div className="grid-bg" />
 
-      <div className="w-full max-w-sm flex flex-col items-center gap-8 relative z-10 fade-up">
-        <div className="flex items-center gap-3">
-          <Logo size={36} />
-          <span className="text-2xl font-bold font-display tracking-tight">Verso</span>
+      <div className="login-container">
+        <div className="auth-logo-area">
+          <div className="auth-logo-icon"><VersoLogo /></div>
+          <div className="auth-logo-text">Verso <span>AI</span></div>
         </div>
-        <div className="w-full bg-surface rounded-2xl p-6 border border-border shadow-xl shadow-primary/5">
+
+        <div className="login-card">
           <Outlet />
         </div>
       </div>
