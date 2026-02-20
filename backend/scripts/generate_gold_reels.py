@@ -50,11 +50,15 @@ def load_gold_reels(path: str) -> list[dict]:
     return data
 
 
-def auto_select_segments(category: str, num: int = SEGMENTS_PER_REEL) -> list[dict]:
+def auto_select_segments(
+    category: str,
+    overlays: list[str] | None = None,
+    num: int = SEGMENTS_PER_REEL,
+) -> list[dict]:
     """Pick `num` random clips from the category's video catalog.
 
     Returns segment dicts compatible with compose_multi_clip_reel:
-        [{"type": "video", "clip": "07.mp4", "duration": 5}, ...]
+        [{"type": "video", "clip": "07.mp4", "duration": 5, "overlay": "text"}, ...]
     """
     clips = get_clips_for_category(category)
     if not clips:
@@ -66,7 +70,13 @@ def auto_select_segments(category: str, num: int = SEGMENTS_PER_REEL) -> list[di
 
     # Distribute duration roughly equally (compose_multi_clip_reel will rescale to TTS length)
     base_dur = 5.0
-    return [{"type": "video", "clip": c["file"], "duration": base_dur} for c in chosen]
+    segments = []
+    for i, c in enumerate(chosen):
+        seg = {"type": "video", "clip": c["file"], "duration": base_dur}
+        if overlays and i < len(overlays):
+            seg["overlay"] = overlays[i]
+        segments.append(seg)
+    return segments
 
 
 def ensure_gold_upload(conn) -> int:
@@ -125,10 +135,14 @@ def process_reel(reel: dict, index: int, upload_id: int, conn) -> bool:
 
     print(f"  [{index}] Processing: {title} ({category})")
 
-    # Auto-select clips from category
-    segments = reel.get("segments") or auto_select_segments(category)
+    # Auto-select clips from category, attaching overlay texts if present
+    overlays = reel.get("overlays", [])
+    segments = reel.get("segments") or auto_select_segments(category, overlays=overlays)
     clip_names = [s["clip"] for s in segments]
+    overlay_texts = [s.get("overlay", "") for s in segments]
     print(f"    Clips: {clip_names}")
+    if any(overlay_texts):
+        print(f"    Overlays: {overlay_texts}")
 
     # 1) TTS
     print(f"    TTS...", end=" ", flush=True)

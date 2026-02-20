@@ -207,6 +207,46 @@ def _prepare_image_segment(image_path: str, text: str, width: int, height: int,
     return out
 
 
+def _create_segment_overlay(text: str, width: int, height: int,
+                             tmpdir: str, index: int = 0) -> str:
+    """Create a transparent PNG overlay with gradient + centered text for a video segment.
+
+    Returns path to the overlay PNG in tmpdir.
+    """
+    img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    # Dark gradient at bottom 35% of frame
+    gradient_top = int(height * 0.55)
+    for y in range(gradient_top, height):
+        alpha = int(180 * (y - gradient_top) / (height - gradient_top))
+        draw.line([(0, y), (width, y)], fill=(0, 0, 0, alpha))
+
+    # Render text
+    font = _resolve_pillow_font(52)
+    margin = 60
+    max_text_width = width - margin * 2
+    lines = _wrap_text(text, font, max_text_width)
+
+    line_height = 66
+    total_text_height = len(lines) * line_height
+    text_y = int(height * 0.75) - total_text_height // 2
+
+    for line in lines:
+        bbox = font.getbbox(line)
+        text_w = bbox[2] - bbox[0]
+        text_x = (width - text_w) // 2
+        # Shadow
+        draw.text((text_x + 2, text_y + 2), line, font=font, fill=(0, 0, 0, 200))
+        # Main text
+        draw.text((text_x, text_y), line, font=font, fill=(255, 255, 255, 255))
+        text_y += line_height
+
+    out = os.path.join(tmpdir, f"overlay_{index}.png")
+    img.save(out, "PNG")
+    return out
+
+
 # Transition types cycled across xfade joins
 _XFADE_TRANSITIONS = ["fade", "fadeblack", "dissolve", "wipeleft", "slideup", "smoothleft"]
 
@@ -409,6 +449,8 @@ def compose_multi_clip_reel(
         # Build ffmpeg inputs — video clips or composited images
         inputs = []
         filter_parts = []
+        # Track overlay PNGs to add as inputs after all video/image inputs
+        overlay_inputs: list[tuple[int, str]] = []  # (segment_index, png_path)
 
         for i, seg in enumerate(segments):
             seg_type = seg.get("type", "video")
@@ -437,10 +479,34 @@ def compose_multi_clip_reel(
                 if not clip_path or not os.path.exists(clip_path):
                     raise FileNotFoundError(f"Clip not found: {seg.get('clip', '')}")
                 inputs.extend(["-stream_loop", "-1", "-t", f"{dur:.2f}", "-i", clip_path])
-                filter_parts.append(
-                    f"[{i}:v]scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase"
-                    f":flags=lanczos,crop={WIDTH}:{HEIGHT},setsar=1,fps={FPS},setpts=PTS-STARTPTS[v{i}]"
-                )
+
+                overlay_text = seg.get("overlay", "")
+                if overlay_text:
+                    # Render overlay PNG; composite after scaling
+                    png_path = _create_segment_overlay(
+                        overlay_text, WIDTH, HEIGHT, tmpdir, index=i,
+                    )
+                    overlay_inputs.append((i, png_path))
+                    filter_parts.append(
+                        f"[{i}:v]scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase"
+                        f":flags=lanczos,crop={WIDTH}:{HEIGHT},setsar=1,fps={FPS},"
+                        f"setpts=PTS-STARTPTS[v{i}_raw]"
+                    )
+                else:
+                    filter_parts.append(
+                        f"[{i}:v]scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase"
+                        f":flags=lanczos,crop={WIDTH}:{HEIGHT},setsar=1,fps={FPS},setpts=PTS-STARTPTS[v{i}]"
+                    )
+
+        # Add overlay PNG inputs and composite filters
+        next_input_idx = n  # video/image inputs used indices 0..n-1
+        for seg_i, png_path in overlay_inputs:
+            ov_idx = next_input_idx
+            inputs.extend(["-loop", "1", "-t", f"{durations[seg_i]:.2f}", "-i", png_path])
+            filter_parts.append(
+                f"[v{seg_i}_raw][{ov_idx}:v]overlay=0:0:format=auto[v{seg_i}]"
+            )
+            next_input_idx += 1
 
         # Chain xfade transitions
         if n == 1:
@@ -462,7 +528,7 @@ def compose_multi_clip_reel(
 
         # Audio pipeline
         audio_layers = []
-        audio_idx = n  # video/image inputs used indices 0..n-1
+        audio_idx = next_input_idx  # after video + overlay inputs
 
         if tts_audio_path and os.path.exists(tts_audio_path):
             inputs.extend(["-i", tts_audio_path])
