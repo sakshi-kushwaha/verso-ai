@@ -734,12 +734,43 @@ def compose_multi_clip_reel(
                 )
                 last_label = out_label
 
+        # Word-synced narration overlays (integrated into single pass)
+        if narration:
+            words = narration.split()
+            wpg = 4  # words per group
+            groups = [" ".join(words[i:i + wpg]) for i in range(0, len(words), wpg)]
+            total_words = len(words)
+            start_pad, end_pad = 0.3, 0.5
+            usable = TOTAL_DURATION - start_pad - end_pad
+            if usable < 1:
+                usable, start_pad = TOTAL_DURATION, 0
+            tpw = usable / total_words  # time per word
+            style_idx = reel_id % len(_TEXT_STYLES)
+            w_offset = 0
+            for gi, grp in enumerate(groups):
+                gcnt = len(grp.split())
+                t0 = start_pad + w_offset * tpw
+                t1 = start_pad + (w_offset + gcnt) * tpw
+                png = _create_word_group_png(grp, WIDTH, HEIGHT, tmpdir, gi,
+                                             style_idx=style_idx)
+                ov_idx = next_input_idx
+                inputs.extend(["-i", png])
+                out_lbl = f"wt{gi}"
+                filter_parts.append(
+                    f"[{last_label}][{ov_idx}:v]overlay=0:0"
+                    f":enable='between(t,{t0:.3f},{t1:.3f})'"
+                    f":format=auto[{out_lbl}]"
+                )
+                last_label = out_lbl
+                next_input_idx += 1
+                w_offset += gcnt
+
         # Final video output label
         filter_parts.append(f"[{last_label}]null[vout]")
 
         # Audio pipeline
         audio_layers = []
-        audio_idx = next_input_idx  # after video + overlay inputs
+        audio_idx = next_input_idx  # after video + word overlay inputs
 
         if tts_audio_path and os.path.exists(tts_audio_path):
             inputs.extend(["-i", tts_audio_path])
@@ -790,13 +821,5 @@ def compose_multi_clip_reel(
         ]
 
         subprocess.run(cmd, check=True, capture_output=True, timeout=FFMPEG_ENCODE_TIMEOUT)
-
-        # Second pass: burn word-synced narration text onto the video
-        if narration:
-            text_video = _burn_word_sync(out_path, narration, TOTAL_DURATION, tmpdir,
-                                                reel_id=reel_id)
-            if text_video != out_path:
-                import shutil
-                shutil.move(text_video, out_path)
 
     return out_path
