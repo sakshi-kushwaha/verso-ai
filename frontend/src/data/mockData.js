@@ -6,7 +6,7 @@ export const REELS = [
     pages: '1-4',
     body: 'Neural networks were inspired by the biological neural networks in the human brain. The perceptron, invented in 1958 by Frank Rosenblatt, was the first algorithmically described neural network. It consisted of a single layer of output nodes connected to inputs through weights. Despite initial excitement, the limitations of single-layer perceptrons led to a period known as the "AI winter." It wasn\'t until the development of backpropagation and multi-layer networks in the 1980s that the field was revitalized.',
     keywords: ['Perceptron', 'Backpropagation', 'AI Winter', 'Rosenblatt'],
-    accent: '#6366F1',
+    accent: '#3B82F6',
   },
   {
     id: 2,

@@ -11,6 +11,15 @@ const features = [
   { icon: Chat, title: 'Smart Chat', desc: 'Chat with AI about your documents to deepen understanding.' },
 ]
 
+const PARTICLES = Array.from({ length: 20 }, (_, i) => ({
+  id: i,
+  left: `${Math.random() * 100}%`,
+  size: 2 + Math.random() * 3,
+  duration: 8 + Math.random() * 12,
+  delay: Math.random() * 10,
+  opacity: 0.3 + Math.random() * 0.5,
+}))
+
 export default function LandingPage() {
   const token = useStore((s) => s.token)
   const [splashDone, setSplashDone] = useState(false)
@@ -22,17 +31,69 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-bg text-text relative overflow-hidden">
-      {/* Background effects */}
+      {/* Animated background */}
       <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-20 left-1/4 w-[600px] h-[600px] bg-primary/5 rounded-full blur-[100px]" />
-        <div className="absolute bottom-20 right-1/4 w-[400px] h-[400px] bg-primary-light/5 rounded-full blur-[100px]" />
+
+        {/* Floating gradient orbs */}
         <div
-          className="absolute inset-0 opacity-[0.02]"
+          className="absolute w-[500px] h-[500px] rounded-full blur-[120px] opacity-[0.07]"
           style={{
-            backgroundImage: 'linear-gradient(rgba(99,102,241,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(99,102,241,0.3) 1px, transparent 1px)',
-            backgroundSize: '60px 60px',
+            top: '5%', left: '15%',
+            background: 'radial-gradient(circle, #3B82F6, #2563EB 60%, transparent 70%)',
+            animation: 'orbDrift1 20s ease-in-out infinite',
           }}
         />
+        <div
+          className="absolute w-[400px] h-[400px] rounded-full blur-[100px] opacity-[0.06]"
+          style={{
+            top: '50%', right: '10%',
+            background: 'radial-gradient(circle, #06B6D4, #0891B2 60%, transparent 70%)',
+            animation: 'orbDrift2 25s ease-in-out infinite',
+          }}
+        />
+        <div
+          className="absolute w-[350px] h-[350px] rounded-full blur-[90px] opacity-[0.05]"
+          style={{
+            bottom: '10%', left: '40%',
+            background: 'radial-gradient(circle, #F472B6, #EC4899 60%, transparent 70%)',
+            animation: 'orbDrift3 18s ease-in-out infinite',
+          }}
+        />
+
+        {/* Aurora gradient band */}
+        <div
+          className="absolute top-0 left-0 w-full h-full opacity-40"
+          style={{
+            background: 'linear-gradient(120deg, transparent 20%, rgba(59,130,246,0.04) 35%, rgba(6,182,212,0.03) 50%, rgba(244,114,182,0.03) 65%, transparent 80%)',
+            backgroundSize: '200% 200%',
+            animation: 'auroraShift 15s ease-in-out infinite',
+          }}
+        />
+
+        {/* Animated grid */}
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage: 'linear-gradient(rgba(59,130,246,0.25) 1px, transparent 1px), linear-gradient(90deg, rgba(59,130,246,0.25) 1px, transparent 1px)',
+            backgroundSize: '60px 60px',
+            animation: 'gridPulse 8s ease-in-out infinite',
+          }}
+        />
+
+        {/* Rising particles */}
+        {PARTICLES.map((p) => (
+          <div
+            key={p.id}
+            className="absolute bottom-0 rounded-full bg-primary-light"
+            style={{
+              left: p.left,
+              width: p.size,
+              height: p.size,
+              opacity: p.opacity,
+              animation: `particleRise ${p.duration}s linear ${p.delay}s infinite`,
+            }}
+          />
+        ))}
       </div>
 
       {/* Nav */}
