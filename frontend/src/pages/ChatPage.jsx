@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Send, Sparkle, ChevDown } from '../components/Icons'
-import { askChat, getChatHistory, getChatStatus, getUploads } from '../api'
+import { useSearchParams } from 'react-router-dom'
+import { Send, Sparkle, ChevDown, Mic, MicOff } from '../components/Icons'
+import { askChat, getChatHistory, getChatStatus, getChatSummary, getUploads, startNewChatSession } from '../api'
 import { getWsBaseUrl, getAuthToken } from '../api/ws'
 
 export default function ChatPage() {
+  const [searchParams] = useSearchParams()
   const [messages, setMessages] = useState([
     { role: 'ai', text: "Hi! I'm Verso AI. Select a document above to start chatting.", sources: [] },
   ])
@@ -13,8 +15,15 @@ export default function ChatPage() {
   const [uploadId, setUploadId] = useState(null)
   const [qaReady, setQaReady] = useState(false)
   const [remaining, setRemaining] = useState(null)
+  const [limit, setLimit] = useState(null)
+  const [summary, setSummary] = useState(null)
+  const [pastSummaries, setPastSummaries] = useState([])
+  const [listening, setListening] = useState(false)
   const endRef = useRef(null)
+  const recognitionRef = useRef(null)
   const wsRef = useRef(null)
+  const pendingSourcesRef = useRef([])
+  const streamingRef = useRef(false)
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -25,7 +34,12 @@ export default function ChatPage() {
     getUploads()
       .then((list) => {
         setUploads(list)
-        if (list.length > 0) setUploadId(list[0].id)
+        const paramId = Number(searchParams.get('upload'))
+        if (paramId && list.some((u) => u.id === paramId)) {
+          setUploadId(paramId)
+        } else if (list.length > 0) {
+          setUploadId(list[0].id)
+        }
       })
       .catch(() => {})
   }, [])
@@ -49,19 +63,36 @@ export default function ChatPage() {
         try {
           const msg = JSON.parse(evt.data)
           if (msg.type === 'stream_start') {
-            setTyping(false)
-            setMessages((prev) => [...prev, { role: 'ai', text: '', sources: msg.sources || [] }])
+            // Store sources but don't show bubble yet — wait for first token
+            pendingSourcesRef.current = msg.sources || []
+            streamingRef.current = false
           } else if (msg.type === 'token') {
-            setMessages((prev) => {
-              const updated = [...prev]
-              const last = updated[updated.length - 1]
-              if (last && last.role === 'ai') {
-                updated[updated.length - 1] = { ...last, text: last.text + msg.content }
-              }
-              return updated
-            })
+            if (!streamingRef.current) {
+              // First token: create the AI bubble and hide typing dots
+              streamingRef.current = true
+              setTyping(false)
+              setMessages((prev) => [...prev, { role: 'ai', text: msg.content, sources: pendingSourcesRef.current }])
+            } else {
+              // Subsequent tokens: append to last message
+              setMessages((prev) => {
+                const updated = [...prev]
+                const last = updated[updated.length - 1]
+                if (last && last.role === 'ai') {
+                  updated[updated.length - 1] = { ...last, text: last.text + msg.content }
+                }
+                return updated
+              })
+            }
+          } else if (msg.type === 'generating_summary') {
+            setTyping(true)
           } else if (msg.type === 'stream_end') {
-            setRemaining(msg.limit - msg.exchange_count)
+            setTyping(false)
+            const newRemaining = msg.limit - msg.exchange_count
+            setRemaining(newRemaining)
+            setLimit(msg.limit)
+            if (msg.summary) {
+              setSummary(msg.summary)
+            }
           } else if (msg.type === 'error') {
             setTyping(false)
             setMessages((prev) => [
@@ -86,30 +117,55 @@ export default function ChatPage() {
     const doc = uploads.find((u) => u.id === uploadId)
     const name = doc?.filename || 'Document'
 
-    getChatStatus(uploadId)
-      .then((s) => {
-        setQaReady(s.qa_ready)
-        setRemaining(s.remaining)
-        if (s.qa_ready) connectChatWs(uploadId)
-      })
-      .catch(() => setQaReady(false))
+    const loadChat = async () => {
+      try {
+        const status = await getChatStatus(uploadId)
+        setQaReady(status.qa_ready)
+        setRemaining(status.remaining)
+        setLimit(status.limit)
 
-    getChatHistory(uploadId)
-      .then((history) => {
+        let summaryText = null
+        try {
+          const res = await getChatSummary(uploadId)
+          const allSummaries = res.summaries || []
+          setPastSummaries(status.has_summary ? allSummaries.slice(0, -1) : allSummaries)
+          if (status.has_summary && allSummaries.length > 0) {
+            summaryText = allSummaries[allSummaries.length - 1].summary
+            setSummary(summaryText)
+          } else {
+            setSummary(null)
+          }
+        } catch {
+          setPastSummaries([])
+          setSummary(null)
+        }
+
+        if (status.qa_ready) connectChatWs(uploadId)
+
+        const history = await getChatHistory(uploadId)
         const restored = history.flatMap((h) => [
           { role: 'user', text: h.user_message },
           { role: 'ai', text: h.ai_response, sources: h.sources },
         ])
+
+        if (restored.length === 0 && summaryText) {
+          setMessages([
+            { role: 'ai', text: `Here's a summary of your conversation about ${name}:`, sources: [] },
+          ])
+        } else {
+          setMessages([
+            { role: 'ai', text: `Ask me anything about ${name}!`, sources: [] },
+            ...restored,
+          ])
+        }
+      } catch {
         setMessages([
           { role: 'ai', text: `Ask me anything about ${name}!`, sources: [] },
-          ...restored,
         ])
-      })
-      .catch(() => {
-        setMessages([
-          { role: 'ai', text: `Ask me anything about ${name}!`, sources: [] },
-        ])
-      })
+      }
+    }
+
+    loadChat()
 
     return () => {
       if (wsRef.current) { try { wsRef.current.close() } catch {} }
@@ -134,6 +190,10 @@ export default function ChatPage() {
         { role: 'ai', text: res.answer, sources: res.sources },
       ])
       setRemaining(res.limit - res.exchange_count)
+      setLimit(res.limit)
+      if (res.summary) {
+        setSummary(res.summary)
+      }
     } catch (err) {
       const detail = err.response?.data?.detail || 'Something went wrong. Please try again.'
       setMessages((prev) => [
@@ -143,6 +203,45 @@ export default function ChatPage() {
     } finally {
       setTyping(false)
     }
+  }
+
+  const toggleListening = () => {
+    if (listening) {
+      recognitionRef.current?.stop()
+      return
+    }
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SpeechRecognition) return
+    const recognition = new SpeechRecognition()
+    recognition.lang = 'en-US'
+    recognition.interimResults = false
+    recognition.continuous = false
+    recognition.onresult = (e) => {
+      const transcript = e.results[0][0].transcript
+      setInput((prev) => prev ? `${prev} ${transcript}` : transcript)
+    }
+    recognition.onend = () => setListening(false)
+    recognition.onerror = () => setListening(false)
+    recognitionRef.current = recognition
+    recognition.start()
+    setListening(true)
+  }
+
+  const handleNewSession = async () => {
+    if (!uploadId) return
+    try {
+      await startNewChatSession(uploadId)
+      // Move current summary to past summaries
+      if (summary) {
+        setPastSummaries((prev) => [...prev, { summary, session: prev.length + 1 }])
+      }
+      setSummary(null)
+      setRemaining(limit)
+      const doc = uploads.find((u) => u.id === uploadId)
+      const name = doc?.filename || 'Document'
+      setMessages([{ role: 'ai', text: `Ask me anything about ${name}!`, sources: [] }])
+      connectChatWs(uploadId)
+    } catch {}
   }
 
   const send = async () => {
@@ -166,6 +265,7 @@ export default function ChatPage() {
   }
 
   const inputDisabled = !uploadId || !qaReady || (remaining !== null && remaining <= 0)
+  const used = limit && remaining !== null ? limit - remaining : 0
 
   return (
     <div className="flex flex-col h-screen">
@@ -193,13 +293,39 @@ export default function ChatPage() {
             <p className="text-text-muted text-xs">No documents uploaded yet</p>
           )}
         </div>
-        {remaining !== null && (
-          <span className="text-[10px] text-text-muted whitespace-nowrap">{remaining} left</span>
+        {remaining !== null && limit !== null && (
+          <div className="flex flex-col items-end gap-1">
+            <span className={`text-xs font-semibold whitespace-nowrap ${
+              remaining <= 0 ? 'text-danger' : remaining <= 2 ? 'text-warning' : 'text-text-secondary'
+            }`}>
+              {remaining > 0 ? `${remaining} of ${limit} left` : 'Completed'}
+            </span>
+            <div className="w-24 h-1.5 bg-surface-alt rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${
+                  remaining <= 0 ? 'bg-danger' : remaining <= 2 ? 'bg-warning' : 'bg-primary'
+                }`}
+                style={{ width: `${(used / limit) * 100}%` }}
+              />
+            </div>
+          </div>
         )}
       </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        {pastSummaries.length > 0 && (
+          <div className="space-y-2 mb-2">
+            {pastSummaries.map((s, i) => (
+              <details key={i} className="bg-surface border border-border rounded-lg">
+                <summary className="px-3 py-2 text-xs text-text-muted cursor-pointer hover:text-text-secondary">
+                  Session {s.session} Summary
+                </summary>
+                <p className="px-3 pb-3 text-sm text-text-secondary leading-relaxed whitespace-pre-line">{s.summary}</p>
+              </details>
+            ))}
+          </div>
+        )}
         {messages.map((msg, i) => (
           <div
             key={i}
@@ -216,15 +342,6 @@ export default function ChatPage() {
               }`}
             >
               {msg.text}
-              {msg.sources?.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-2 pt-2 border-t border-border">
-                  {msg.sources.map((s, j) => (
-                    <span key={j} className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary-light font-mono">
-                      {s}
-                    </span>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
         ))}
@@ -251,7 +368,29 @@ export default function ChatPage() {
           <p className="text-xs text-warning mb-2">Document is still processing. Chat will be available once complete.</p>
         )}
         {remaining !== null && remaining <= 0 && (
-          <p className="text-xs text-text-muted mb-2">Exchange limit reached for this document.</p>
+          <div className="mb-3">
+            {summary ? (
+              <div className="bg-surface border border-primary/20 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Sparkle />
+                  <span className="text-sm font-semibold text-primary-light">Conversation Summary</span>
+                </div>
+                <p className="text-sm text-text-secondary leading-relaxed whitespace-pre-line">
+                  {summary}
+                </p>
+                <button
+                  onClick={handleNewSession}
+                  className="mt-3 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors cursor-pointer"
+                >
+                  Start New Chat
+                </button>
+              </div>
+            ) : (
+              <p className="text-xs text-text-muted">
+                All {limit} questions used for this document.
+              </p>
+            )}
+          </div>
         )}
         <div className={`flex items-center gap-3 bg-surface-alt rounded-xl px-4 py-2 border border-border ${inputDisabled ? 'opacity-50' : ''}`}>
           <input
@@ -262,6 +401,16 @@ export default function ChatPage() {
             disabled={inputDisabled}
             className="flex-1 bg-transparent outline-none text-sm text-text placeholder:text-text-muted/50 disabled:cursor-not-allowed"
           />
+          {!inputDisabled && (
+            <button
+              onClick={toggleListening}
+              className={`p-2 rounded-lg transition-all cursor-pointer ${
+                listening ? 'bg-danger text-white animate-pulse' : 'text-text-muted hover:text-primary'
+              }`}
+            >
+              {listening ? <MicOff /> : <Mic />}
+            </button>
+          )}
           <button
             onClick={send}
             disabled={inputDisabled || !input.trim()}

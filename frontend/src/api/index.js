@@ -108,7 +108,17 @@ export async function getChatHistory(uploadId) {
 
 export async function getChatStatus(uploadId) {
   const { data } = await api.get(`/chat/status/${uploadId}`)
-  return data // { qa_ready, exchange_count, limit, remaining }
+  return data // { qa_ready, exchange_count, limit, remaining, has_summary }
+}
+
+export async function getChatSummary(uploadId) {
+  const { data } = await api.get(`/chat/summary/${uploadId}`)
+  return data // { summaries: [{ summary, session, created_at }] }
+}
+
+export async function startNewChatSession(uploadId) {
+  const { data } = await api.post(`/chat/new-session/${uploadId}`)
+  return data // { status, remaining }
 }
 
 // --- Document Summary ---
