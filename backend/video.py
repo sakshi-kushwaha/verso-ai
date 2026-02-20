@@ -21,7 +21,7 @@ HEIGHT = 1920
 
 # Duration bounds (seconds) — video length adapts to narration
 MIN_DURATION = 10
-MAX_DURATION = 30
+MAX_DURATION = 60
 DEFAULT_DURATION = 15
 
 # Per-category ambient music: (base_freq, wave_type)
@@ -439,7 +439,7 @@ def compose_multi_clip_reel(
                 inputs.extend(["-stream_loop", "-1", "-t", f"{dur:.2f}", "-i", clip_path])
                 filter_parts.append(
                     f"[{i}:v]scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase"
-                    f":flags=lanczos,crop={WIDTH}:{HEIGHT},setsar=1,setpts=PTS-STARTPTS[v{i}]"
+                    f":flags=lanczos,crop={WIDTH}:{HEIGHT},setsar=1,fps={FPS},setpts=PTS-STARTPTS[v{i}]"
                 )
 
         # Chain xfade transitions
