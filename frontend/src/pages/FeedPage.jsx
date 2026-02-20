@@ -28,10 +28,10 @@ function wrapCanvasText(ctx, text, x, y, maxW, lineH) {
   return y + lineH
 }
 
-function downloadBite(reel) {
+function downloadBite(reel, isGradient = false) {
   const safeName = reel.title.replace(/[^a-zA-Z0-9 ]/g, '').trim() || 'bite'
 
-  if (reel.videoUrl) {
+  if (reel.videoUrl && !isGradient) {
     // Video bite — backend burns text overlay via ffmpeg
     const baseURL = api.defaults.baseURL || ''
     const a = document.createElement('a')
@@ -45,17 +45,19 @@ function downloadBite(reel) {
     c.width = 480
     c.height = 640
 
-    // Background
+    // Background — dark with subtle accent tint
     ctx.fillStyle = '#111827'
     ctx.fillRect(0, 0, 480, 640)
 
-    // Top accent bar
-    ctx.fillStyle = reel.accent || '#3B82F6'
-    ctx.fillRect(0, 0, 480, 3)
+    if (!isGradient) {
+      // Top accent bar for plain text cards
+      ctx.fillStyle = reel.accent || '#3B82F6'
+      ctx.fillRect(0, 0, 480, 3)
+    }
 
     // Category
     ctx.font = 'bold 13px sans-serif'
-    ctx.fillStyle = reel.accent || '#3B82F6'
+    ctx.fillStyle = isGradient ? 'rgba(255,255,255,0.85)' : (reel.accent || '#3B82F6')
     ctx.fillText(reel.category, 28, 40)
 
     // Page ref
@@ -72,10 +74,10 @@ function downloadBite(reel) {
 
     // Separator
     y += 8
-    ctx.strokeStyle = 'rgba(255,255,255,0.1)'
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)'
     ctx.beginPath()
     ctx.moveTo(28, y)
-    ctx.lineTo(452, y)
+    ctx.lineTo(isGradient ? 92 : 452, y)
     ctx.stroke()
     y += 16
 
@@ -88,7 +90,10 @@ function downloadBite(reel) {
     y += 16
     ctx.font = '12px sans-serif'
     ctx.fillStyle = '#64748B'
-    ctx.fillText(`Keywords: ${reel.keywords.join(', ')}`, 28, y)
+    const kwText = isGradient
+      ? reel.keywords.map((kw) => '#' + kw.replace(/\s+/g, '')).join('  ')
+      : `Keywords: ${reel.keywords.join(', ')}`
+    ctx.fillText(kwText, 28, y)
 
     c.toBlob((blob) => {
       const url = URL.createObjectURL(blob)
@@ -393,6 +398,115 @@ function ReelCard({ reel, index, total }) {
   )
 }
 
+function GradientPostCard({ reel, index, total, isActive }) {
+  const { bookmarks, toggleBookmark } = useStore()
+  const saved = bookmarks.has(reel.id)
+  const [animKey, setAnimKey] = useState(0)
+
+  // Replay staggered animations when slide becomes active
+  useEffect(() => {
+    if (isActive) setAnimKey((k) => k + 1)
+  }, [isActive])
+
+  // Always use a stock image — pick from general category if reel has no bg_image
+  const baseURL = api.defaults.baseURL || ''
+  const bgUrl = reel.bgImage
+    || `${baseURL}/bg-images/general/${String((reel.id % 10) + 1).padStart(2, '0')}.jpg`
+
+  return (
+    <div className="flex items-center justify-center h-full bg-black">
+      <div className="relative w-full max-w-[480px] h-full overflow-hidden flex flex-col bg-[#0A0F1A]">
+        {/* Stock image background */}
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: `url(${bgUrl})` }}
+        />
+        {/* Dark gradient overlay for text readability */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black/80" />
+        {/* Dot pattern overlay (subtle texture) */}
+        <div
+          className="absolute inset-0 gradient-shimmer pointer-events-none"
+          style={{
+            backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.08) 1px, transparent 1px)',
+            backgroundSize: '24px 24px',
+          }}
+        />
+
+        {/* Content */}
+        <div className="relative z-10 flex flex-col h-full p-6 md:p-8">
+          {/* Title */}
+          <h2
+            key={`t-${animKey}`}
+            className="text-2xl md:text-3xl font-bold font-display leading-tight text-white line-clamp-3 mb-4"
+            style={{
+              opacity: isActive ? 1 : 0,
+              animation: isActive ? 'fadeUp 0.5s ease-out both' : 'none',
+              animationDelay: '100ms',
+            }}
+          >
+            {reel.title}
+          </h2>
+
+          {/* Separator */}
+          <div
+            key={`s-${animKey}`}
+            className="w-16 h-px bg-white/25 mb-4"
+            style={{
+              opacity: isActive ? 1 : 0,
+              animation: isActive ? 'fadeUp 0.5s ease-out both' : 'none',
+              animationDelay: '200ms',
+            }}
+          />
+
+          {/* Body */}
+          <div
+            key={`b-${animKey}`}
+            className="flex-1 min-h-0"
+            style={{
+              opacity: isActive ? 1 : 0,
+              animation: isActive ? 'fadeUp 0.5s ease-out both' : 'none',
+              animationDelay: '300ms',
+            }}
+          >
+            <p className="text-sm md:text-base leading-relaxed text-white/75 line-clamp-5">
+              {reel.body}
+            </p>
+          </div>
+
+          {/* Action bar */}
+          <div
+            key={`a-${animKey}`}
+            className="flex items-center gap-3 mt-6 pt-4 border-t border-white/10"
+            style={{
+              opacity: isActive ? 1 : 0,
+              animation: isActive ? 'slideUp 0.3s ease-out both' : 'none',
+              animationDelay: '400ms',
+            }}
+          >
+            <button
+              onClick={() => downloadBite(reel, true)}
+              className="flex items-center gap-1.5 px-4 py-2.5 rounded-full text-sm font-medium transition-colors cursor-pointer bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white/80"
+            >
+              <Download />
+              Download
+            </button>
+            <button
+              onClick={() => toggleBookmark(reel.id)}
+              className={`flex items-center gap-1.5 px-3 py-2.5 rounded-full text-sm font-medium transition-colors cursor-pointer ${
+                saved
+                  ? 'bg-white/20 text-white'
+                  : 'bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white/80'
+              }`}
+            >
+              {saved ? <BookmarkFill /> : <Bookmark />}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const TABS = [
   { id: 'all', label: 'All' },
   { id: 'explore', label: 'Explore' },
@@ -574,15 +688,20 @@ export default function FeedPage() {
           swiper.allowSlideNext = swiper.activeIndex < reels.length - 1
         }}
       >
-        {reels.map((reel, i) => (
-          <SwiperSlide key={reel.id}>
-            {reel.videoUrl && !failedVideos.has(reel.id) ? (
-              <VideoReelCard reel={reel} index={i} total={reels.length} isActive={i === activeIndex} onVideoError={(id) => setFailedVideos(prev => new Set(prev).add(id))} />
-            ) : (
-              <ReelCard reel={reel} index={i} total={reels.length} />
-            )}
-          </SwiperSlide>
-        ))}
+        {reels.map((reel, i) => {
+          const showAsCard = (i + 1) % 4 === 0
+          return (
+            <SwiperSlide key={reel.id}>
+              {showAsCard ? (
+                <GradientPostCard reel={reel} index={i} total={reels.length} isActive={i === activeIndex} />
+              ) : reel.videoUrl && !failedVideos.has(reel.id) ? (
+                <VideoReelCard reel={reel} index={i} total={reels.length} isActive={i === activeIndex} onVideoError={(id) => setFailedVideos(prev => new Set(prev).add(id))} />
+              ) : (
+                <ReelCard reel={reel} index={i} total={reels.length} />
+              )}
+            </SwiperSlide>
+          )
+        })}
 
         {/* Swiper needs this slide to initialize — scroll guard prevents reaching it */}
         <SwiperSlide>
