@@ -1,7 +1,24 @@
-import { Outlet, NavLink } from 'react-router-dom'
+import { Outlet, NavLink, Link } from 'react-router-dom'
 import useStore from '../store/useStore'
 import UploadTracker from '../components/UploadTracker'
-import { Logo, Home, Bookmark, Upload, User, Book, Help } from '../components/Icons'
+import { Home, Bookmark, Upload, User, Book, Help } from '../components/Icons'
+import './MainLayout.css'
+
+function VersoLogo({ id = 'vg-ml' }) {
+  return (
+    <svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id={id} x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#00e5ff" />
+          <stop offset="100%" stopColor="#7c4dff" />
+        </linearGradient>
+      </defs>
+      <ellipse cx="20" cy="20" rx="18" ry="10" fill="none" stroke={`url(#${id})`} strokeWidth="1.2" opacity="0.5" transform="rotate(-20 20 20)" />
+      <path d="M10 10L20 32L30 10" fill="none" stroke={`url(#${id})`} strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" opacity="0.85" />
+      <circle cx="30.5" cy="11" r="3" fill={`url(#${id})`} />
+    </svg>
+  )
+}
 
 const navItems = [
   { to: '/', icon: Home, label: 'Feed' },
@@ -10,60 +27,78 @@ const navItems = [
   { to: '/bookmarks', icon: Bookmark, label: 'Saved' },
 ]
 
-const linkClass = ({ isActive }) =>
-  `flex items-center justify-center w-10 h-10 rounded-xl transition-colors ${
-    isActive ? 'text-primary bg-primary/10' : 'text-text-muted hover:text-primary'
-  }`
+const sidebarLinkClass = ({ isActive }) => `nav-item ${isActive ? 'active' : ''}`
+const mobileLinkClass = ({ isActive }) => `mob-nav-item ${isActive ? 'active' : ''}`
 
 export default function MainLayout() {
-  const bgUpload = useStore((s) => s.bgUpload)
-  const hasBanner = !!bgUpload
-
   return (
-    <div className="min-h-screen bg-bg">
-      {/* Top header bar */}
-      <header className="fixed top-0 left-0 right-0 h-14 bg-surface border-b border-border z-40 flex items-center px-6">
-        <NavLink to="/" className="flex items-center gap-2">
-          <Logo size={28} />
-          <span className="text-xl font-bold text-white">Verso <span className="text-primary">AI</span></span>
+    <div className="app-shell">
+      {/* ═══ SIDEBAR ═══ */}
+      <aside className="app-sidebar">
+        <NavLink to="/" className="sidebar-logo">
+          <VersoLogo id="vg-sidebar" />
         </NavLink>
-      </header>
 
-      {/* Desktop sidebar */}
-      <aside className="hidden md:flex fixed top-14 left-0 bottom-0 w-16 flex-col items-center py-6 bg-surface border-r border-border z-30">
-        <nav className="flex flex-col gap-2">
+        <nav className="sidebar-nav">
           {navItems.map(({ to, icon: Icon, label }) => (
-            <NavLink key={to} to={to} className={linkClass} title={label} end={to === '/'}>
+            <NavLink key={to} to={to} className={sidebarLinkClass} end={to === '/'}>
               <Icon />
+              <span className="tooltip">{label}</span>
             </NavLink>
           ))}
         </nav>
-        <div className="mt-auto flex flex-col gap-2 items-center">
-          <NavLink to="/help" className={linkClass} title="Help">
+
+        <div className="sidebar-spacer" />
+
+        <div className="sidebar-bottom">
+          <NavLink to="/help" className={sidebarLinkClass}>
             <Help />
+            <span className="tooltip">Help</span>
           </NavLink>
-          <NavLink to="/profile" className={linkClass} title="Profile">
+          <NavLink to="/profile" className={sidebarLinkClass}>
             <User />
+            <span className="tooltip">Profile</span>
           </NavLink>
         </div>
       </aside>
 
-      {/* Background upload progress banner */}
-      <UploadTracker />
-
-      {/* Main content */}
-      <main className={`mt-14 md:ml-16 pb-18 md:pb-0 min-h-screen ${hasBanner ? 'pt-14' : ''}`}>
-        <Outlet />
-      </main>
-
-      {/* Mobile bottom nav */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 h-16 bg-surface border-t border-border flex items-center justify-around z-30">
-        {navItems.slice(0, 6).map(({ to, icon: Icon, label }) => (
-          <NavLink key={to} to={to} className={linkClass} title={label} end={to === '/'}>
-            <Icon />
+      {/* ═══ MAIN ═══ */}
+      <div className="app-main">
+        <header className="app-topbar">
+          <NavLink to="/" className="topbar-brand">
+            <div className="topbar-brand-icon">
+              <VersoLogo id="vg-topbar" />
+            </div>
+            <div className="topbar-brand-text">Verso <span>AI</span></div>
           </NavLink>
-        ))}
-      </nav>
+
+          <div className="topbar-spacer" />
+
+          <Link to="/upload" className="topbar-upload">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+            Upload
+          </Link>
+        </header>
+
+        <UploadTracker />
+
+        <main className="app-content">
+          <Outlet />
+        </main>
+
+        {/* ═══ MOBILE BOTTOM NAV ═══ */}
+        <nav className="app-mobile-nav">
+          {navItems.map(({ to, icon: Icon }) => (
+            <NavLink key={to} to={to} className={mobileLinkClass} end={to === '/'}>
+              <Icon />
+            </NavLink>
+          ))}
+        </nav>
+      </div>
     </div>
   )
 }
