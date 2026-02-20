@@ -508,9 +508,8 @@ function GradientPostCard({ reel, index, total, isActive }) {
 }
 
 const TABS = [
-  { id: 'all', label: 'All' },
   { id: 'explore', label: 'Explore' },
-  { id: 'my-docs', label: 'My Docs' },
+  { id: 'all', label: 'For You' },
 ]
 
 export default function FeedPage() {
@@ -521,7 +520,7 @@ export default function FeedPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
-  const [tab, setTab] = useState('all')
+  const [tab, setTab] = useState('explore')
   const [failedVideos, setFailedVideos] = useState(new Set())
   const [initialSlide, setInitialSlide] = useState(0)
   const bookNavState = useRef(location.state)
@@ -614,16 +613,12 @@ export default function FeedPage() {
   }
 
   const tabBar = (
-    <div className="flex items-center gap-2 px-4 py-2 bg-surface border-b border-border">
+    <div className="feed-filter-tabs">
       {TABS.map((t) => (
         <button
           key={t.id}
           onClick={() => handleTabChange(t.id)}
-          className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors cursor-pointer ${
-            tab === t.id
-              ? 'bg-primary text-white'
-              : 'bg-surface-alt text-text-secondary hover:text-text-primary'
-          }`}
+          className={`feed-filter-tab ${tab === t.id ? 'active' : ''}`}
         >
           {t.label}
         </button>
@@ -633,7 +628,7 @@ export default function FeedPage() {
 
   if (initialLoading) {
     return (
-      <div className="h-[calc(100dvh-4rem)] md:h-screen flex flex-col">
+      <div className="h-full flex flex-col overflow-hidden">
         {tabBar}
         <div className="flex-1">
           <Spinner text="Loading bites..." />
@@ -644,7 +639,7 @@ export default function FeedPage() {
 
   if (error) {
     return (
-      <div className="h-[calc(100dvh-4rem)] md:h-screen flex flex-col">
+      <div className="h-full flex flex-col overflow-hidden">
         {tabBar}
         <div className="flex-1">
           <ErrorState onRetry={() => loadReels()} />
@@ -655,7 +650,7 @@ export default function FeedPage() {
 
   if (reels.length === 0) {
     return (
-      <div className="h-[calc(100dvh-4rem)] md:h-screen flex flex-col">
+      <div className="h-full flex flex-col overflow-hidden">
         {tabBar}
         <div className="flex-1">
           <EmptyState
@@ -671,7 +666,7 @@ export default function FeedPage() {
   }
 
   return (
-    <div className="h-[calc(100dvh-4rem)] md:h-screen flex flex-col">
+    <div className="h-full flex flex-col overflow-hidden">
       {tabBar}
       <Swiper
         direction="vertical"
