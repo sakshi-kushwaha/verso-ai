@@ -5,14 +5,13 @@ import { Mousewheel, Keyboard } from 'swiper/modules'
 import 'swiper/css'
 
 import api, { getFeed } from '../api'
-import { speak } from '../services/tts'
 import useStore from '../store/useStore'
 import Tag from '../components/Tag'
 import Button from '../components/Button'
 import { Bookmark, BookmarkFill, Play, Pause, Upload, Volume, VolumeOff } from '../components/Icons'
 import { Spinner, ErrorState, EmptyState } from '../components/StateScreens'
 
-function VideoReelCard({ reel, index, total, isActive, onVideoError }) {
+function VideoReelCard({ reel, index, total, isActive }) {
   const videoRef = useRef(null)
   const [paused, setPaused] = useState(false)
   const [buffering, setBuffering] = useState(true)
@@ -62,7 +61,7 @@ function VideoReelCard({ reel, index, total, isActive, onVideoError }) {
 
   return (
     <div className="flex items-center justify-center h-full bg-black">
-      <div className="relative w-full max-w-[480px] h-full bg-gray-900">
+      <div className="relative w-full max-w-[480px] md:max-w-[640px] lg:max-w-[768px] h-full bg-gray-900">
 
         {/* Full-screen video */}
         <video
@@ -80,7 +79,7 @@ function VideoReelCard({ reel, index, total, isActive, onVideoError }) {
             const v = e.target
             if (v.duration) setProgress((v.currentTime / v.duration) * 100)
           }}
-          onError={() => onVideoError?.(reel.id)}
+          onError={() => {}}
         />
 
         {/* Buffering indicator */}
@@ -153,146 +152,6 @@ function VideoReelCard({ reel, index, total, isActive, onVideoError }) {
   )
 }
 
-function ReelCard({ reel, index, total }) {
-  const [expanded, setExpanded] = useState(false)
-  const [playing, setPlaying] = useState(false)
-  const [audioLoading, setAudioLoading] = useState(false)
-  const ttsRef = useRef(null)
-  const { bookmarks, toggleBookmark } = useStore()
-  const saved = bookmarks.has(reel.id)
-
-  const handleAudio = async () => {
-    // Block rapid clicks while loading
-    if (audioLoading) return
-
-    // If already playing, pause
-    if (playing && ttsRef.current) {
-      ttsRef.current.pause()
-      setPlaying(false)
-      return
-    }
-
-    // If paused with existing controller, resume
-    if (ttsRef.current && !playing) {
-      ttsRef.current.resume()
-      setPlaying(true)
-      return
-    }
-
-    // Start new playback — server TTS (Piper) first, browser fallback
-    setAudioLoading(true)
-    try {
-      // Cancel any lingering previous audio
-      if (ttsRef.current) { ttsRef.current.cancel(); ttsRef.current = null }
-      const controller = await speak(reel.id, reel.narration, () => {
-        setPlaying(false)
-        ttsRef.current = null
-      })
-      ttsRef.current = controller
-      setPlaying(true)
-    } catch {
-      // Audio not available — silently fail
-      ttsRef.current = null
-    } finally {
-      setAudioLoading(false)
-    }
-  }
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (ttsRef.current) ttsRef.current.cancel()
-    }
-  }, [])
-
-  const hasBg = !!reel.bgImage
-
-  return (
-    <div className="flex items-center justify-center p-4 md:p-8 h-full">
-      <div className="w-full max-w-lg h-4/5 fade-up">
-        <div className="bg-surface rounded-2xl p-6 md:p-8 border border-border relative overflow-hidden h-full flex flex-col">
-          {hasBg && (
-            <>
-              <div
-                className="absolute inset-0 bg-cover bg-center"
-                style={{ backgroundImage: `url(${reel.bgImage})` }}
-              />
-              <div className="absolute inset-0 bg-black/60" />
-            </>
-          )}
-          {!hasBg && (
-            <div
-              className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl"
-              style={{ background: `linear-gradient(90deg, ${reel.accent}, transparent)` }}
-            />
-          )}
-
-          <div className="relative z-10 flex flex-col h-full">
-            <div className="flex items-center justify-between mb-4">
-              <Tag color={reel.accent}>{reel.category}</Tag>
-              <span className={`text-xs font-mono ${hasBg ? 'text-white/70' : 'text-text-muted'}`}>
-                p. {reel.pages} &middot; {index + 1}/{total}
-              </span>
-            </div>
-
-            <h2 className={`text-xl md:text-2xl font-bold font-display leading-tight mb-4 ${hasBg ? 'text-white' : ''}`}>
-              {reel.title}
-            </h2>
-
-            <div className={`h-px mb-4 ${hasBg ? 'bg-white/20' : 'bg-border'}`} />
-
-            <p className={`text-sm leading-relaxed flex-1 ${expanded ? 'overflow-y-auto' : 'line-clamp-6'} ${hasBg ? 'text-white/90' : 'text-text-secondary'}`}>
-              {reel.body}
-            </p>
-            {!expanded && (
-              <button
-                onClick={() => setExpanded(true)}
-                className={`text-xs font-semibold mt-2 cursor-pointer hover:underline ${hasBg ? 'text-white/80' : 'text-primary'}`}
-              >
-                Read more
-              </button>
-            )}
-
-            <div className="flex flex-wrap gap-2 mt-4">
-              {reel.keywords.map((kw) => (
-                <span key={kw} className={`px-2.5 py-1 rounded-full text-xs ${hasBg ? 'bg-white/15 text-white/80' : 'bg-surface-alt text-text-secondary'}`}>
-                  {kw}
-                </span>
-              ))}
-            </div>
-
-            <div className={`flex items-center gap-3 mt-auto pt-4 border-t ${hasBg ? 'border-white/20' : 'border-border'}`}>
-              <button
-                onClick={handleAudio}
-                disabled={audioLoading}
-                className={`flex items-center gap-1.5 text-sm transition-colors cursor-pointer ${
-                  playing
-                    ? (hasBg ? 'text-white' : 'text-primary')
-                    : (hasBg ? 'text-white/70 hover:text-white' : 'text-text-muted hover:text-primary')
-                } ${audioLoading ? 'opacity-50' : ''}`}
-              >
-                {playing ? <Pause /> : <Play />}
-                {audioLoading ? 'Loading...' : playing ? 'Pause' : 'Listen'}
-              </button>
-              <button
-                onClick={() => toggleBookmark(reel.id)}
-                className={`flex items-center gap-1.5 text-sm transition-colors cursor-pointer ${
-                  saved
-                    ? 'text-accent'
-                    : (hasBg ? 'text-white/70 hover:text-white' : 'text-text-muted hover:text-primary')
-                }`}
-              >
-                {saved ? <BookmarkFill /> : <Bookmark />}
-                {saved ? 'Saved' : 'Save'}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 const TABS = [
   { id: 'all', label: 'All' },
   { id: 'explore', label: 'Explore' },
@@ -302,13 +161,12 @@ const TABS = [
 export default function FeedPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { reels, setReels, appendReels, feedPage, hasMore } = useStore()
+  const { reels, setReels, appendReels, feedPage, hasMore, feedStale, bgUpload } = useStore()
   const [initialLoading, setInitialLoading] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
   const [tab, setTab] = useState('all')
-  const [failedVideos, setFailedVideos] = useState(new Set())
   const [initialSlide, setInitialSlide] = useState(0)
   const bookNavState = useRef(location.state)
 
@@ -383,6 +241,11 @@ export default function FeedPage() {
     loadReels()
   }, [])
 
+  // Reload feed when processing finishes and bgUpload is cleared
+  useEffect(() => {
+    if (feedStale) loadReels()
+  }, [feedStale])
+
   // Load more when reaching end
   const handleReachEnd = async () => {
     if (!hasMore || loading) return
@@ -439,18 +302,25 @@ export default function FeedPage() {
     )
   }
 
-  if (reels.length === 0) {
+  const videoReels = reels.filter((r) => r.videoUrl)
+  const isGenerating = bgUpload && bgUpload.status !== 'done' && bgUpload.status !== 'error'
+
+  if (videoReels.length === 0) {
     return (
       <div className="h-[calc(100dvh-4rem)] md:h-screen flex flex-col">
         {tabBar}
         <div className="flex-1">
-          <EmptyState
-            icon={<Upload />}
-            title="No bites yet"
-            subtitle={tab === 'my-docs' ? 'Upload a document to see your bites here' : 'Upload a document to get started'}
-          >
-            <Button onClick={() => navigate('/upload')}>Upload Document</Button>
-          </EmptyState>
+          {isGenerating ? (
+            <Spinner text="Generating your bites..." />
+          ) : (
+            <EmptyState
+              icon={<Upload />}
+              title="No bites yet"
+              subtitle={tab === 'my-docs' ? 'Upload a document to see your bites here' : 'Upload a document to get started'}
+            >
+              <Button onClick={() => navigate('/upload')}>Upload Document</Button>
+            </EmptyState>
+          )}
         </div>
       </div>
     )
@@ -471,16 +341,12 @@ export default function FeedPage() {
         onReachEnd={handleReachEnd}
         onSlideChange={(swiper) => {
           setActiveIndex(swiper.activeIndex)
-          swiper.allowSlideNext = swiper.activeIndex < reels.length - 1
+          swiper.allowSlideNext = swiper.activeIndex < videoReels.length - 1
         }}
       >
-        {reels.map((reel, i) => (
+        {videoReels.map((reel, i) => (
           <SwiperSlide key={reel.id}>
-            {reel.videoUrl && !failedVideos.has(reel.id) ? (
-              <VideoReelCard reel={reel} index={i} total={reels.length} isActive={i === activeIndex} onVideoError={(id) => setFailedVideos(prev => new Set(prev).add(id))} />
-            ) : (
-              <ReelCard reel={reel} index={i} total={reels.length} />
-            )}
+            <VideoReelCard reel={reel} index={i} total={videoReels.length} isActive={i === activeIndex} />
           </SwiperSlide>
         ))}
 

@@ -20,7 +20,7 @@ HEIGHT = 1920
 
 # Duration bounds (seconds) — video length adapts to narration
 MIN_DURATION = 10
-MAX_DURATION = 30
+MAX_DURATION = 60
 DEFAULT_DURATION = 15
 
 # Per-category ambient music: (base_freq, wave_type)
@@ -103,6 +103,19 @@ def get_images_for_category(category: str) -> list[dict]:
         for f in sorted(folder.iterdir())
         if f.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp")
     ]
+
+
+def _resolve_drawtext_font() -> str | None:
+    """Find a usable font path for ffmpeg drawtext filter."""
+    candidates = [
+        "/System/Library/Fonts/Helvetica.ttc",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path.replace(":", "\\:")
+    return None
 
 
 def _resolve_pillow_font(size: int = 48) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
@@ -436,9 +449,22 @@ def compose_multi_clip_reel(
                 if not clip_path or not os.path.exists(clip_path):
                     raise FileNotFoundError(f"Clip not found: {seg.get('clip', '')}")
                 inputs.extend(["-stream_loop", "-1", "-t", f"{dur:.2f}", "-i", clip_path])
+                overlay_text = seg.get("overlay", "").strip()
+                if overlay_text:
+                    # Escape special chars for ffmpeg drawtext
+                    safe_text = overlay_text.replace("'", "'\\''").replace(":", "\\:")
+                    font_file = _resolve_drawtext_font()
+                    drawtext = (
+                        f",drawtext=text='{safe_text}'"
+                        f":fontsize=52:fontcolor=white:borderw=2:bordercolor=black"
+                        f":x=(w-text_w)/2:y=h*0.72"
+                        f"{':fontfile=' + font_file if font_file else ''}"
+                    )
+                else:
+                    drawtext = ""
                 filter_parts.append(
                     f"[{i}:v]scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase"
-                    f":flags=lanczos,crop={WIDTH}:{HEIGHT},setsar=1,setpts=PTS-STARTPTS[v{i}]"
+                    f":flags=lanczos,crop={WIDTH}:{HEIGHT},setsar=1,setpts=PTS-STARTPTS{drawtext}[v{i}]"
                 )
 
         # Chain xfade transitions
