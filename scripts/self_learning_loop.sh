@@ -44,7 +44,7 @@ echo ""
 # --------------------------------------------------
 echo "── Phase 1: Scoring existing reels ──"
 cd "$BACKEND_DIR"
-python "$SCRIPT_DIR/score_reels.py" --export "$SCRIPT_DIR/scores_latest.jsonl" || true
+python3 "$SCRIPT_DIR/score_reels.py" --export "$SCRIPT_DIR/scores_latest.jsonl" || true
 echo ""
 
 # --------------------------------------------------
@@ -52,14 +52,14 @@ echo ""
 # --------------------------------------------------
 echo "── Phase 2: Generating best-of-N gold data ──"
 cd "$BACKEND_DIR"
-python "$SCRIPT_DIR/best_of_n_generate.py" --n "$N" --min-score "$MIN_SCORE"
+python3 "$SCRIPT_DIR/best_of_n_generate.py" --n "$N" --min-score "$MIN_SCORE"
 echo ""
 
 # --------------------------------------------------
 # Phase 3: Convert to ShareGPT format
 # --------------------------------------------------
 echo "── Phase 3: Converting to ShareGPT v2 format ──"
-python "$SCRIPT_DIR/convert_gold_to_sharegpt.py"
+python3 "$SCRIPT_DIR/convert_gold_to_sharegpt.py"
 echo ""
 
 # --------------------------------------------------
