@@ -9,7 +9,97 @@ import { speak } from '../services/tts'
 import useStore from '../store/useStore'
 import Tag from '../components/Tag'
 import Button from '../components/Button'
-import { Bookmark, BookmarkFill, Play, Pause, Upload, Volume, VolumeOff } from '../components/Icons'
+import { Bookmark, BookmarkFill, Play, Pause, Upload, Download, Volume, VolumeOff } from '../components/Icons'
+
+function wrapCanvasText(ctx, text, x, y, maxW, lineH) {
+  const words = text.split(' ')
+  let line = ''
+  for (const word of words) {
+    const test = line + (line ? ' ' : '') + word
+    if (ctx.measureText(test).width > maxW && line) {
+      ctx.fillText(line, x, y)
+      line = word
+      y += lineH
+    } else {
+      line = test
+    }
+  }
+  ctx.fillText(line, x, y)
+  return y + lineH
+}
+
+function downloadBite(reel) {
+  const safeName = reel.title.replace(/[^a-zA-Z0-9 ]/g, '').trim() || 'bite'
+
+  if (reel.videoUrl) {
+    // Video bite — backend burns text overlay via ffmpeg
+    const baseURL = api.defaults.baseURL || ''
+    const a = document.createElement('a')
+    a.href = `${baseURL}/video/${reel.id}/download`
+    a.download = `${safeName}.mp4`
+    a.click()
+  } else {
+    // Text bite — render as PNG using Canvas
+    const c = document.createElement('canvas')
+    const ctx = c.getContext('2d')
+    c.width = 480
+    c.height = 640
+
+    // Background
+    ctx.fillStyle = '#151B3B'
+    ctx.fillRect(0, 0, 480, 640)
+
+    // Top accent bar
+    ctx.fillStyle = reel.accent || '#6366F1'
+    ctx.fillRect(0, 0, 480, 3)
+
+    // Category
+    ctx.font = 'bold 13px sans-serif'
+    ctx.fillStyle = reel.accent || '#6366F1'
+    ctx.fillText(reel.category, 28, 40)
+
+    // Page ref
+    ctx.font = '12px monospace'
+    ctx.fillStyle = '#64748B'
+    ctx.textAlign = 'right'
+    ctx.fillText(`p. ${reel.pages}`, 452, 40)
+    ctx.textAlign = 'left'
+
+    // Title
+    ctx.font = 'bold 24px sans-serif'
+    ctx.fillStyle = '#F8FAFC'
+    let y = wrapCanvasText(ctx, reel.title, 28, 80, 424, 30)
+
+    // Separator
+    y += 8
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)'
+    ctx.beginPath()
+    ctx.moveTo(28, y)
+    ctx.lineTo(452, y)
+    ctx.stroke()
+    y += 16
+
+    // Body
+    ctx.font = '15px sans-serif'
+    ctx.fillStyle = '#94A3B8'
+    y = wrapCanvasText(ctx, reel.body, 28, y, 424, 22)
+
+    // Keywords
+    y += 16
+    ctx.font = '12px sans-serif'
+    ctx.fillStyle = '#64748B'
+    ctx.fillText(`Keywords: ${reel.keywords.join(', ')}`, 28, y)
+
+    c.toBlob((blob) => {
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${safeName}.png`
+      a.click()
+      URL.revokeObjectURL(url)
+    })
+  }
+}
 import { Spinner, ErrorState, EmptyState } from '../components/StateScreens'
 
 function VideoReelCard({ reel, index, total, isActive, onVideoError }) {
@@ -113,18 +203,19 @@ function VideoReelCard({ reel, index, total, isActive, onVideoError }) {
           </div>
         </button>
 
-        {/* Save button — bottom right, aligned vertically with mute */}
-        <div className="absolute right-3 bottom-20 z-20">
-          <button
-            onClick={() => toggleBookmark(reel.id)}
-            className="flex flex-col items-center gap-1 cursor-pointer"
-          >
+        {/* Action buttons — bottom right */}
+        <div className="absolute right-4 bottom-24 z-20 flex flex-col gap-2">
+          <button onClick={() => downloadBite(reel)} className="cursor-pointer">
+            <div className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white">
+              <Download />
+            </div>
+          </button>
+          <button onClick={() => toggleBookmark(reel.id)} className="cursor-pointer">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-              saved ? 'bg-accent/20' : 'bg-black/40 backdrop-blur-sm'
+              saved ? 'bg-accent/20 text-accent' : 'bg-black/40 backdrop-blur-sm text-white'
             }`}>
               {saved ? <BookmarkFill /> : <Bookmark />}
             </div>
-            <span className="text-white text-[10px]">{saved ? 'Saved' : 'Save'}</span>
           </button>
         </div>
 
@@ -273,6 +364,15 @@ function ReelCard({ reel, index, total }) {
               >
                 {playing ? <Pause /> : <Play />}
                 {audioLoading ? 'Loading...' : playing ? 'Pause' : 'Listen'}
+              </button>
+              <button
+                onClick={() => downloadBite(reel)}
+                className={`flex items-center gap-1.5 text-sm transition-colors cursor-pointer ${
+                  hasBg ? 'text-white/70 hover:text-white' : 'text-text-muted hover:text-primary'
+                }`}
+              >
+                <Download />
+                Download
               </button>
               <button
                 onClick={() => toggleBookmark(reel.id)}
