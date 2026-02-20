@@ -10,6 +10,6 @@ export default function ProtectedRoute() {
     if (token) loadBookmarks()
   }, [token])
 
-  if (!token) return <Navigate to="/login" replace />
+  if (!token) return <Navigate to="/welcome" replace />
   return <Outlet />
 }

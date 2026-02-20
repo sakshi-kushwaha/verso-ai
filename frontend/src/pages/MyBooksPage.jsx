@@ -41,7 +41,7 @@ function BookCard({ book, onClick }) {
       {book.status === 'done' && (
         <div className="flex items-center gap-4 mt-3 pt-3 border-t border-border">
           <span className="text-xs text-text-muted">
-            <span className="font-semibold text-text">{book.reel_count || 0}</span> reels
+            <span className="font-semibold text-text">{book.reel_count || 0}</span> bites
           </span>
           <span className="text-xs text-text-muted">
             <span className="font-semibold text-text">{book.flashcard_count || 0}</span> flashcards
@@ -326,7 +326,7 @@ function BookDetail({ book, onBack }) {
   }
 
   const tabs = [
-    { id: 'reels', icon: Grid, label: 'Reels' },
+    { id: 'reels', icon: Grid, label: 'Bites' },
     { id: 'flashcards', icon: Cards, label: 'Cards' },
     { id: 'chat', icon: Chat, label: 'Chat' },
   ]
@@ -345,7 +345,7 @@ function BookDetail({ book, onBack }) {
           <h1 className="text-lg sm:text-xl font-bold font-display truncate">{book.filename}</h1>
           <div className="flex items-center gap-3 mt-1">
             {book.doc_type && <span className="text-xs text-text-muted">{book.doc_type}</span>}
-            <span className="text-xs text-text-muted">{book.reel_count || 0} reels</span>
+            <span className="text-xs text-text-muted">{book.reel_count || 0} bites</span>
             <span className="text-xs text-text-muted">{book.flashcard_count || 0} cards</span>
           </div>
         </div>
@@ -389,7 +389,7 @@ function BookDetail({ book, onBack }) {
         <Spinner text="Loading content..." />
       ) : tab === 'reels' ? (
         reels.length === 0 ? (
-          <EmptyState title="No reels yet" subtitle="Reels will appear once processing is complete" />
+          <EmptyState title="No bites yet" subtitle="Bites will appear once processing is complete" />
         ) : (
           <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
             {reels.map((reel, i) => (
@@ -473,7 +473,7 @@ export default function MyBooksPage() {
         <EmptyState
           icon={<File />}
           title="No collections yet"
-          subtitle="Upload a document to get started with reels, flashcards, and chat"
+          subtitle="Upload a document to get started with bites, flashcards, and chat"
         >
           <Button onClick={() => navigate('/upload')}>Upload Document</Button>
         </EmptyState>

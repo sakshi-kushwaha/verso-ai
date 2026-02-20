@@ -22,10 +22,17 @@ export default function MainLayout() {
 
   return (
     <div className="min-h-screen bg-bg">
+      {/* Top header bar */}
+      <header className="fixed top-0 left-0 right-0 h-14 bg-surface border-b border-border z-40 flex items-center px-6">
+        <NavLink to="/" className="flex items-center gap-2">
+          <Logo size={28} />
+          <span className="text-xl font-bold text-white">Verso <span className="text-primary">AI</span></span>
+        </NavLink>
+      </header>
+
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex fixed inset-y-0 left-0 w-16 flex-col items-center py-6 bg-surface border-r border-border z-30">
-        <Logo size={28} />
-        <nav className="flex flex-col gap-2 mt-8">
+      <aside className="hidden md:flex fixed top-14 left-0 bottom-0 w-16 flex-col items-center py-6 bg-surface border-r border-border z-30">
+        <nav className="flex flex-col gap-2">
           {navItems.map(({ to, icon: Icon, label }) => (
             <NavLink key={to} to={to} className={linkClass} title={label} end={to === '/'}>
               <Icon />
@@ -43,7 +50,7 @@ export default function MainLayout() {
       <UploadTracker />
 
       {/* Main content */}
-      <main className={`md:ml-16 pb-18 md:pb-0 min-h-screen ${hasBanner ? 'pt-14' : ''}`}>
+      <main className={`mt-14 md:ml-16 pb-18 md:pb-0 min-h-screen ${hasBanner ? 'pt-14' : ''}`}>
         <Outlet />
       </main>
 

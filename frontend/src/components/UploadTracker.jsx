@@ -8,7 +8,7 @@ const STAGE_LABELS = {
   parsing: 'Parsing...',
   analyzing: 'Analyzing...',
   extracting: 'Extracting concepts...',
-  generating: 'Generating reels...',
+  generating: 'Generating bites...',
   embedding: 'Building knowledge base...',
   done: 'Done!',
 }
@@ -108,7 +108,7 @@ export default function UploadTracker() {
           <span className="text-xs font-semibold tabular-nums">{Math.round(progress)}%</span>
         </div>
       )}
-      {isDone && <span className="text-xs font-semibold">Reels ready!</span>}
+      {isDone && <span className="text-xs font-semibold">Bites ready!</span>}
       {(isDone || isError) && (
         <button
           onClick={clearBgUpload}
