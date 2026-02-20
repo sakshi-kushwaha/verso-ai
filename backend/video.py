@@ -2,6 +2,7 @@
 
 Memory-conscious: uses 1080p output and ffmpeg thread limits to stay under ~250MB per encode.
 """
+from __future__ import annotations
 
 import csv
 import json
@@ -20,7 +21,7 @@ HEIGHT = 1920
 
 # Duration bounds (seconds) — video length adapts to narration
 MIN_DURATION = 10
-MAX_DURATION = 30
+MAX_DURATION = 60
 DEFAULT_DURATION = 15
 
 # Per-category ambient music: (base_freq, wave_type)
@@ -105,14 +106,21 @@ def get_images_for_category(category: str) -> list[dict]:
     ]
 
 
-def _resolve_pillow_font(size: int = 48) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    """Find a usable font for Pillow text rendering."""
-    candidates = [
+def _resolve_pillow_font(size: int = 48, font_path: str | None = None) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    """Load a specific font or fall back to a usable system font."""
+    if font_path and os.path.exists(font_path):
+        try:
+            return ImageFont.truetype(font_path, size)
+        except Exception:
+            pass
+    # Fallback chain
+    fallbacks = [
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
         "/System/Library/Fonts/Helvetica.ttc",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
     ]
-    for path in candidates:
+    for path in fallbacks:
         if os.path.exists(path):
             try:
                 return ImageFont.truetype(path, size)
@@ -203,6 +211,202 @@ def _prepare_image_segment(image_path: str, text: str, width: int, height: int,
 
     out = os.path.join(tmpdir, f"img_seg_{index}.jpg")
     img.save(out, "JPEG", quality=92)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Text style presets — each reel gets a unique look (font, color, effects)
+# like different Instagram creators. Rotated by reel_id.
+# ---------------------------------------------------------------------------
+_TEXT_STYLES = [
+    {   # 0: Impact — classic viral reel, big caps
+        "font": "/System/Library/Fonts/Supplemental/Impact.ttf",
+        "font_linux": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "font_size": 90, "uppercase": True, "stroke_r": 5,
+    },
+    {   # 1: Georgia Bold — elegant serif, mixed case
+        "font": "/System/Library/Fonts/Supplemental/Georgia Bold.ttf",
+        "font_linux": "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf",
+        "font_size": 78, "uppercase": False, "stroke_r": 4,
+    },
+    {   # 2: DIN Condensed Bold — modern tight caps
+        "font": "/System/Library/Fonts/Supplemental/DIN Condensed Bold.ttf",
+        "font_linux": "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "font_size": 88, "uppercase": True, "stroke_r": 5,
+    },
+    {   # 3: Futura — clean geometric sans, mixed case
+        "font": "/System/Library/Fonts/Supplemental/Futura.ttc",
+        "font_linux": "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "font_size": 76, "uppercase": False, "stroke_r": 4,
+    },
+    {   # 4: Arial Black — heavy ultra-bold caps
+        "font": "/System/Library/Fonts/Supplemental/Arial Black.ttf",
+        "font_linux": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "font_size": 82, "uppercase": True, "stroke_r": 5,
+    },
+    {   # 5: Trebuchet Bold — friendly humanist, mixed case
+        "font": "/System/Library/Fonts/Supplemental/Trebuchet MS Bold.ttf",
+        "font_linux": "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "font_size": 78, "uppercase": False, "stroke_r": 4,
+    },
+    {   # 6: Gill Sans — refined classic sans, caps
+        "font": "/System/Library/Fonts/Supplemental/GillSans.ttc",
+        "font_linux": "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "font_size": 80, "uppercase": True, "stroke_r": 5,
+    },
+    {   # 7: Rockwell — punchy slab serif, mixed case
+        "font": "/System/Library/Fonts/Supplemental/Rockwell.ttc",
+        "font_linux": "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf",
+        "font_size": 78, "uppercase": False, "stroke_r": 4,
+    },
+    {   # 8: Verdana Bold — wide screen-optimized, mixed case
+        "font": "/System/Library/Fonts/Supplemental/Verdana Bold.ttf",
+        "font_linux": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "font_size": 74, "uppercase": False, "stroke_r": 4,
+    },
+    {   # 9: Arial Rounded Bold — soft friendly, mixed case
+        "font": "/System/Library/Fonts/Supplemental/Arial Rounded Bold.ttf",
+        "font_linux": "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "font_size": 78, "uppercase": False, "stroke_r": 4,
+    },
+    {   # 10: Tahoma Bold — compact tight, caps
+        "font": "/System/Library/Fonts/Supplemental/Tahoma Bold.ttf",
+        "font_linux": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "font_size": 82, "uppercase": True, "stroke_r": 5,
+    },
+]
+
+
+def _create_word_group_png(text: str, width: int, height: int,
+                            tmpdir: str, index: int = 0,
+                            style_idx: int = 0) -> str:
+    """Create a transparent PNG with centered white text + black stroke.
+
+    Always white on black stroke (readable on any video). Style presets
+    vary only the font family, size, and casing across reels.
+    """
+    style = _TEXT_STYLES[style_idx % len(_TEXT_STYLES)]
+    img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    # Pick font: try macOS path first, then Linux, then fallback
+    font_path = style.get("font", "")
+    if not font_path or not os.path.exists(font_path):
+        font_path = style.get("font_linux", "")
+    font = _resolve_pillow_font(style["font_size"], font_path=font_path)
+    margin = 50
+    max_text_width = width - margin * 2
+    display = text.upper() if style["uppercase"] else text
+    lines = _wrap_text(display, font, max_text_width)
+
+    line_height = style["font_size"] + 22
+    total_text_height = len(lines) * line_height
+    text_y_start = (height - total_text_height) // 2
+
+    stroke_r = style.get("stroke_r", 4)
+    text_y = text_y_start
+    for line in lines:
+        bbox = font.getbbox(line)
+        text_w = bbox[2] - bbox[0]
+        text_x = (width - text_w) // 2
+
+        # Black stroke (circular for clean edges)
+        for r in range(stroke_r, 0, -1):
+            for dx in range(-r, r + 1):
+                for dy in range(-r, r + 1):
+                    if dx * dx + dy * dy <= r * r:
+                        draw.text((text_x + dx, text_y + dy), line,
+                                  font=font, fill=(0, 0, 0, 255))
+
+        # White text — always readable on any background
+        draw.text((text_x, text_y), line, font=font, fill=(255, 255, 255, 255))
+        text_y += line_height
+
+    out = os.path.join(tmpdir, f"wordgroup_{index}.png")
+    img.save(out, "PNG")
+    return out
+
+
+def _burn_word_sync(video_path: str, narration: str, duration: float,
+                     tmpdir: str, reel_id: int = 0) -> str:
+    """Second-pass: burn word-synced text onto composed video using Pillow PNGs.
+
+    Each reel gets a different text style (rotated from _TEXT_STYLES) so every
+    reel looks unique — like different Instagram creators.
+    Returns path to the output video with text overlaid.
+    """
+    words = narration.split()
+    if not words:
+        return video_path
+
+    words_per_group = 4
+    groups = []
+    for i in range(0, len(words), words_per_group):
+        groups.append(" ".join(words[i:i + words_per_group]))
+
+    if not groups:
+        return video_path
+
+    # Pick a style for this reel (rotate through styles)
+    style_idx = reel_id % len(_TEXT_STYLES)
+
+    # Calculate timing
+    total_words = len(words)
+    start_pad = 0.3
+    end_pad = 0.5
+    usable = duration - start_pad - end_pad
+    if usable < 1:
+        usable = duration
+        start_pad = 0
+    time_per_word = usable / total_words
+
+    # Generate PNGs and build overlay filter chain
+    inputs = ["-i", video_path]
+    filter_parts = []
+    current_label = "0:v"
+    word_offset = 0
+
+    for idx, group in enumerate(groups):
+        group_word_count = len(group.split())
+        t_start = start_pad + word_offset * time_per_word
+        t_end = start_pad + (word_offset + group_word_count) * time_per_word
+
+        # Render PNG for this word group with the reel's style
+        png_path = _create_word_group_png(group, WIDTH, HEIGHT, tmpdir, idx,
+                                           style_idx=style_idx)
+        input_idx = idx + 1  # input 0 is the video
+        inputs.extend(["-i", png_path])
+
+        out_label = f"wg{idx}"
+        filter_parts.append(
+            f"[{current_label}][{input_idx}:v]overlay=0:0"
+            f":enable='between(t,{t_start:.3f},{t_end:.3f})'"
+            f":format=auto[{out_label}]"
+        )
+        current_label = out_label
+        word_offset += group_word_count
+
+    filter_complex = ";".join(filter_parts)
+    out = os.path.join(tmpdir, "reel_with_text.mp4")
+    cmd = [
+        "ffmpeg", "-y",
+        *inputs,
+        "-filter_complex", filter_complex,
+        "-map", f"[{current_label}]",
+        "-map", "0:a",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "26",
+        "-c:a", "copy",
+        "-threads", FFMPEG_THREADS,
+        "-movflags", "+faststart",
+        "-pix_fmt", "yuv420p",
+        out,
+    ]
+    result = subprocess.run(cmd, capture_output=True, timeout=FFMPEG_ENCODE_TIMEOUT)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"word-sync burn failed (rc={result.returncode}):\n"
+            f"STDERR: {result.stderr.decode(errors='replace')[-2000:]}"
+        )
     return out
 
 
@@ -438,8 +642,10 @@ def compose_multi_clip_reel(
                 inputs.extend(["-stream_loop", "-1", "-t", f"{dur:.2f}", "-i", clip_path])
                 filter_parts.append(
                     f"[{i}:v]scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase"
-                    f":flags=lanczos,crop={WIDTH}:{HEIGHT},setsar=1,setpts=PTS-STARTPTS[v{i}]"
+                    f":flags=lanczos,crop={WIDTH}:{HEIGHT},setsar=1,fps={FPS},setpts=PTS-STARTPTS[v{i}]"
                 )
+
+        next_input_idx = n  # video/image inputs used indices 0..n-1
 
         # Chain xfade transitions
         if n == 1:
@@ -456,12 +662,43 @@ def compose_multi_clip_reel(
                 )
                 last_label = out_label
 
+        # Word-synced narration overlays (integrated into single pass)
+        if narration:
+            words = narration.split()
+            wpg = 4  # words per group
+            groups = [" ".join(words[i:i + wpg]) for i in range(0, len(words), wpg)]
+            total_words = len(words)
+            start_pad, end_pad = 0.3, 0.5
+            usable = TOTAL_DURATION - start_pad - end_pad
+            if usable < 1:
+                usable, start_pad = TOTAL_DURATION, 0
+            tpw = usable / total_words  # time per word
+            style_idx = reel_id % len(_TEXT_STYLES)
+            w_offset = 0
+            for gi, grp in enumerate(groups):
+                gcnt = len(grp.split())
+                t0 = start_pad + w_offset * tpw
+                t1 = start_pad + (w_offset + gcnt) * tpw
+                png = _create_word_group_png(grp, WIDTH, HEIGHT, tmpdir, gi,
+                                             style_idx=style_idx)
+                ov_idx = next_input_idx
+                inputs.extend(["-i", png])
+                out_lbl = f"wt{gi}"
+                filter_parts.append(
+                    f"[{last_label}][{ov_idx}:v]overlay=0:0"
+                    f":enable='between(t,{t0:.3f},{t1:.3f})'"
+                    f":format=auto[{out_lbl}]"
+                )
+                last_label = out_lbl
+                next_input_idx += 1
+                w_offset += gcnt
+
         # Final video output label
         filter_parts.append(f"[{last_label}]null[vout]")
 
         # Audio pipeline
         audio_layers = []
-        audio_idx = n  # video/image inputs used indices 0..n-1
+        audio_idx = next_input_idx  # after video + word overlay inputs
 
         if tts_audio_path and os.path.exists(tts_audio_path):
             inputs.extend(["-i", tts_audio_path])
