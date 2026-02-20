@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 import json
 import logging
 import re
 import time
 import httpx
 from config import OLLAMA_HOST, LLM_MODEL, CLASSIFICATION_MODEL, REEL_MODEL, LLM_TIMEOUT
+from database import get_db
 from prompts import (
     DOC_TYPE_PROMPT,
     SUBJECT_CATEGORY_PROMPT,
@@ -395,11 +398,65 @@ def gather_topic_content(topic: dict, full_text: str, max_chars: int = 3000) -> 
     return "\n".join(collected)
 
 
-def generate_topic_reel(topic: str, topic_text: str, doc_type: str, prefs: dict) -> dict:
+def get_gold_few_shot(category: str = "general") -> str:
+    """Fetch gold standard reels from DB as dynamic few-shot examples.
+
+    Queries for reels matching the category. Falls back to any gold reels,
+    then to the static REEL_FEW_SHOT constant if DB has none.
+    """
+    try:
+        conn = get_db()
+        rows = conn.execute(
+            "SELECT title, summary, narration, category, keywords, source_text "
+            "FROM reels WHERE upload_id = ("
+            "  SELECT id FROM uploads WHERE filename = '__gold_standard__' LIMIT 1"
+            ") AND LOWER(category) = LOWER(?) LIMIT 2",
+            (category,),
+        ).fetchall()
+
+        if not rows:
+            rows = conn.execute(
+                "SELECT title, summary, narration, category, keywords, source_text "
+                "FROM reels WHERE upload_id = ("
+                "  SELECT id FROM uploads WHERE filename = '__gold_standard__' LIMIT 1"
+                ") ORDER BY RANDOM() LIMIT 2",
+            ).fetchall()
+
+        conn.close()
+
+        if not rows:
+            return REEL_FEW_SHOT
+
+        examples = []
+        for i, row in enumerate(rows, 1):
+            source = (row["source_text"] or row["summary"] or "")[:300]
+            output = json.dumps({
+                "reels": [{
+                    "title": row["title"],
+                    "summary": row["summary"],
+                    "narration": row["narration"],
+                    "category": row["category"],
+                    "keywords": row["keywords"],
+                }],
+                "flashcards": [],
+            })
+            examples.append(f'Example {i}:\nInput: "{source}"\nOutput: {output}')
+
+        result = "\n\n".join(examples)
+        log.info("Dynamic few-shot: %d examples for category=%s", len(examples), category)
+        return result
+
+    except Exception as e:
+        log.warning("Failed to fetch gold few-shot examples: %s — using static fallback", e)
+        return REEL_FEW_SHOT
+
+
+def generate_topic_reel(topic: str, topic_text: str, doc_type: str, prefs: dict, category: str = "general") -> dict:
     """Generate a single reel + flashcards for one topic.
 
     Returns parsed dict with "reels" and "flashcards" arrays.
     """
+    few_shot = get_gold_few_shot(category)
     prompt = TOPIC_REEL_PROMPT.format(
         topic=topic,
         text=topic_text[:3000],
@@ -409,7 +466,7 @@ def generate_topic_reel(topic: str, topic_text: str, doc_type: str, prefs: dict)
         depth_instruction=REEL_DEPTH_INSTRUCTIONS.get(prefs.get("content_depth", "balanced"), REEL_DEPTH_INSTRUCTIONS["balanced"]),
         use_case_instruction=REEL_USE_CASE_INSTRUCTIONS.get(prefs.get("use_case", "learning"), REEL_USE_CASE_INSTRUCTIONS["learning"]),
         difficulty_instruction=FLASHCARD_DIFFICULTY_INSTRUCTIONS.get(prefs.get("flashcard_difficulty", "medium"), FLASHCARD_DIFFICULTY_INSTRUCTIONS["medium"]),
-        few_shot=REEL_FEW_SHOT,
+        few_shot=few_shot,
     )
 
     result = reel_llm_call(prompt)

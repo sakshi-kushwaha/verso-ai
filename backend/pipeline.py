@@ -208,7 +208,7 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
             log.info("Topic %d/%d: %r (%d chars)", i + 1, len(topics), topic["topic"], len(topic_text))
 
             try:
-                result = generate_topic_reel(topic["topic"], topic_text, doc_type, prefs)
+                result = generate_topic_reel(topic["topic"], topic_text, doc_type, prefs, category=subject_category)
             except OllamaUnavailableError:
                 log.error("Ollama went down at topic %d/%d for upload %s", i + 1, len(topics), upload_id)
                 ollama_down = True
