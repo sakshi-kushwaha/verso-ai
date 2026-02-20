@@ -422,7 +422,7 @@ export default function FeedPage() {
       <div className="h-[calc(100dvh-4rem)] md:h-screen flex flex-col">
         {tabBar}
         <div className="flex-1">
-          <Spinner text="Loading reels..." />
+          <Spinner text="Loading bites..." />
         </div>
       </div>
     )
@@ -446,8 +446,8 @@ export default function FeedPage() {
         <div className="flex-1">
           <EmptyState
             icon={<Upload />}
-            title="No reels yet"
-            subtitle={tab === 'my-docs' ? 'Upload a document to see your reels here' : 'Upload a document to get started'}
+            title="No bites yet"
+            subtitle={tab === 'my-docs' ? 'Upload a document to see your bites here' : 'Upload a document to get started'}
           >
             <Button onClick={() => navigate('/upload')}>Upload Document</Button>
           </EmptyState>
@@ -493,7 +493,7 @@ export default function FeedPage() {
               </div>
               <h2 className="text-xl md:text-2xl font-bold font-display">Upload a new document</h2>
               <p className="text-text-secondary text-sm max-w-xs">
-                Turn any PDF or article into bite-sized reels, flashcards, and more.
+                Turn any PDF or article into bite-sized bites, flashcards, and more.
               </p>
               <Button onClick={() => navigate('/upload')}>Upload Document</Button>
             </div>

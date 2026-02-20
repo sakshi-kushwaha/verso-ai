@@ -28,13 +28,13 @@ export default function BookmarksPage() {
   return (
     <div className="max-w-xl mx-auto p-6 pt-10 fade-up">
       <h1 className="text-2xl font-bold font-display mb-1">Saved</h1>
-      <p className="text-text-muted text-sm mb-8">Your bookmarked reels and flashcards</p>
+      <p className="text-text-muted text-sm mb-8">Your bookmarked bites and flashcards</p>
 
       {reelBookmarks.length === 0 && fcBookmarks.length === 0 ? (
         <EmptyState
           icon={<Bookmark />}
           title="No saved items yet"
-          subtitle="Bookmark reels from the feed to see them here"
+          subtitle="Bookmark bites from the feed to see them here"
         />
       ) : (
         <div className="flex flex-col gap-4">

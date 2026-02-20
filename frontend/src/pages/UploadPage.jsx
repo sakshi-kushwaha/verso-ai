@@ -62,7 +62,7 @@ export default function UploadPage() {
   return (
     <div className="max-w-xl mx-auto p-6 pt-10 fade-up">
       <h1 className="text-2xl font-bold font-display mb-1">Upload Document</h1>
-      <p className="text-text-muted text-sm mb-8">Transform your documents into bite-sized learning reels</p>
+      <p className="text-text-muted text-sm mb-8">Transform your documents into bite-sized learning bites</p>
 
       {error && (
         <div className="mb-4 p-3 rounded-lg bg-danger/10 text-danger text-sm">
@@ -84,7 +84,7 @@ export default function UploadPage() {
                  bgUpload.stage === 'parsing' ? 'Parsing document...' :
                  bgUpload.stage === 'analyzing' ? 'Analyzing content...' :
                  bgUpload.stage === 'extracting' ? 'Extracting concepts...' :
-                 bgUpload.stage === 'generating' ? 'Generating reels...' :
+                 bgUpload.stage === 'generating' ? 'Generating bites...' :
                  bgUpload.stage === 'embedding' ? 'Building knowledge base...' :
                  'Processing...'}
               </p>
@@ -149,7 +149,7 @@ export default function UploadPage() {
           {/* Generate button */}
           {file && (
             <Button full onClick={startProcessing} disabled={uploading} className="mt-6">
-              {uploading ? 'Uploading...' : 'Generate Reels'}
+              {uploading ? 'Uploading...' : 'Generate Bites'}
             </Button>
           )}
         </>
