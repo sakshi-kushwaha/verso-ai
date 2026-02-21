@@ -353,18 +353,39 @@ def parse_llm_json(text: str) -> dict:
     return parsed
 
 
+def _sample_document(full_text: str, max_chars: int = 6000) -> str:
+    """Sample text from beginning, middle, and end of a document.
+
+    For short docs (<= max_chars), returns the full text.
+    For longer docs, takes roughly equal chunks from start, middle, and end
+    so the LLM sees the full breadth of topics covered.
+    """
+    if len(full_text) <= max_chars:
+        return full_text
+
+    chunk = max_chars // 3
+    start = full_text[:chunk]
+    mid_start = (len(full_text) - chunk) // 2
+    middle = full_text[mid_start:mid_start + chunk]
+    end = full_text[-chunk:]
+    return f"{start}\n\n[...]\n\n{middle}\n\n[...]\n\n{end}"
+
+
 def extract_topics(full_text: str, num_topics: int = 5) -> list[dict]:
     """Extract key topics from document text using LLM.
 
     Returns list of {"topic": "...", "keywords": "..."} dicts.
     """
+    sampled = _sample_document(full_text, max_chars=6000)
     prompt = TOPIC_EXTRACTION_PROMPT.format(
-        text=full_text[:4000],
+        text=sampled,
         num_topics=num_topics,
     )
 
+    # Scale num_predict with topic count (each topic needs ~30 tokens)
+    predict = max(400, num_topics * 50)
     try:
-        result = reel_llm_call(prompt, timeout=120.0, num_predict=400)
+        result = reel_llm_call(prompt, timeout=120.0, num_predict=predict)
     except (OllamaUnavailableError, httpx.TimeoutException):
         log.warning("Topic extraction failed — LLM unavailable")
         return []
