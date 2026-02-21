@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { getBookmarks, addBookmark as apiAddBookmark, removeBookmark as apiRemoveBookmark } from '../api';
+import { getBookmarks, addBookmark as apiAddBookmark, removeBookmark as apiRemoveBookmark, trackInteraction, getLikedReels } from '../api';
 import { clearAudioCache } from '../services/audioCache';
 
 const useStore = create((set, get) => ({
@@ -23,6 +23,7 @@ const useStore = create((set, get) => ({
       hasMore: true,
       bookmarks: new Map(),
       bookmarkItems: [],
+      likes: new Map(),
       currentUpload: null,
       bgUpload: null,
     });
@@ -50,6 +51,7 @@ const useStore = create((set, get) => ({
       const bookmarkId = bookmarks.get(reelId);
       try {
         await apiRemoveBookmark(bookmarkId);
+        trackInteraction(reelId, 'unbookmark').catch(() => {});
         const next = new Map(bookmarks);
         next.delete(reelId);
         set((state) => ({
@@ -60,12 +62,44 @@ const useStore = create((set, get) => ({
     } else {
       try {
         const result = await apiAddBookmark(reelId, null);
+        trackInteraction(reelId, 'bookmark').catch(() => {});
         const next = new Map(bookmarks);
         next.set(reelId, result.id);
         set((state) => ({
           bookmarks: next,
           bookmarkItems: [...state.bookmarkItems, { id: result.id, reel_id: reelId }],
         }));
+      } catch { /* silent */ }
+    }
+  },
+
+  // --- Likes (API-backed) ---
+  likes: new Map(), // reel_id -> true
+  loadLikes: async () => {
+    try {
+      const data = await getLikedReels();
+      const map = new Map();
+      data.liked_reel_ids.forEach((id) => map.set(id, true));
+      set({ likes: map });
+    } catch {
+      // silent fail
+    }
+  },
+  toggleLike: async (reelId) => {
+    const { likes } = get();
+    if (likes.has(reelId)) {
+      try {
+        await trackInteraction(reelId, 'unlike');
+        const next = new Map(likes);
+        next.delete(reelId);
+        set({ likes: next });
+      } catch { /* silent */ }
+    } else {
+      try {
+        await trackInteraction(reelId, 'like');
+        const next = new Map(likes);
+        next.set(reelId, true);
+        set({ likes: next });
       } catch { /* silent */ }
     }
   },

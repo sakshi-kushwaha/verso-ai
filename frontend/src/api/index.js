@@ -171,4 +171,19 @@ export async function getAllProgress() {
   return data
 }
 
+// --- Interactions / Algorithm ---
+export async function trackInteraction(reelId, action, timeSpentMs = 0) {
+  const { data } = await api.post('/interactions/track', {
+    reel_id: reelId,
+    action,
+    time_spent_ms: timeSpentMs,
+  })
+  return data
+}
+
+export async function getLikedReels() {
+  const { data } = await api.get('/interactions/likes')
+  return data
+}
+
 export default api

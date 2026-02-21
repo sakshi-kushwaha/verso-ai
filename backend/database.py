@@ -151,6 +151,31 @@ def init_db():
     if "chat_summary" not in upload_cols:
         conn.execute("ALTER TABLE uploads ADD COLUMN chat_summary TEXT")
 
+    # Migration: reel_interactions + reel_likes tables for feed algorithm
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS reel_interactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            reel_id INTEGER NOT NULL REFERENCES reels(id),
+            action TEXT NOT NULL CHECK(action IN ('view','like','unlike','skip','bookmark','unbookmark')),
+            time_spent_ms INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_ri_user ON reel_interactions(user_id);
+        CREATE INDEX IF NOT EXISTS idx_ri_user_action ON reel_interactions(user_id, action);
+
+        CREATE TABLE IF NOT EXISTS reel_likes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            reel_id INTEGER NOT NULL REFERENCES reels(id),
+            created_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(user_id, reel_id)
+        );
+    """)
+
+    # Backfill: fix gold standard reels to appear in Explore tab
+    conn.execute("UPDATE uploads SET doc_type = 'seed' WHERE filename = '__gold_standard__' AND (doc_type IS NULL OR doc_type != 'seed')")
+
     # Seed a default user (placeholder until auth is implemented)
     conn.execute(
         "INSERT OR IGNORE INTO users (id, name, password_hash) VALUES (1, 'default', 'placeholder')"

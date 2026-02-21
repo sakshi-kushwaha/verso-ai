@@ -5,9 +5,13 @@ import useStore from '../store/useStore'
 export default function ProtectedRoute() {
   const token = useStore((s) => s.token)
   const loadBookmarks = useStore((s) => s.loadBookmarks)
+  const loadLikes = useStore((s) => s.loadLikes)
 
   useEffect(() => {
-    if (token) loadBookmarks()
+    if (token) {
+      loadBookmarks()
+      loadLikes()
+    }
   }, [token])
 
   if (!token) return <Navigate to="/welcome" replace />
