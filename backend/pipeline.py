@@ -84,6 +84,9 @@ def _try_compose_video(reel_id: int, reel: dict, subject_category: str):
     tts_path = None
     narration = reel.get("narration", reel.get("summary", ""))
     if narration:
+        # Strip markdown formatting so TTS doesn't read "asterisk" etc.
+        import re
+        narration = re.sub(r'\*+', '', narration).strip()
         try:
             tts_path = generate_audio(narration, reel_index=reel_id)
         except Exception:
@@ -97,6 +100,7 @@ def _try_compose_video(reel_id: int, reel: dict, subject_category: str):
                 text=reel.get("summary", ""),
                 category=cat,
                 clips=clips,
+                narration=narration or "",
             )
             if script and script.get("segments"):
                 video_path = compose_multi_clip_reel(

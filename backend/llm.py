@@ -546,7 +546,8 @@ def generate_topic_reel_with_clips(
     return parse_llm_json(result)
 
 
-def generate_reel_script(text: str, category: str, clips: list[dict]) -> dict | None:
+def generate_reel_script(text: str, category: str, clips: list[dict],
+                         narration: str = "") -> dict | None:
     """Generate a multi-segment reel script using the LLM.
 
     Returns parsed dict with title, narration, segments — or None on failure.
@@ -557,7 +558,7 @@ def generate_reel_script(text: str, category: str, clips: list[dict]) -> dict | 
     # Build numbered clip list for the prompt
     clip_list_lines = []
     for i, c in enumerate(clips, 1):
-        clip_list_lines.append(f"{i}. {c['file']} — {c['description']}")
+        clip_list_lines.append(f"{i}. {c['file']}")
     clip_list = "\n".join(clip_list_lines)
 
     num_segments = 3 if len(text) < 800 else 4
@@ -565,6 +566,7 @@ def generate_reel_script(text: str, category: str, clips: list[dict]) -> dict | 
 
     prompt = REEL_SCRIPT_PROMPT.format(
         clip_list=clip_list,
+        narration=narration[:1500] if narration else text[:500],
         num_segments=num_segments,
         total_duration=total_duration,
         text=text[:2000],

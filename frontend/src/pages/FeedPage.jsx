@@ -711,12 +711,10 @@ export default function FeedPage() {
           const showAsCard = (i + 1) % 4 === 0
           return (
             <SwiperSlide key={reel.id}>
-              {showAsCard ? (
+              {showAsCard || !reel.videoUrl || failedVideos.has(reel.id) ? (
                 <GradientPostCard reel={reel} index={i} total={reels.length} isActive={i === activeIndex} />
-              ) : reel.videoUrl && !failedVideos.has(reel.id) ? (
-                <VideoReelCard reel={reel} index={i} total={reels.length} isActive={i === activeIndex} onVideoError={(id) => setFailedVideos(prev => new Set(prev).add(id))} />
               ) : (
-                <ReelCard reel={reel} index={i} total={reels.length} />
+                <VideoReelCard reel={reel} index={i} total={reels.length} isActive={i === activeIndex} onVideoError={(id) => setFailedVideos(prev => new Set(prev).add(id))} />
               )}
             </SwiperSlide>
           )
