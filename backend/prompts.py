@@ -212,6 +212,65 @@ Text to create a reel about:
 
 JSON:"""
 
+COMBINED_CLASSIFICATION_PROMPT = """Classify this document by BOTH its type and subject area.
+
+Document types: textbook, research_paper, business, fiction, technical, general
+Subject categories: science, math, history, literature, business, technology, medicine, law, arts, engineering, general
+
+Rules:
+- Respond with ONLY two words separated by a space: doc_type subject_category
+- No explanation, no punctuation, no extra text.
+
+Text:
+{text}
+
+Classification:"""
+
+TOPIC_REEL_WITH_CLIPS_PROMPT = """You are a learning content creator for Verso. Generate exactly ONE reel with video clip selections and 1-2 flashcards about the specific topic below.
+
+TOPIC: {topic}
+DOCUMENT TYPE: {doc_type}
+{doc_type_instruction}
+
+STYLE: {style_instruction}
+LENGTH: {depth_instruction}
+FOCUS: {use_case_instruction}
+DIFFICULTY: {difficulty_instruction}
+
+{few_shot}
+
+AVAILABLE VIDEO CLIPS (use ONLY these filenames for segments):
+{clip_list}
+
+RULES:
+1. Return ONLY valid JSON matching the schema below — no extra text before or after.
+2. Generate exactly 1 reel focused ONLY on the topic "{topic}". Do not cover other topics.
+3. Generate 1-2 flashcards about this topic.
+4. Every flashcard question MUST end with a question mark (?).
+5. Every flashcard answer MUST be at least 10 words long.
+6. Reel title must be under 60 characters.
+7. "narration" MUST follow these spoken-audio rules:
+   - Write as if explaining to a curious friend, NOT reading from a textbook.
+   - Use contractions: "don't", "isn't", "you're", "it's", "here's".
+   - Mix short punchy sentences (5-8 words) with longer explanations (12-18 words).
+   - Start at least one sentence with "Here's the thing", "Think about it", "Now", or "So".
+   - Use "..." for natural pauses and "—" for pivots.
+   - NEVER use passive voice in the first sentence. Start with something engaging.
+   - Narration MUST be 40-60 words long (~15-20 seconds when spoken). Never shorter than 40 words.
+   - End with a memorable takeaway or a reflective thought — not a dry fact.
+   - No bullet points, no special symbols, no abbreviations, no parentheses.
+8. Pick exactly {num_segments} different clips from the available list for "segments".
+9. Each segment "duration" is in seconds. Durations MUST sum to exactly {total_duration}.
+10. Each duration must be at least 2 seconds.
+11. "overlay" is short text shown on screen (max 8 words per segment).
+
+Schema: {{"reels":[{{"title":"short catchy title","summary":"key idea summary","narration":"spoken version of summary","category":"topic area","keywords":"comma separated","segments":[{{"clip":"filename.mp4","overlay":"short text","duration":5}}]}}],"flashcards":[{{"question":"question about content?","answer":"detailed answer at least 10 words long"}}]}}
+
+Relevant text about "{topic}":
+{text}
+
+JSON:"""
+
 DOC_SUMMARY_PROMPT = """You are a study assistant. Read the document text below and write a short summary.
 
 Rules:

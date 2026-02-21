@@ -1,6 +1,6 @@
 """Video reel composition using ffmpeg — stock video + TTS audio + background music.
 
-Memory-conscious: uses 1080p output and ffmpeg thread limits to stay under ~250MB per encode.
+Memory-conscious: uses 1080p output and ffmpeg thread limits to stay under ~400MB per encode.
 """
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ AUDIO_PROFILES = {
 DEFAULT_PROFILE = (261, "sine")
 
 # ffmpeg resource limits for 8GB environments
-FFMPEG_THREADS = "2"          # limit encoder threads (default would use all cores)
+FFMPEG_THREADS = "4"          # limit encoder threads (default would use all cores)
 FFMPEG_ENCODE_TIMEOUT = 180   # seconds
 
 # Module-level video catalog cache
@@ -339,7 +339,7 @@ def _burn_word_sync(video_path: str, narration: str, duration: float,
     if not words:
         return video_path
 
-    words_per_group = 4
+    words_per_group = 7
     groups = []
     for i in range(0, len(words), words_per_group):
         groups.append(" ".join(words[i:i + words_per_group]))
@@ -394,7 +394,7 @@ def _burn_word_sync(video_path: str, narration: str, duration: float,
         "-filter_complex", filter_complex,
         "-map", f"[{current_label}]",
         "-map", "0:a",
-        "-c:v", "libx264", "-preset", "fast", "-crf", "26",
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "30",
         "-c:a", "copy",
         "-threads", FFMPEG_THREADS,
         "-movflags", "+faststart",
@@ -432,8 +432,25 @@ def _get_tts_duration(tts_audio_path: str | None) -> float:
         return DEFAULT_DURATION
 
 
+_bgm_cache: dict[str, str] = {}  # {cache_key: path} for reusing background music
+
+
 def _generate_background_music(out_path: str, freq: float, wave_type: str, duration: float = 16.0):
-    """Generate ambient background music — a warm pad with fade in/out."""
+    """Generate ambient background music — a warm pad with fade in/out. Cached per freq+duration."""
+    from config import AUDIO_CACHE_DIR
+    AUDIO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Round duration to nearest second for better cache hits
+    dur_rounded = round(duration)
+    cache_key = f"bgm_{int(freq)}_{wave_type}_{dur_rounded}"
+    cached_path = str(AUDIO_CACHE_DIR / f"{cache_key}.wav")
+
+    if os.path.exists(cached_path) and os.path.getsize(cached_path) > 0:
+        # Copy cached file to the requested output path
+        import shutil
+        shutil.copy2(cached_path, out_path)
+        return
+
     fade_out_start = max(0, duration - 3)
     cmd = [
         "ffmpeg", "-y",
@@ -456,6 +473,13 @@ def _generate_background_music(out_path: str, freq: float, wave_type: str, durat
         out_path,
     ]
     subprocess.run(cmd, check=True, capture_output=True, timeout=30)
+
+    # Cache the generated file for reuse
+    try:
+        import shutil
+        shutil.copy2(out_path, cached_path)
+    except Exception:
+        pass
 
 
 def compose_reel_video(
@@ -543,8 +567,8 @@ def compose_reel_video(
             "-t", str(duration),
             "-threads", FFMPEG_THREADS,
             "-c:v", "libx264",
-            "-preset", "fast",
-            "-crf", "26",
+            "-preset", "ultrafast",
+            "-crf", "30",
             "-c:a", "aac", "-b:a", "128k",
             "-movflags", "+faststart",
             "-pix_fmt", "yuv420p",
@@ -665,7 +689,7 @@ def compose_multi_clip_reel(
         # Word-synced narration overlays (integrated into single pass)
         if narration:
             words = narration.split()
-            wpg = 4  # words per group
+            wpg = 7  # words per group
             groups = [" ".join(words[i:i + wpg]) for i in range(0, len(words), wpg)]
             total_words = len(words)
             start_pad, end_pad = 0.3, 0.5
@@ -740,8 +764,8 @@ def compose_multi_clip_reel(
             "-t", str(TOTAL_DURATION),
             "-threads", FFMPEG_THREADS,
             "-c:v", "libx264",
-            "-preset", "fast",
-            "-crf", "26",
+            "-preset", "ultrafast",
+            "-crf", "30",
             "-c:a", "aac", "-b:a", "128k",
             "-movflags", "+faststart",
             "-pix_fmt", "yuv420p",
