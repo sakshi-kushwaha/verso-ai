@@ -9,7 +9,8 @@ import { speak } from '../services/tts'
 import useStore from '../store/useStore'
 import Tag from '../components/Tag'
 import Button from '../components/Button'
-import { Bookmark, BookmarkFill, Play, Pause, Upload, Download, Volume, VolumeOff } from '../components/Icons'
+import { Bookmark, BookmarkFill, Heart, HeartFill, Play, Pause, Upload, Download, Volume, VolumeOff } from '../components/Icons'
+import useReelTracker from '../hooks/useReelTracker'
 
 function wrapCanvasText(ctx, text, x, y, maxW, lineH) {
   const words = text.split(' ')
@@ -111,8 +112,9 @@ function VideoReelCard({ reel, index, total, isActive, onVideoError }) {
   const videoRef = useRef(null)
   const [paused, setPaused] = useState(false)
   const [buffering, setBuffering] = useState(true)
-  const { bookmarks, toggleBookmark } = useStore()
+  const { bookmarks, toggleBookmark, likes, toggleLike } = useStore()
   const saved = bookmarks.has(reel.id)
+  const liked = likes.has(reel.id)
   const [progress, setProgress] = useState(0)
   const [muted, setMuted] = useState(false)
 
@@ -210,6 +212,13 @@ function VideoReelCard({ reel, index, total, isActive, onVideoError }) {
 
         {/* Action buttons — bottom right */}
         <div className="absolute right-4 bottom-24 z-20 flex flex-col gap-2">
+          <button onClick={() => toggleLike(reel.id)} className="cursor-pointer">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+              liked ? 'bg-red-500/20 text-red-500' : 'bg-black/40 backdrop-blur-sm text-white'
+            }`}>
+              {liked ? <HeartFill /> : <Heart />}
+            </div>
+          </button>
           <button onClick={() => downloadBite(reel)} className="cursor-pointer">
             <div className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white">
               <Download />
@@ -254,8 +263,9 @@ function ReelCard({ reel, index, total }) {
   const [playing, setPlaying] = useState(false)
   const [audioLoading, setAudioLoading] = useState(false)
   const ttsRef = useRef(null)
-  const { bookmarks, toggleBookmark } = useStore()
+  const { bookmarks, toggleBookmark, likes, toggleLike } = useStore()
   const saved = bookmarks.has(reel.id)
+  const liked = likes.has(reel.id)
 
   const handleAudio = async () => {
     // Block rapid clicks while loading
@@ -380,6 +390,17 @@ function ReelCard({ reel, index, total }) {
                 Download
               </button>
               <button
+                onClick={() => toggleLike(reel.id)}
+                className={`flex items-center gap-1.5 text-sm transition-colors cursor-pointer ${
+                  liked
+                    ? 'text-red-500'
+                    : (hasBg ? 'text-white/70 hover:text-white' : 'text-text-muted hover:text-primary')
+                }`}
+              >
+                {liked ? <HeartFill /> : <Heart />}
+                {liked ? 'Liked' : 'Like'}
+              </button>
+              <button
                 onClick={() => toggleBookmark(reel.id)}
                 className={`flex items-center gap-1.5 text-sm transition-colors cursor-pointer ${
                   saved
@@ -399,8 +420,9 @@ function ReelCard({ reel, index, total }) {
 }
 
 function GradientPostCard({ reel, index, total, isActive }) {
-  const { bookmarks, toggleBookmark } = useStore()
+  const { bookmarks, toggleBookmark, likes, toggleLike } = useStore()
   const saved = bookmarks.has(reel.id)
+  const liked = likes.has(reel.id)
   const [animKey, setAnimKey] = useState(0)
 
   // Replay staggered animations when slide becomes active
@@ -484,6 +506,16 @@ function GradientPostCard({ reel, index, total, isActive }) {
             }}
           >
             <button
+              onClick={() => toggleLike(reel.id)}
+              className={`flex items-center gap-1.5 px-3 py-2.5 rounded-full text-sm font-medium transition-colors cursor-pointer ${
+                liked
+                  ? 'bg-red-500/20 text-red-500'
+                  : 'bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white/80'
+              }`}
+            >
+              {liked ? <HeartFill /> : <Heart />}
+            </button>
+            <button
               onClick={() => downloadBite(reel, true)}
               className="flex items-center gap-1.5 px-4 py-2.5 rounded-full text-sm font-medium transition-colors cursor-pointer bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white/80"
             >
@@ -516,6 +548,7 @@ export default function FeedPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { reels, setReels, appendReels, feedPage, hasMore } = useStore()
+  const { onSlideEnter } = useReelTracker()
   const [initialLoading, setInitialLoading] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(false)
@@ -546,7 +579,9 @@ export default function FeedPage() {
     try {
       const data = await getFeed(1, 10, null, activeTab)
       if (data.reels?.length) {
-        setReels(data.reels.map(mapReel))
+        const mapped = data.reels.map(mapReel)
+        setReels(mapped)
+        onSlideEnter(mapped[0].id)
       } else {
         setReels([])
       }
@@ -681,6 +716,8 @@ export default function FeedPage() {
         onSlideChange={(swiper) => {
           setActiveIndex(swiper.activeIndex)
           swiper.allowSlideNext = swiper.activeIndex < reels.length - 1
+          const reel = reels[swiper.activeIndex]
+          if (reel) onSlideEnter(reel.id)
         }}
       >
         {reels.map((reel, i) => {

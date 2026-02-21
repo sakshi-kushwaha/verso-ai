@@ -14,9 +14,13 @@ import gc
 import json
 import os
 import random
-import resource
 import sys
 import time
+
+try:
+    import resource
+except ImportError:
+    resource = None  # Not available on Windows
 
 # Ensure backend/ is on sys.path so we can import project modules
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -34,7 +38,14 @@ SEGMENTS_PER_REEL = 3
 
 
 def get_rss_mb():
-    """Current RSS in megabytes (macOS/Linux)."""
+    """Current RSS in megabytes."""
+    if resource is None:
+        # Windows fallback
+        try:
+            import psutil
+            return psutil.Process().memory_info().rss / (1024 * 1024)
+        except ImportError:
+            return 0
     usage = resource.getrusage(resource.RUSAGE_SELF)
     if sys.platform == "darwin":
         return usage.ru_maxrss / (1024 * 1024)  # bytes → MB on macOS
@@ -42,7 +53,7 @@ def get_rss_mb():
 
 
 def load_gold_reels(path: str) -> list[dict]:
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         data = json.load(f)
     # Support both {"reels": [...]} and bare [...]
     if isinstance(data, dict):
@@ -88,7 +99,7 @@ def ensure_gold_upload(conn) -> int:
         return row[0]
     cur = conn.execute(
         "INSERT INTO uploads (user_id, filename, status, doc_type, subject_category) "
-        "VALUES (1, '__gold_standard__', 'done', 'general', 'general')"
+        "VALUES (1, '__gold_standard__', 'done', 'seed', 'general')"
     )
     conn.commit()
     return cur.lastrowid

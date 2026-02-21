@@ -503,14 +503,14 @@ def compose_reel_video(
 
         # TTS narration
         if tts_audio_path and os.path.exists(tts_audio_path):
-            inputs.extend(["-i", tts_audio_path])
+            inputs.extend(["-i", str(tts_audio_path)])
             filter_parts.append(f"[{audio_idx}:a]volume=1.2[tts]")
             audio_layers.append("[tts]")
             audio_idx += 1
 
         # Sound effect (chime etc.)
         if sound_effect_path and os.path.exists(sound_effect_path):
-            inputs.extend(["-i", sound_effect_path])
+            inputs.extend(["-i", str(sound_effect_path)])
             filter_parts.append(f"[{audio_idx}:a]volume=0.25[sfx]")
             audio_layers.append("[sfx]")
             audio_idx += 1
@@ -639,10 +639,10 @@ def compose_multi_clip_reel(
                 clip_path = clip_map.get(seg.get("clip", ""))
                 if not clip_path or not os.path.exists(clip_path):
                     raise FileNotFoundError(f"Clip not found: {seg.get('clip', '')}")
-                inputs.extend(["-stream_loop", "-1", "-t", f"{dur:.2f}", "-i", clip_path])
+                inputs.extend(["-r", str(FPS), "-stream_loop", "-1", "-t", f"{dur:.2f}", "-i", clip_path])
                 filter_parts.append(
                     f"[{i}:v]scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase"
-                    f":flags=lanczos,crop={WIDTH}:{HEIGHT},setsar=1,fps={FPS},setpts=PTS-STARTPTS[v{i}]"
+                    f":flags=lanczos,crop={WIDTH}:{HEIGHT},setsar=1[v{i}]"
                 )
 
         next_input_idx = n  # video/image inputs used indices 0..n-1
@@ -701,13 +701,13 @@ def compose_multi_clip_reel(
         audio_idx = next_input_idx  # after video + word overlay inputs
 
         if tts_audio_path and os.path.exists(tts_audio_path):
-            inputs.extend(["-i", tts_audio_path])
+            inputs.extend(["-i", str(tts_audio_path)])
             filter_parts.append(f"[{audio_idx}:a]volume=1.2[tts]")
             audio_layers.append("[tts]")
             audio_idx += 1
 
         if sound_effect_path and os.path.exists(sound_effect_path):
-            inputs.extend(["-i", sound_effect_path])
+            inputs.extend(["-i", str(sound_effect_path)])
             filter_parts.append(f"[{audio_idx}:a]volume=0.25[sfx]")
             audio_layers.append("[sfx]")
             audio_idx += 1

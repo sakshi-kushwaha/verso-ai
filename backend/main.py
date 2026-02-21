@@ -16,6 +16,7 @@ from routers.auth import router as auth_router
 from routers.bookmarks import router as bookmarks_router
 from routers.progress import router as progress_router
 from routers.video import router as video_router
+from routers.interactions import router as interactions_router
 import pipeline
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
@@ -62,6 +63,7 @@ app.include_router(auth_router)
 app.include_router(bookmarks_router)
 app.include_router(progress_router)
 app.include_router(video_router)
+app.include_router(interactions_router)
 
 
 @app.get("/health")
