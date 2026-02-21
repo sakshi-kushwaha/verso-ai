@@ -3,13 +3,16 @@ import os
 import random
 import asyncio
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from database import get_db
 import httpx
 from parser import parse_document, EmptyDocumentError, ScannedPDFError
 from llm import (
-    detect_doc_type, detect_subject_category, generate_doc_summary,
+    detect_doc_type, detect_subject_category, detect_doc_classification,
+    generate_doc_summary,
     generate_reels, generate_reel_script,
     extract_topics, gather_topic_content, generate_topic_reel,
+    generate_topic_reel_with_clips,
     OllamaUnavailableError,
 )
 from bg_images import assign_images, _resolve_category
@@ -23,6 +26,9 @@ log = logging.getLogger(__name__)
 
 TEMP_DIR = os.path.join(os.path.dirname(__file__), "data", "temp")
 BATCH_SIZE = 3
+
+# Thread pool for overlapping TTS+ffmpeg with LLM calls
+_video_executor = ThreadPoolExecutor(max_workers=1)
 
 # Set by main.py lifespan — the running asyncio event loop
 _event_loop: asyncio.AbstractEventLoop | None = None
@@ -133,6 +139,94 @@ def _try_compose_video(reel_id: int, reel: dict, subject_category: str):
         log.warning("Video composition failed for reel %d: %s", reel_id, e)
 
 
+def _compose_and_notify(upload_id: int, reel_id: int, reel: dict, subject_category: str,
+                        segments: list[dict] | None = None):
+    """Run video composition + WS notification in the thread pool.
+
+    If segments are provided (from merged LLM call), use them directly for
+    multi-clip composition without an extra LLM call.
+    """
+    if segments:
+        _try_compose_video_with_segments(reel_id, reel, subject_category, segments)
+    else:
+        _try_compose_video(reel_id, reel, subject_category)
+    _notify_reel_ready(upload_id, reel_id)
+
+
+def _try_compose_video_with_segments(reel_id: int, reel: dict, subject_category: str,
+                                      segments: list[dict]):
+    """Compose multi-clip video using pre-selected segments (no extra LLM call)."""
+    cat = _resolve_category(reel.get("category", ""), subject_category)
+
+    # Generate TTS
+    tts_path = None
+    narration = reel.get("narration", reel.get("summary", ""))
+    if narration:
+        try:
+            tts_path = generate_audio(narration, reel_index=reel_id)
+        except Exception:
+            log.debug("TTS failed for reel %d, composing without narration", reel_id)
+
+    # Validate segments against available clips
+    clips = get_clips_for_category(cat)
+    valid_filenames = {c["file"] for c in clips}
+    validated = []
+    for seg in segments:
+        if not isinstance(seg, dict):
+            continue
+        clip_file = seg.get("clip", "")
+        if clip_file not in valid_filenames:
+            continue
+        dur = seg.get("duration", 5)
+        if not isinstance(dur, (int, float)) or dur < 2:
+            dur = 5
+        validated.append({
+            "clip": clip_file,
+            "overlay": str(seg.get("overlay", ""))[:60],
+            "duration": float(dur),
+        })
+
+    if len(validated) >= 2:
+        try:
+            video_path = compose_multi_clip_reel(
+                reel_id=reel_id,
+                title=reel.get("title", ""),
+                narration=narration or "",
+                segments=validated,
+                category=cat,
+                tts_audio_path=str(tts_path) if tts_path else None,
+            )
+            conn = get_db()
+            conn.execute("UPDATE reels SET video_path = ? WHERE id = ?", (video_path, reel_id))
+            conn.commit()
+            conn.close()
+            log.info("Composed multi-clip video for reel %d (merged): %s", reel_id, video_path)
+            return
+        except Exception as e:
+            log.warning("Multi-clip composition failed for reel %d: %s — falling back", reel_id, e)
+
+    # Fallback to single-clip
+    stock_video = _pick_stock_video(reel.get("category", ""), subject_category)
+    if not stock_video:
+        return
+    try:
+        video_path = compose_reel_video(
+            reel_id=reel_id,
+            title=reel.get("title", ""),
+            summary=reel.get("summary", ""),
+            stock_video_path=stock_video,
+            tts_audio_path=str(tts_path) if tts_path else None,
+            category=reel.get("category"),
+        )
+        conn = get_db()
+        conn.execute("UPDATE reels SET video_path = ? WHERE id = ?", (video_path, reel_id))
+        conn.commit()
+        conn.close()
+        log.info("Composed single-clip fallback video for reel %d: %s", reel_id, video_path)
+    except Exception as e:
+        log.warning("Video composition failed for reel %d: %s", reel_id, e)
+
+
 def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
     try:
         # Step 0: Fetch user preferences for personalized generation
@@ -157,26 +251,14 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
 
         _update_pages(upload_id, len(pages))
 
-        # Step 2: Detect doc type from first page text
+        # Step 2: Detect doc type + subject category in ONE LLM call
         _update_progress(upload_id, 15, "analyzing")
         full_text = "\n".join(p["text"] for p in pages)
-        doc_type = detect_doc_type(full_text)
+        doc_type, subject_category = detect_doc_classification(full_text)
         _update_doc_type(upload_id, doc_type)
-
-        # Step 2b: Detect subject category for background images
-        subject_category = detect_subject_category(full_text)
         _update_subject_category(upload_id, subject_category)
 
-        # Step 2c: Generate document-level summary
-        _update_progress(upload_id, 18, "summarizing")
-        doc_summary = generate_doc_summary(full_text)
-        if doc_summary:
-            _save_doc_summary(upload_id, doc_summary)
-            log.info("Upload %s: doc summary generated (%d chars)", upload_id, len(doc_summary))
-        else:
-            log.warning("Upload %s: doc summary generation failed or skipped", upload_id)
-
-        # Step 3: Extract topics and generate one reel per topic
+        # Step 3: Extract topics (summary deferred until after reels)
         _update_progress(upload_id, 20, "extracting")
 
         # Decide number of reels based on document length
@@ -195,9 +277,14 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
         log.info("Upload %s: extracted %d topics — %s",
                  upload_id, len(topics), ", ".join(t["topic"] for t in topics))
 
+        # Pre-fetch clips for the subject category (used by merged LLM call)
+        cat = _resolve_category(subject_category, subject_category)
+        available_clips = get_clips_for_category(cat)
+
         reels_completed = 0
         reels_failed = 0
         ollama_down = False
+        pending_futures = []
 
         for i, topic in enumerate(topics):
             topic_progress = 20 + int(((i + 1) / len(topics)) * 50)
@@ -207,8 +294,15 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
             topic_text = gather_topic_content(topic, full_text)
             log.info("Topic %d/%d: %r (%d chars)", i + 1, len(topics), topic["topic"], len(topic_text))
 
+            # Single merged LLM call: generates reel content + picks clips
             try:
-                result = generate_topic_reel(topic["topic"], topic_text, doc_type, prefs, category=subject_category)
+                if available_clips and len(available_clips) >= 2:
+                    result = generate_topic_reel_with_clips(
+                        topic["topic"], topic_text, doc_type, prefs,
+                        category=subject_category, clips=available_clips,
+                    )
+                else:
+                    result = generate_topic_reel(topic["topic"], topic_text, doc_type, prefs, category=subject_category)
             except OllamaUnavailableError:
                 log.error("Ollama went down at topic %d/%d for upload %s", i + 1, len(topics), upload_id)
                 ollama_down = True
@@ -232,16 +326,23 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
             for fc in result.get("flashcards", []):
                 _save_flashcard(upload_id, fc)
 
-            # Video composition
+            # Submit video composition to thread pool (overlaps with next LLM call)
             _update_progress(upload_id, topic_progress + 2, "composing")
             for reel_id, reel in saved_reels:
-                _try_compose_video(reel_id, reel, subject_category)
-
-            # Push each reel to frontend immediately via WebSocket
-            for reel_id, _ in saved_reels:
-                _notify_reel_ready(upload_id, reel_id)
+                segments = reel.get("segments")
+                fut = _video_executor.submit(
+                    _compose_and_notify, upload_id, reel_id, reel, subject_category, segments,
+                )
+                pending_futures.append(fut)
 
             reels_completed += 1
+
+        # Wait for all video composition futures to finish
+        for fut in pending_futures:
+            try:
+                fut.result(timeout=300)
+            except Exception as e:
+                log.warning("Video future failed: %s", e)
 
         # Handle failures
         if ollama_down:
@@ -267,23 +368,32 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
             _update_status(upload_id, "error", "All topic reels failed. Please try again later.")
             return
 
-        # Step 4: Embed chunks for RAG / Chat Q&A
-        _update_progress(upload_id, 70, "embedding")
-        try:
-            asyncio.run(embed_chunks(upload_id, full_text, lambda p: _update_progress(upload_id, 70 + int(p * 25), "embedding")))
-            _set_qa_ready(upload_id)
-        except (httpx.ConnectError, httpx.TimeoutException) as e:
-            log.error("Embedding failed for upload %s: %s", upload_id, e)
-            _update_status(
-                upload_id, "partial",
-                "Reels generated but chat Q&A is unavailable — embedding failed. "
-                "Reels are still viewable.",
-            )
-            _update_progress(upload_id, 95, "partial")
-            return
-
-        _update_progress(upload_id, 100, "done")
+        # Step 4: Mark as done immediately, defer embedding + summary
+        _update_progress(upload_id, 95, "done")
         _update_status(upload_id, "done")
+
+        # Deferred: doc summary + embedding in background
+        def _deferred_tasks():
+            try:
+                # Generate doc summary (deferred from before reel loop)
+                _update_progress(upload_id, 96, "summarizing")
+                doc_summary = generate_doc_summary(full_text)
+                if doc_summary:
+                    _save_doc_summary(upload_id, doc_summary)
+                    log.info("Upload %s: deferred doc summary generated (%d chars)", upload_id, len(doc_summary))
+            except Exception as e:
+                log.warning("Deferred doc summary failed for upload %s: %s", upload_id, e)
+
+            try:
+                _update_progress(upload_id, 97, "embedding")
+                asyncio.run(embed_chunks(upload_id, full_text, lambda p: None))
+                _set_qa_ready(upload_id)
+                _update_progress(upload_id, 100, "done")
+                log.info("Upload %s: deferred embedding complete, Q&A ready", upload_id)
+            except (httpx.ConnectError, httpx.TimeoutException) as e:
+                log.error("Deferred embedding failed for upload %s: %s", upload_id, e)
+
+        threading.Thread(target=_deferred_tasks, daemon=True).start()
 
     except Exception as e:
         log.exception("Pipeline error for upload %s", upload_id)

@@ -10,6 +10,7 @@ from database import get_db
 from prompts import (
     DOC_TYPE_PROMPT,
     SUBJECT_CATEGORY_PROMPT,
+    COMBINED_CLASSIFICATION_PROMPT,
     DOC_SUMMARY_PROMPT,
     REEL_GENERATION_PROMPT,
     REEL_SYSTEM_PROMPT,
@@ -17,6 +18,7 @@ from prompts import (
     REEL_MIXED_SCRIPT_PROMPT,
     TOPIC_EXTRACTION_PROMPT,
     TOPIC_REEL_PROMPT,
+    TOPIC_REEL_WITH_CLIPS_PROMPT,
     REEL_STYLE_INSTRUCTIONS,
     REEL_DEPTH_INSTRUCTIONS,
     REEL_USE_CASE_INSTRUCTIONS,
@@ -49,7 +51,8 @@ def llm_call(prompt: str, json_mode: bool = False, timeout: float = None) -> str
         "stream": False,
         "options": {
             "temperature": 0.3,
-            "num_ctx": 4096,
+            "num_ctx": 2048,
+            "num_predict": 400,
             "repeat_penalty": 1.1,
         },
     }
@@ -130,19 +133,22 @@ def classification_llm_call(prompt: str, timeout: float = 60.0) -> str:
     raise last_error
 
 
-def reel_llm_call(prompt: str, timeout: float = 600.0, system: str = None) -> str:
-    """LLM call using the reel model with JSON mode."""
+def reel_llm_call(prompt: str, timeout: float = 600.0, system: str = None,
+                   num_predict: int = 800, json_mode: bool = True) -> str:
+    """LLM call using the reel model. JSON mode on by default."""
     payload = {
         "model": REEL_MODEL,
         "prompt": prompt,
         "stream": False,
-        "format": "json",
         "options": {
             "temperature": 0.3,
-            "num_ctx": 4096,
+            "num_ctx": 2048,
+            "num_predict": num_predict,
             "repeat_penalty": 1.1,
         },
     }
+    if json_mode:
+        payload["format"] = "json"
     if system:
         payload["system"] = system
 
@@ -209,6 +215,35 @@ def detect_subject_category(text: str) -> str:
     return "general"
 
 
+def detect_doc_classification(text: str) -> tuple[str, str]:
+    """Detect both doc type and subject category in a single LLM call.
+
+    Returns (doc_type, subject_category) tuple.
+    """
+    valid_doc_types = {"textbook", "research_paper", "business", "fiction", "technical", "general"}
+
+    try:
+        prompt = COMBINED_CLASSIFICATION_PROMPT.format(text=text[:2000])
+        raw = classification_llm_call(prompt)
+        cleaned = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL).strip()
+        words = cleaned.lower().split()
+    except (OllamaUnavailableError, httpx.TimeoutException):
+        log.warning("Combined classification failed, defaulting to general/general")
+        return ("general", "general")
+
+    doc_type = "general"
+    subject = "general"
+
+    for w in words:
+        w = w.rstrip('.,;:')
+        if w in valid_doc_types and doc_type == "general":
+            doc_type = w
+        elif w in VALID_CATEGORIES and subject == "general":
+            subject = w
+
+    return (doc_type, subject)
+
+
 def generate_doc_summary(full_text: str) -> str | None:
     """Generate a document-level summary (~10 sentences) for the uploads table.
 
@@ -217,7 +252,7 @@ def generate_doc_summary(full_text: str) -> str | None:
     """
     prompt = DOC_SUMMARY_PROMPT.format(text=full_text[:6000])
     try:
-        result = llm_call(prompt, json_mode=False, timeout=120.0)
+        result = reel_llm_call(prompt, timeout=120.0, num_predict=300, json_mode=False)
         summary = result.strip()
         if summary and len(summary) > 50 and len(summary) < 3000:
             return summary
@@ -329,7 +364,7 @@ def extract_topics(full_text: str, num_topics: int = 5) -> list[dict]:
     )
 
     try:
-        result = reel_llm_call(prompt, timeout=120.0)
+        result = reel_llm_call(prompt, timeout=120.0, num_predict=400)
     except (OllamaUnavailableError, httpx.TimeoutException):
         log.warning("Topic extraction failed — LLM unavailable")
         return []
@@ -470,6 +505,44 @@ def generate_topic_reel(topic: str, topic_text: str, doc_type: str, prefs: dict,
     )
 
     result = reel_llm_call(prompt)
+    return parse_llm_json(result)
+
+
+def generate_topic_reel_with_clips(
+    topic: str, topic_text: str, doc_type: str, prefs: dict,
+    category: str, clips: list[dict],
+) -> dict:
+    """Generate a single reel with video clip selections + flashcards in ONE LLM call.
+
+    Merges generate_topic_reel + generate_reel_script into a single call.
+    Returns parsed dict with "reels" (including segments) and "flashcards".
+    """
+    few_shot = get_gold_few_shot(category)
+
+    # Build clip list for the prompt
+    clip_list_lines = []
+    for i, c in enumerate(clips, 1):
+        clip_list_lines.append(f"{i}. {c['file']} — {c.get('description', 'stock footage')}")
+    clip_list = "\n".join(clip_list_lines)
+
+    num_segments = 3 if len(topic_text) < 800 else 4
+
+    prompt = TOPIC_REEL_WITH_CLIPS_PROMPT.format(
+        topic=topic,
+        text=topic_text[:3000],
+        doc_type=doc_type,
+        doc_type_instruction=DOC_TYPE_INSTRUCTIONS.get(doc_type, DOC_TYPE_INSTRUCTIONS["general"]),
+        style_instruction=REEL_STYLE_INSTRUCTIONS.get(prefs.get("learning_style", "mixed"), REEL_STYLE_INSTRUCTIONS["mixed"]),
+        depth_instruction=REEL_DEPTH_INSTRUCTIONS.get(prefs.get("content_depth", "balanced"), REEL_DEPTH_INSTRUCTIONS["balanced"]),
+        use_case_instruction=REEL_USE_CASE_INSTRUCTIONS.get(prefs.get("use_case", "learning"), REEL_USE_CASE_INSTRUCTIONS["learning"]),
+        difficulty_instruction=FLASHCARD_DIFFICULTY_INSTRUCTIONS.get(prefs.get("flashcard_difficulty", "medium"), FLASHCARD_DIFFICULTY_INSTRUCTIONS["medium"]),
+        few_shot=few_shot,
+        clip_list=clip_list,
+        num_segments=num_segments,
+        total_duration=15,
+    )
+
+    result = reel_llm_call(prompt, system=REEL_SYSTEM_PROMPT)
     return parse_llm_json(result)
 
 
