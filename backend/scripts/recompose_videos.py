@@ -47,11 +47,11 @@ def get_rss_mb():
 
 def recompose_reel(reel_id: int, title: str, narration: str, category: str) -> bool:
     """Delete cached video and recompose with current code. Returns True on success."""
-    # Find and delete cached video
+    # Find and delete cached video + download cache
     possible_paths = [
         VIDEO_CACHE_DIR / f"reel_{reel_id}.mp4",
+        VIDEO_CACHE_DIR / "downloads" / f"reel_{reel_id}.mp4",
     ]
-    # Gold standard reels also use reel_90000+ naming
     for p in possible_paths:
         if p.exists():
             p.unlink()

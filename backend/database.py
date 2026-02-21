@@ -143,6 +143,10 @@ def init_db():
     if "source_text" not in reel_cols:
         conn.execute("ALTER TABLE reels ADD COLUMN source_text TEXT")
 
+    # Migration: add one_liner to reels (short LLM-generated description)
+    if "one_liner" not in reel_cols:
+        conn.execute("ALTER TABLE reels ADD COLUMN one_liner TEXT")
+
     # Migration: add doc_summary to uploads (document-level summary)
     if "doc_summary" not in upload_cols:
         conn.execute("ALTER TABLE uploads ADD COLUMN doc_summary TEXT")

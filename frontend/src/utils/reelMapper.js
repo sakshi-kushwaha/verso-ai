@@ -10,6 +10,7 @@ export function mapReel(r, i = null) {
     category: r.category || 'General',
     pages: r.page_ref || '—',
     body: r.summary || '',
+    oneLiner: r.one_liner || r.title || '',
     narration: r.narration || r.summary || '',
     keywords: r.keywords ? r.keywords.split(',').map((k) => k.trim()).filter(Boolean) : [],
     accent: ACCENTS[accentIndex % ACCENTS.length],
