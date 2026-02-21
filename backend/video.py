@@ -327,11 +327,13 @@ _CAPTION_STYLES = [
 ]
 
 
-def _create_ass_captions(narration: str, duration: float, filepath: str,
+def _create_ass_captions(narration: str, tts_duration: float, filepath: str,
                           width: int = 1080, height: int = 1920,
                           style_idx: int = 0) -> str | None:
     """Create ASS subtitle file with animated captions.
 
+    tts_duration should be the *actual* TTS audio length (not the padded video
+    duration) so captions stay in sync with spoken words.
     Each word group gets fade/scale animation. Style rotates per reel
     so every reel looks visually distinct — like different Instagram creators.
     """
@@ -346,11 +348,10 @@ def _create_ass_captions(narration: str, duration: float, filepath: str,
     groups = [" ".join(words[i:i + wpg]) for i in range(0, len(words), wpg)]
     total_words = len(words)
 
-    tts_dur = duration - 1.5 if duration > 3 else duration
     start_pad = 0.05
-    usable = tts_dur - start_pad
+    usable = tts_duration - start_pad
     if usable < 1:
-        usable, start_pad = tts_dur, 0
+        usable, start_pad = tts_duration, 0
     tpw = usable / total_words
 
     # Build ASS style line from preset
@@ -489,22 +490,29 @@ def _burn_word_sync(video_path: str, narration: str, duration: float,
 _XFADE_TRANSITIONS = ["fade", "fadeblack", "dissolve", "wipeleft", "slideup", "smoothleft"]
 
 
-def _get_tts_duration(tts_audio_path: str | None) -> float:
-    """Get TTS audio duration in seconds using ffprobe, clamped to bounds."""
-    if not tts_audio_path or not os.path.exists(tts_audio_path):
-        return DEFAULT_DURATION
+def _get_raw_audio_duration(audio_path: str | None) -> float | None:
+    """Get raw audio duration in seconds via ffprobe. Returns None on failure."""
+    if not audio_path or not os.path.exists(audio_path):
+        return None
     try:
         result = subprocess.run(
             ["ffprobe", "-v", "quiet", "-show_entries", "format=duration",
-             "-of", "json", tts_audio_path],
+             "-of", "json", audio_path],
             capture_output=True, timeout=10,
         )
         info = json.loads(result.stdout)
-        dur = float(info["format"]["duration"])
-        # Add 1.5s padding after narration ends
-        return max(MIN_DURATION, min(dur + 1.5, MAX_DURATION))
+        return float(info["format"]["duration"])
     except Exception:
+        return None
+
+
+def _get_tts_duration(tts_audio_path: str | None) -> float:
+    """Get TTS audio duration in seconds using ffprobe, clamped to bounds."""
+    dur = _get_raw_audio_duration(tts_audio_path)
+    if dur is None:
         return DEFAULT_DURATION
+    # Add 1.5s padding after narration ends
+    return max(MIN_DURATION, min(dur + 1.5, MAX_DURATION))
 
 
 _bgm_cache: dict[str, str] = {}  # {cache_key: path} for reusing background music
@@ -762,10 +770,13 @@ def compose_multi_clip_reel(
                 last_label = out_label
 
         # Animated narration captions (ASS subtitles — style rotates per reel)
+        # Use actual TTS audio duration (not padded video duration) so captions
+        # stay in sync with spoken narration.
         if narration:
             ass_path = os.path.join(tmpdir, "captions.ass")
             caption_style = reel_id % len(_CAPTION_STYLES)
-            if _create_ass_captions(narration, TOTAL_DURATION, ass_path, WIDTH, HEIGHT,
+            raw_tts_dur = _get_raw_audio_duration(tts_audio_path) or (TOTAL_DURATION - 1.5)
+            if _create_ass_captions(narration, raw_tts_dur, ass_path, WIDTH, HEIGHT,
                                      style_idx=caption_style):
                 ass_esc = ass_path.replace("\\", "/").replace(":", "\\:")
                 filter_parts.append(

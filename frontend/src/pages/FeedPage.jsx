@@ -8,7 +8,6 @@ import api, { getFeed } from '../api'
 import { mapReel } from '../utils/reelMapper'
 import { speak } from '../services/tts'
 import useStore from '../store/useStore'
-import Tag from '../components/Tag'
 import Button from '../components/Button'
 import { Bookmark, BookmarkFill, Heart, HeartFill, Play, Pause, Upload, Download, Volume, VolumeOff } from '../components/Icons'
 import useReelTracker from '../hooks/useReelTracker'
@@ -236,13 +235,9 @@ function VideoReelCard({ reel, index, total, isActive, onVideoError }) {
 
         {/* Bottom info — minimal, over video */}
         <div className="absolute bottom-0 left-0 right-0 z-10 p-4 pb-6 bg-gradient-to-t from-black/70 via-black/30 to-transparent">
-          <Tag color={reel.accent}>{reel.category}</Tag>
-          <h2 className="text-white font-bold font-display text-base leading-snug mt-2">
+          <h2 className="text-white font-bold font-display text-base leading-snug">
             {reel.title}
           </h2>
-          <p className="text-white/70 text-xs line-clamp-2 mt-1">
-            {reel.body}
-          </p>
         </div>
 
         {/* Progress bar at very bottom */}
@@ -335,8 +330,7 @@ function ReelCard({ reel, index, total }) {
           )}
 
           <div className="relative z-10 flex flex-col h-full">
-            <div className="flex items-center justify-between mb-4">
-              <Tag color={reel.accent}>{reel.category}</Tag>
+            <div className="flex items-center justify-end mb-4">
               <span className={`text-xs font-mono ${hasBg ? 'text-white/70' : 'text-text-muted'}`}>
                 p. {reel.pages} &middot; {index + 1}/{total}
               </span>
