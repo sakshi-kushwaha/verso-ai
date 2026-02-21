@@ -91,7 +91,9 @@ RULES:
    - End with a memorable takeaway or a reflective thought — not a dry fact.
    - No bullet points, no special symbols, no abbreviations, no parentheses.
 
-Schema: {{"reels":[{{"title":"short catchy title","summary":"key idea summary","narration":"spoken version of summary","category":"topic area","keywords":"comma separated"}}],"flashcards":[{{"question":"question about content?","answer":"detailed answer at least 10 words long"}}]}}
+8. "one_liner" is a single catchy sentence (under 15 words) that captures the reel's key insight. Not a repeat of the title — add new context or a surprising angle.
+
+Schema: {{"reels":[{{"title":"short catchy title","summary":"key idea summary","narration":"spoken version of summary","one_liner":"one punchy sentence describing the key takeaway","category":"topic area","keywords":"comma separated"}}],"flashcards":[{{"question":"question about content?","answer":"detailed answer at least 10 words long"}}]}}
 
 Relevant text about "{topic}":
 {text}
@@ -266,8 +268,9 @@ RULES:
 9. Each segment "duration" is in seconds. Durations MUST sum to exactly {total_duration}.
 10. Each duration must be at least 2 seconds.
 11. "overlay" is short text shown on screen (max 8 words per segment).
+12. "one_liner" is a single catchy sentence (under 15 words) that captures the reel's key insight. Not a repeat of the title — add new context or a surprising angle.
 
-Schema: {{"reels":[{{"title":"short catchy title","summary":"key idea summary","narration":"spoken version of summary","category":"topic area","keywords":"comma separated","segments":[{{"clip":"filename.mp4","overlay":"short text","duration":5}}]}}],"flashcards":[{{"question":"question about content?","answer":"detailed answer at least 10 words long"}}]}}
+Schema: {{"reels":[{{"title":"short catchy title","summary":"key idea summary","narration":"spoken version of summary","one_liner":"one punchy sentence describing the key takeaway","category":"topic area","keywords":"comma separated","segments":[{{"clip":"filename.mp4","overlay":"short text","duration":5}}]}}],"flashcards":[{{"question":"question about content?","answer":"detailed answer at least 10 words long"}}]}}
 
 Relevant text about "{topic}":
 {text}

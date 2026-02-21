@@ -29,16 +29,21 @@ function wrapCanvasText(ctx, text, x, y, maxW, lineH) {
   return y + lineH
 }
 
-function downloadBite(reel, isGradient = false) {
+async function downloadBite(reel, isGradient = false) {
   const safeName = reel.title.replace(/[^a-zA-Z0-9 ]/g, '').trim() || 'bite'
 
   if (reel.videoUrl && !isGradient) {
-    // Video bite — backend burns text overlay via ffmpeg
+    // Video bite — fetch blob then trigger download (avoids server timeout on first encode)
     const baseURL = api.defaults.baseURL || ''
+    const res = await fetch(`${baseURL}/video/${reel.id}/download`)
+    if (!res.ok) throw new Error('Download failed')
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = `${baseURL}/video/${reel.id}/download`
+    a.href = url
     a.download = `${safeName}.mp4`
     a.click()
+    URL.revokeObjectURL(url)
   } else {
     // Text bite — render as PNG using Canvas
     const c = document.createElement('canvas')
@@ -117,6 +122,9 @@ function VideoReelCard({ reel, index, total, isActive, onVideoError }) {
   const liked = likes.has(reel.id)
   const [progress, setProgress] = useState(0)
   const [muted, setMuted] = useState(false)
+  const [downloading, setDownloading] = useState(false)
+  const seekingRef = useRef(false)
+  const progressBarRef = useRef(null)
 
   // Autoplay when active slide, pause when not
   useEffect(() => {
@@ -150,12 +158,48 @@ function VideoReelCard({ reel, index, total, isActive, onVideoError }) {
     setMuted(videoRef.current.muted)
   }, [])
 
-  const handleSeek = useCallback((e) => {
-    if (!videoRef.current || !videoRef.current.duration) return
-    const rect = e.currentTarget.getBoundingClientRect()
-    const ratio = (e.clientX - rect.left) / rect.width
+  const seekToX = useCallback((clientX) => {
+    if (!videoRef.current || !videoRef.current.duration || !isFinite(videoRef.current.duration)) return
+    if (!progressBarRef.current) return
+    const rect = progressBarRef.current.getBoundingClientRect()
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
     videoRef.current.currentTime = ratio * videoRef.current.duration
+    setProgress(ratio * 100)
   }, [])
+
+  const handleSeek = useCallback((e) => seekToX(e.clientX), [seekToX])
+
+  // Native non-passive touch listeners — React's synthetic events are passive
+  // and can't preventDefault, so Swiper steals the gesture. Attach directly.
+  useEffect(() => {
+    const el = progressBarRef.current
+    if (!el) return
+    const onStart = (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      seekingRef.current = true
+      seekToX(e.touches[0].clientX)
+    }
+    const onMove = (e) => {
+      if (!seekingRef.current) return
+      e.preventDefault()
+      e.stopPropagation()
+      seekToX(e.touches[0].clientX)
+    }
+    const onEnd = (e) => {
+      if (!seekingRef.current) return
+      e.stopPropagation()
+      seekingRef.current = false
+    }
+    el.addEventListener('touchstart', onStart, { passive: false })
+    el.addEventListener('touchmove', onMove, { passive: false })
+    el.addEventListener('touchend', onEnd)
+    return () => {
+      el.removeEventListener('touchstart', onStart)
+      el.removeEventListener('touchmove', onMove)
+      el.removeEventListener('touchend', onEnd)
+    }
+  }, [seekToX])
 
   return (
     <div className="flex items-center justify-center h-full bg-black">
@@ -173,9 +217,11 @@ function VideoReelCard({ reel, index, total, isActive, onVideoError }) {
           onWaiting={() => setBuffering(true)}
           onCanPlay={() => setBuffering(false)}
           onPlaying={() => setBuffering(false)}
+          onLoadedMetadata={() => setBuffering(false)}
           onTimeUpdate={(e) => {
+            if (seekingRef.current) return
             const v = e.target
-            if (v.duration) setProgress((v.currentTime / v.duration) * 100)
+            if (v.duration && isFinite(v.duration)) setProgress((v.currentTime / v.duration) * 100)
           }}
           onError={() => onVideoError?.(reel.id)}
         />
@@ -219,8 +265,12 @@ function VideoReelCard({ reel, index, total, isActive, onVideoError }) {
               {liked ? <HeartFill /> : <Heart />}
             </div>
           </button>
-          <button onClick={() => downloadBite(reel)} className="cursor-pointer">
-            <div className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white">
+          <button onClick={async () => {
+            if (downloading) return
+            setDownloading(true)
+            try { await downloadBite(reel) } catch {} finally { setDownloading(false) }
+          }} className="cursor-pointer">
+            <div className={`w-10 h-10 rounded-full backdrop-blur-sm flex items-center justify-center text-white ${downloading ? 'bg-primary/40 animate-pulse' : 'bg-black/40'}`}>
               <Download />
             </div>
           </button>
@@ -238,15 +288,18 @@ function VideoReelCard({ reel, index, total, isActive, onVideoError }) {
           <h2 className="text-white font-bold font-display text-base leading-snug">
             {reel.title}
           </h2>
+          <p className="text-white/60 text-xs mt-1">{reel.oneLiner}</p>
         </div>
 
-        {/* Progress bar at very bottom */}
+        {/* Progress bar at very bottom — draggable on touch */}
         <div
-          className="absolute bottom-0 left-0 right-0 z-20 h-3 flex items-end cursor-pointer"
+          ref={progressBarRef}
+          className="absolute bottom-0 left-0 right-0 z-20 h-6 flex items-end cursor-pointer"
+          style={{ touchAction: 'none' }}
           onClick={handleSeek}
         >
-          <div className="w-full h-1 bg-white/20">
-            <div className="h-full bg-primary rounded-full" style={{ width: `${progress}%` }} />
+          <div className="w-full h-[3px] bg-white/20">
+            <div className="h-full bg-white rounded-full" style={{ width: `${progress}%` }} />
           </div>
         </div>
       </div>

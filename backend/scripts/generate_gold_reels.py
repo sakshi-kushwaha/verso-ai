@@ -115,13 +115,14 @@ def reel_exists(conn, upload_id: int, title: str) -> bool:
 
 def insert_reel(conn, upload_id: int, reel: dict, video_path: str):
     conn.execute(
-        "INSERT INTO reels (upload_id, title, summary, narration, category, keywords, video_path, source_text) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO reels (upload_id, title, summary, narration, one_liner, category, keywords, video_path, source_text) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             upload_id,
             reel["title"],
             reel["summary"],
             reel["narration"],
+            reel.get("one_liner", reel["title"]),
             reel["category"],
             reel["keywords"],
             video_path,

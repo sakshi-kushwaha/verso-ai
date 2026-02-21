@@ -329,13 +329,12 @@ _CAPTION_STYLES = [
 
 def _create_ass_captions(narration: str, tts_duration: float, filepath: str,
                           width: int = 1080, height: int = 1920,
-                          style_idx: int = 0) -> str | None:
+                          style_idx: int = 0,
+                          word_timestamps: list[dict] | None = None) -> str | None:
     """Create ASS subtitle file with animated captions.
 
-    tts_duration should be the *actual* TTS audio length (not the padded video
-    duration) so captions stay in sync with spoken words.
-    Each word group gets fade/scale animation. Style rotates per reel
-    so every reel looks visually distinct — like different Instagram creators.
+    If word_timestamps (from Edge-TTS) are provided, uses exact per-word timing.
+    Otherwise falls back to uniform word-rate estimation from tts_duration.
     """
     clean = re.sub(r'\*+', '', narration).strip()
     words = clean.split()
@@ -348,11 +347,27 @@ def _create_ass_captions(narration: str, tts_duration: float, filepath: str,
     groups = [" ".join(words[i:i + wpg]) for i in range(0, len(words), wpg)]
     total_words = len(words)
 
-    start_pad = 0.05
-    usable = tts_duration - start_pad
-    if usable < 1:
-        usable, start_pad = tts_duration, 0
-    tpw = usable / total_words
+    # Build word-level timing: either from real timestamps or uniform estimate
+    if word_timestamps and len(word_timestamps) >= total_words * 0.8:
+        # Use actual Edge-TTS timestamps — precise per-word timing
+        word_starts = [wt["start"] for wt in word_timestamps]
+        word_ends = [wt["end"] for wt in word_timestamps]
+        # Pad if TTS returned fewer words than narration (punctuation etc.)
+        while len(word_starts) < total_words:
+            last_end = word_ends[-1] if word_ends else 0
+            word_starts.append(last_end + 0.1)
+            word_ends.append(last_end + 0.3)
+        use_real = True
+    else:
+        # Fallback: uniform word rate
+        start_pad = 0.05
+        usable = tts_duration - start_pad
+        if usable < 1:
+            usable, start_pad = tts_duration, 0
+        tpw = usable / total_words
+        word_starts = [start_pad + i * tpw for i in range(total_words)]
+        word_ends = [start_pad + (i + 1) * tpw for i in range(total_words)]
+        use_real = False
 
     # Build ASS style line from preset
     style_line = (
@@ -382,13 +397,14 @@ def _create_ass_captions(narration: str, tts_duration: float, filepath: str,
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
 
-    w_offset = 0
-    gap = 0.15  # 150ms gap between captions to prevent overlap
+    gap = 0.10  # 100ms gap between captions
     anim = style["anim"]
+    w_offset = 0
     for grp in groups:
         gcnt = len(grp.split())
-        t0 = start_pad + w_offset * tpw
-        t1 = start_pad + (w_offset + gcnt) * tpw - gap
+        # Group timing: start of first word → end of last word
+        t0 = word_starts[w_offset]
+        t1 = word_ends[min(w_offset + gcnt - 1, len(word_ends) - 1)] - gap
         if t1 <= t0:
             t1 = t0 + 0.5
         start_ts = _seconds_to_ass_time(t0)
@@ -471,7 +487,8 @@ def _burn_word_sync(video_path: str, narration: str, duration: float,
         "-map", f"[{current_label}]",
         "-map", "0:a",
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "30",
-        "-c:a", "copy",
+        "-profile:v", "baseline", "-level", "3.1",
+        "-c:a", "aac", "-b:a", "128k",
         "-threads", FFMPEG_THREADS,
         "-movflags", "+faststart",
         "-pix_fmt", "yuv420p",
@@ -652,6 +669,7 @@ def compose_reel_video(
             "-c:v", "libx264",
             "-preset", "ultrafast",
             "-crf", "30",
+            "-profile:v", "baseline", "-level", "3.1",
             "-c:a", "aac", "-b:a", "128k",
             "-movflags", "+faststart",
             "-pix_fmt", "yuv420p",
@@ -770,14 +788,20 @@ def compose_multi_clip_reel(
                 last_label = out_label
 
         # Animated narration captions (ASS subtitles — style rotates per reel)
-        # Use actual TTS audio duration (not padded video duration) so captions
-        # stay in sync with spoken narration.
+        # Use word-level timestamps from Edge-TTS when available for precise sync;
+        # falls back to uniform word-rate from actual TTS audio duration.
         if narration:
             ass_path = os.path.join(tmpdir, "captions.ass")
             caption_style = reel_id % len(_CAPTION_STYLES)
             raw_tts_dur = _get_raw_audio_duration(tts_audio_path) or (TOTAL_DURATION - 1.5)
+            # Load Edge-TTS word timestamps if available
+            word_ts = None
+            if tts_audio_path:
+                from tts.engine import get_word_timestamps
+                word_ts = get_word_timestamps(tts_audio_path)
             if _create_ass_captions(narration, raw_tts_dur, ass_path, WIDTH, HEIGHT,
-                                     style_idx=caption_style):
+                                     style_idx=caption_style,
+                                     word_timestamps=word_ts):
                 ass_esc = ass_path.replace("\\", "/").replace(":", "\\:")
                 filter_parts.append(
                     f"[{last_label}]ass={ass_esc}"
@@ -834,6 +858,7 @@ def compose_multi_clip_reel(
             "-c:v", "libx264",
             "-preset", "ultrafast",
             "-crf", "30",
+            "-profile:v", "baseline", "-level", "3.1",
             "-c:a", "aac", "-b:a", "128k",
             "-movflags", "+faststart",
             "-pix_fmt", "yuv420p",

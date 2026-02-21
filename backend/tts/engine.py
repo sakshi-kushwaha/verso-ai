@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import io
+import json
 import logging
 import subprocess
 import threading
@@ -68,17 +69,54 @@ def get_audio_path(text: str) -> Path | None:
 # ---------------------------------------------------------------------------
 
 def _generate_edge_tts(text: str, path: Path, voice: str) -> bool:
-    """Generate audio with Microsoft Edge Neural TTS. Returns True on success."""
+    """Generate audio with Microsoft Edge Neural TTS. Returns True on success.
+
+    Also saves word-level timestamps as a JSON sidecar ({hash}.timestamps.json)
+    so video captions can sync precisely with the spoken audio.
+    """
     try:
         import edge_tts
 
         mp3_path = path.with_suffix(".mp3")
+        ts_path = path.with_suffix(".timestamps.json")
+        sentence_times: list[dict] = []
 
         async def _run():
             communicate = edge_tts.Communicate(text, voice, rate="-5%")
-            await communicate.save(str(mp3_path))
+            with open(str(mp3_path), "wb") as f:
+                async for chunk in communicate.stream():
+                    if chunk["type"] == "audio":
+                        f.write(chunk["data"])
+                    elif chunk["type"] == "SentenceBoundary":
+                        offset_s = chunk["offset"] / 1e7
+                        duration_s = chunk["duration"] / 1e7
+                        sentence_times.append({
+                            "text": chunk["text"],
+                            "start": round(offset_s, 3),
+                            "end": round(offset_s + duration_s, 3),
+                        })
 
         asyncio.run(_run())
+
+        # Expand sentence timestamps into per-word timestamps
+        # (uniform within each sentence, but sentence boundaries are exact)
+        word_times: list[dict] = []
+        for st in sentence_times:
+            words = st["text"].split()
+            if not words:
+                continue
+            sent_dur = st["end"] - st["start"]
+            tpw = sent_dur / len(words) if len(words) > 0 else sent_dur
+            for i, w in enumerate(words):
+                word_times.append({
+                    "word": w,
+                    "start": round(st["start"] + i * tpw, 3),
+                    "end": round(st["start"] + (i + 1) * tpw, 3),
+                })
+
+        if word_times:
+            with open(ts_path, "w", encoding="utf-8") as f:
+                json.dump(word_times, f)
 
         # Convert MP3 to WAV for consistent pipeline (ffmpeg needs WAV)
         subprocess.run(
@@ -184,6 +222,21 @@ def _generate_espeak(text: str, path: Path):
 # Public API
 # ---------------------------------------------------------------------------
 
+def get_word_timestamps(audio_path: str | Path) -> list[dict] | None:
+    """Load word-level timestamps saved by Edge-TTS.
+
+    Returns list of {"word": str, "start": float, "end": float} or None.
+    """
+    ts_path = Path(audio_path).with_suffix(".timestamps.json")
+    if not ts_path.exists():
+        return None
+    try:
+        with open(ts_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
 def get_voice_for_reel(reel_index: int) -> tuple[str, int | None]:
     """Return (edge_voice, piper_speaker_id) for a given reel index.
 
@@ -205,11 +258,12 @@ def generate_audio(text: str, reel_index: int = 0) -> Path:
     h = _content_hash(text, voice_key=edge_voice)
     path = AUDIO_CACHE_DIR / f"{h}.wav"
 
-    if path.exists() and path.stat().st_size > 0:
+    ts_path = path.with_suffix(".timestamps.json")
+    if path.exists() and path.stat().st_size > 0 and ts_path.exists():
         return path
 
     with _tts_lock:
-        if path.exists() and path.stat().st_size > 0:
+        if path.exists() and path.stat().st_size > 0 and ts_path.exists():
             return path
 
         # 1. Edge-TTS (primary — near-human quality)

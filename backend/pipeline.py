@@ -494,8 +494,8 @@ def _update_subject_category(upload_id: int, subject_category: str):
 def _save_reel(upload_id: int, reel: dict, page_ref: int, bg_image: str = None, source_text: str = "") -> int:
     conn = get_db()
     conn.execute(
-        "INSERT INTO reels (upload_id, title, summary, narration, category, keywords, page_ref, bg_image, source_text) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (upload_id, reel.get("title", ""), reel.get("summary", ""), reel.get("narration", ""), reel.get("category", ""), reel.get("keywords", ""), page_ref, bg_image, (source_text or "")[:5000]),
+        "INSERT INTO reels (upload_id, title, summary, narration, one_liner, category, keywords, page_ref, bg_image, source_text) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (upload_id, reel.get("title", ""), reel.get("summary", ""), reel.get("narration", ""), reel.get("one_liner", ""), reel.get("category", ""), reel.get("keywords", ""), page_ref, bg_image, (source_text or "")[:5000]),
     )
     conn.commit()
     reel_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
