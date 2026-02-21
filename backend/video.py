@@ -7,6 +7,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -219,60 +220,10 @@ def _prepare_image_segment(image_path: str, text: str, width: int, height: int,
 # like different Instagram creators. Rotated by reel_id.
 # ---------------------------------------------------------------------------
 _TEXT_STYLES = [
-    {   # 0: Impact — classic viral reel, big caps
-        "font": "/System/Library/Fonts/Supplemental/Impact.ttf",
+    {   # Clean bold sans — Instagram reel style
+        "font": "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
         "font_linux": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "font_size": 90, "uppercase": True, "stroke_r": 5,
-    },
-    {   # 1: Georgia Bold — elegant serif, mixed case
-        "font": "/System/Library/Fonts/Supplemental/Georgia Bold.ttf",
-        "font_linux": "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf",
-        "font_size": 78, "uppercase": False, "stroke_r": 4,
-    },
-    {   # 2: DIN Condensed Bold — modern tight caps
-        "font": "/System/Library/Fonts/Supplemental/DIN Condensed Bold.ttf",
-        "font_linux": "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-        "font_size": 88, "uppercase": True, "stroke_r": 5,
-    },
-    {   # 3: Futura — clean geometric sans, mixed case
-        "font": "/System/Library/Fonts/Supplemental/Futura.ttc",
-        "font_linux": "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "font_size": 76, "uppercase": False, "stroke_r": 4,
-    },
-    {   # 4: Arial Black — heavy ultra-bold caps
-        "font": "/System/Library/Fonts/Supplemental/Arial Black.ttf",
-        "font_linux": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "font_size": 82, "uppercase": True, "stroke_r": 5,
-    },
-    {   # 5: Trebuchet Bold — friendly humanist, mixed case
-        "font": "/System/Library/Fonts/Supplemental/Trebuchet MS Bold.ttf",
-        "font_linux": "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-        "font_size": 78, "uppercase": False, "stroke_r": 4,
-    },
-    {   # 6: Gill Sans — refined classic sans, caps
-        "font": "/System/Library/Fonts/Supplemental/GillSans.ttc",
-        "font_linux": "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "font_size": 80, "uppercase": True, "stroke_r": 5,
-    },
-    {   # 7: Rockwell — punchy slab serif, mixed case
-        "font": "/System/Library/Fonts/Supplemental/Rockwell.ttc",
-        "font_linux": "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf",
-        "font_size": 78, "uppercase": False, "stroke_r": 4,
-    },
-    {   # 8: Verdana Bold — wide screen-optimized, mixed case
-        "font": "/System/Library/Fonts/Supplemental/Verdana Bold.ttf",
-        "font_linux": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "font_size": 74, "uppercase": False, "stroke_r": 4,
-    },
-    {   # 9: Arial Rounded Bold — soft friendly, mixed case
-        "font": "/System/Library/Fonts/Supplemental/Arial Rounded Bold.ttf",
-        "font_linux": "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-        "font_size": 78, "uppercase": False, "stroke_r": 4,
-    },
-    {   # 10: Tahoma Bold — compact tight, caps
-        "font": "/System/Library/Fonts/Supplemental/Tahoma Bold.ttf",
-        "font_linux": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "font_size": 82, "uppercase": True, "stroke_r": 5,
+        "font_size": 48, "uppercase": False, "stroke_w": 3,
     },
 ]
 
@@ -280,51 +231,175 @@ _TEXT_STYLES = [
 def _create_word_group_png(text: str, width: int, height: int,
                             tmpdir: str, index: int = 0,
                             style_idx: int = 0) -> str:
-    """Create a transparent PNG with centered white text + black stroke.
+    """Create a transparent PNG with multi-line white text + black stroke.
 
-    Always white on black stroke (readable on any video). Style presets
-    vary only the font family, size, and casing across reels.
+    Instagram reel style: bold white text with tight stroke, centered,
+    positioned in the lower third. Wraps to multiple lines automatically.
     """
     style = _TEXT_STYLES[style_idx % len(_TEXT_STYLES)]
     img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    # Pick font: try macOS path first, then Linux, then fallback
     font_path = style.get("font", "")
     if not font_path or not os.path.exists(font_path):
         font_path = style.get("font_linux", "")
     font = _resolve_pillow_font(style["font_size"], font_path=font_path)
-    margin = 50
+
+    margin = 100  # wide margins so text never touches edges
     max_text_width = width - margin * 2
     display = text.upper() if style["uppercase"] else text
     lines = _wrap_text(display, font, max_text_width)
 
-    line_height = style["font_size"] + 22
+    line_height = style["font_size"] + 14
     total_text_height = len(lines) * line_height
-    text_y_start = (height - total_text_height) // 2
+    # Lower third — ~70% down the frame
+    text_y_start = int(height * 0.70) - total_text_height // 2
 
-    stroke_r = style.get("stroke_r", 4)
+    stroke_w = style.get("stroke_w", 4)
+
+    # White text with black stroke — clean Instagram look
     text_y = text_y_start
     for line in lines:
         bbox = font.getbbox(line)
         text_w = bbox[2] - bbox[0]
         text_x = (width - text_w) // 2
-
-        # Black stroke (circular for clean edges)
-        for r in range(stroke_r, 0, -1):
-            for dx in range(-r, r + 1):
-                for dy in range(-r, r + 1):
-                    if dx * dx + dy * dy <= r * r:
-                        draw.text((text_x + dx, text_y + dy), line,
-                                  font=font, fill=(0, 0, 0, 255))
-
-        # White text — always readable on any background
-        draw.text((text_x, text_y), line, font=font, fill=(255, 255, 255, 255))
+        draw.text((text_x, text_y), line, font=font,
+                  fill=(255, 255, 255, 255),
+                  stroke_width=stroke_w, stroke_fill=(0, 0, 0, 220))
         text_y += line_height
 
     out = os.path.join(tmpdir, f"wordgroup_{index}.png")
     img.save(out, "PNG")
     return out
+
+
+def _seconds_to_ass_time(seconds: float) -> str:
+    """Convert seconds to ASS timestamp format H:MM:SS.cc"""
+    h = int(seconds // 3600)
+    m = int((seconds % 3600) // 60)
+    s = int(seconds % 60)
+    cs = round((seconds % 1) * 100)
+    if cs >= 100:
+        cs = 99
+    return f"{h}:{m:02d}:{s:02d}.{cs:02d}"
+
+
+# ---------------------------------------------------------------------------
+# Caption style presets — each reel gets a different look (rotated by reel_id)
+# ---------------------------------------------------------------------------
+_CAPTION_STYLES = [
+    {   # Style 0: Clean Pop — white text, subtle pop-in
+        "font_name": "DejaVu Sans",
+        "font_size": 50, "bold": -1,
+        "primary": "&H00FFFFFF",   # white
+        "outline": "&H00000000",   # black
+        "shadow_color": "&H80000000",
+        "outline_px": 3, "shadow_px": 0, "spacing": 1,
+        "anim": r"{\fad(150,100)\t(0,120,\fscx105\fscy105)\t(120,250,\fscx100\fscy100)}",
+    },
+    {   # Style 1: Bold Bounce — thicker outline + shadow, bouncy entrance
+        "font_name": "DejaVu Sans",
+        "font_size": 52, "bold": -1,
+        "primary": "&H00FFFFFF",
+        "outline": "&H00000000",
+        "shadow_color": "&H90000000",
+        "outline_px": 5, "shadow_px": 2, "spacing": 0,
+        "anim": r"{\fad(100,120)\t(0,100,\fscx118\fscy118)\t(100,180,\fscx96\fscy96)\t(180,280,\fscx100\fscy100)}",
+    },
+    {   # Style 2: Editorial — white serif, gentle scale
+        "font_name": "DejaVu Serif",
+        "font_size": 48, "bold": -1,
+        "primary": "&H00FFFFFF",
+        "outline": "&H00000000",
+        "shadow_color": "&H80000000",
+        "outline_px": 3, "shadow_px": 1, "spacing": 2,
+        "anim": r"{\fad(200,150)\t(0,200,\fscx103\fscy103)\t(200,350,\fscx100\fscy100)}",
+    },
+    {   # Style 3: Mono Tech — white monospace, quick snap-in
+        "font_name": "DejaVu Sans Mono",
+        "font_size": 44, "bold": -1,
+        "primary": "&H00FFFFFF",
+        "outline": "&H00000000",
+        "shadow_color": "&HA0000000",
+        "outline_px": 2, "shadow_px": 2, "spacing": 1,
+        "anim": r"{\fad(80,80)}",
+    },
+]
+
+
+def _create_ass_captions(narration: str, duration: float, filepath: str,
+                          width: int = 1080, height: int = 1920,
+                          style_idx: int = 0) -> str | None:
+    """Create ASS subtitle file with animated captions.
+
+    Each word group gets fade/scale animation. Style rotates per reel
+    so every reel looks visually distinct — like different Instagram creators.
+    """
+    clean = re.sub(r'\*+', '', narration).strip()
+    words = clean.split()
+    if not words:
+        return None
+
+    style = _CAPTION_STYLES[style_idx % len(_CAPTION_STYLES)]
+
+    wpg = 7
+    groups = [" ".join(words[i:i + wpg]) for i in range(0, len(words), wpg)]
+    total_words = len(words)
+
+    tts_dur = duration - 1.5 if duration > 3 else duration
+    start_pad = 0.05
+    usable = tts_dur - start_pad
+    if usable < 1:
+        usable, start_pad = tts_dur, 0
+    tpw = usable / total_words
+
+    # Build ASS style line from preset
+    style_line = (
+        f"Style: Caption,{style['font_name']},{style['font_size']},"
+        f"{style['primary']},&H000000FF,{style['outline']},"
+        f"{style['shadow_color']},{style['bold']},0,0,0,100,100,"
+        f"{style['spacing']},0,1,{style['outline_px']},{style['shadow_px']},"
+        f"5,80,80,0,1"
+    )
+
+    lines = [
+        "[Script Info]",
+        "Title: Reel Captions",
+        "ScriptType: v4.00+",
+        f"PlayResX: {width}",
+        f"PlayResY: {height}",
+        "WrapStyle: 0",
+        "",
+        "[V4+ Styles]",
+        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, "
+        "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, "
+        "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
+        "Alignment, MarginL, MarginR, MarginV, Encoding",
+        style_line,
+        "",
+        "[Events]",
+        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+    ]
+
+    w_offset = 0
+    gap = 0.15  # 150ms gap between captions to prevent overlap
+    anim = style["anim"]
+    for grp in groups:
+        gcnt = len(grp.split())
+        t0 = start_pad + w_offset * tpw
+        t1 = start_pad + (w_offset + gcnt) * tpw - gap
+        if t1 <= t0:
+            t1 = t0 + 0.5
+        start_ts = _seconds_to_ass_time(t0)
+        end_ts = _seconds_to_ass_time(t1)
+
+        text = grp.replace("\\", "\\\\").replace("{", "\\{").replace("}", "\\}")
+        lines.append(f"Dialogue: 0,{start_ts},{end_ts},Caption,,0,0,0,,{anim}{text}")
+        w_offset += gcnt
+
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    return filepath
 
 
 def _burn_word_sync(video_path: str, narration: str, duration: float,
@@ -686,36 +761,18 @@ def compose_multi_clip_reel(
                 )
                 last_label = out_label
 
-        # Word-synced narration overlays (integrated into single pass)
+        # Animated narration captions (ASS subtitles — style rotates per reel)
         if narration:
-            words = narration.split()
-            wpg = 7  # words per group
-            groups = [" ".join(words[i:i + wpg]) for i in range(0, len(words), wpg)]
-            total_words = len(words)
-            start_pad, end_pad = 0.3, 0.5
-            usable = TOTAL_DURATION - start_pad - end_pad
-            if usable < 1:
-                usable, start_pad = TOTAL_DURATION, 0
-            tpw = usable / total_words  # time per word
-            style_idx = reel_id % len(_TEXT_STYLES)
-            w_offset = 0
-            for gi, grp in enumerate(groups):
-                gcnt = len(grp.split())
-                t0 = start_pad + w_offset * tpw
-                t1 = start_pad + (w_offset + gcnt) * tpw
-                png = _create_word_group_png(grp, WIDTH, HEIGHT, tmpdir, gi,
-                                             style_idx=style_idx)
-                ov_idx = next_input_idx
-                inputs.extend(["-i", png])
-                out_lbl = f"wt{gi}"
+            ass_path = os.path.join(tmpdir, "captions.ass")
+            caption_style = reel_id % len(_CAPTION_STYLES)
+            if _create_ass_captions(narration, TOTAL_DURATION, ass_path, WIDTH, HEIGHT,
+                                     style_idx=caption_style):
+                ass_esc = ass_path.replace("\\", "/").replace(":", "\\:")
                 filter_parts.append(
-                    f"[{last_label}][{ov_idx}:v]overlay=0:0"
-                    f":enable='between(t,{t0:.3f},{t1:.3f})'"
-                    f":format=auto[{out_lbl}]"
+                    f"[{last_label}]ass={ass_esc}"
+                    f":fontsdir=/usr/share/fonts/truetype/dejavu[vout_sub]"
                 )
-                last_label = out_lbl
-                next_input_idx += 1
-                w_offset += gcnt
+                last_label = "vout_sub"
 
         # Final video output label
         filter_parts.append(f"[{last_label}]null[vout]")

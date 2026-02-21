@@ -215,7 +215,11 @@ def download_video(reel_id: int):
     DOWNLOAD_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     download_path = str(DOWNLOAD_CACHE_DIR / f"reel_{reel_id}.mp4")
 
-    if not os.path.exists(download_path) or os.path.getsize(download_path) == 0:
+    # Regenerate if download cache is missing or older than the source video
+    stale = False
+    if os.path.exists(download_path) and os.path.getsize(download_path) > 0:
+        stale = os.path.getmtime(video_path) > os.path.getmtime(download_path)
+    if not os.path.exists(download_path) or os.path.getsize(download_path) == 0 or stale:
         # Burn title, category, and summary into the video
         success = _burn_text_into_video(
             source_path=video_path,

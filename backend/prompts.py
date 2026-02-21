@@ -168,16 +168,19 @@ REEL_SCRIPT_PROMPT = """You are a video editor for short educational reels. Crea
 Available clips (use ONLY these filenames):
 {clip_list}
 
+Narration (already recorded, DO NOT change it):
+{narration}
+
 Rules:
 1. Return ONLY valid JSON, no extra text.
 2. Pick exactly {num_segments} different clips from the list above.
 3. Each segment "duration" is in seconds. Durations MUST sum to exactly {total_duration}.
 4. Each duration must be at least 2 seconds.
-5. "narration" is one continuous paragraph for text-to-speech. No bullet points, no special characters.
-6. "overlay" is short text shown on screen (max 8 words per segment).
+5. "narration" — copy the narration above EXACTLY as given. Do NOT rewrite it.
+6. "overlay" is a short catchy phrase (max 8 words) that highlights a KEY FACT from the narration for that segment. It must relate to what is being spoken during that segment.
 7. "title" is a catchy title under 50 characters.
 
-Schema: {{"title":"catchy title","narration":"full spoken narration paragraph","segments":[{{"clip":"filename.mp4","overlay":"short text","duration":5}}]}}
+Schema: {{"title":"catchy title","narration":"full spoken narration paragraph","segments":[{{"clip":"filename.mp4","overlay":"short key fact from narration","duration":5}}]}}
 
 Text to create a reel about:
 {text}
