@@ -237,6 +237,10 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
             for reel_id, reel in saved_reels:
                 _try_compose_video(reel_id, reel, subject_category)
 
+            # Push each reel to frontend immediately via WebSocket
+            for reel_id, _ in saved_reels:
+                _notify_reel_ready(upload_id, reel_id)
+
             reels_completed += 1
 
         # Handle failures
@@ -290,6 +294,26 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
             os.unlink(filepath)
         except OSError:
             pass
+
+
+def _notify_reel_ready(upload_id: int, reel_id: int):
+    """Push a reel_ready event to WebSocket subscribers so the frontend can show it immediately."""
+    loop = _event_loop
+    if loop is None or loop.is_closed():
+        return
+    conn = get_db()
+    row = conn.execute("SELECT * FROM reels WHERE id = ?", (reel_id,)).fetchone()
+    conn.close()
+    if not row:
+        return
+    reel_data = dict(row)
+    try:
+        asyncio.run_coroutine_threadsafe(
+            manager.broadcast_reel_ready(upload_id, reel_data),
+            loop,
+        )
+    except Exception:
+        log.debug("WS reel_ready failed for upload %s reel %s", upload_id, reel_id)
 
 
 def _notify_progress(upload_id: int, progress: int, stage: str, status: str | None = None, error: str | None = None):

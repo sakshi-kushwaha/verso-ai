@@ -110,11 +110,16 @@ const useStore = create((set, get) => ({
   hasMore: true,
   setReels: (reels) => set({ reels, feedPage: 1, hasMore: true }),
   appendReels: (newReels) =>
-    set((state) => ({
-      reels: [...state.reels, ...newReels],
-      feedPage: state.feedPage + 1,
-      hasMore: newReels.length > 0,
-    })),
+    set((state) => {
+      const existingIds = new Set(state.reels.map((r) => r.id))
+      const unique = newReels.filter((r) => !existingIds.has(r.id))
+      if (unique.length === 0) return state
+      return {
+        reels: [...state.reels, ...unique],
+        feedPage: state.feedPage + 1,
+        hasMore: newReels.length > 0,
+      }
+    }),
 
   // --- Upload ---
   currentUpload: null, // { id, status, progress }
@@ -128,7 +133,7 @@ const useStore = create((set, get) => ({
     set((state) => ({
       bgUpload: state.bgUpload ? { ...state.bgUpload, ...updates } : null,
     })),
-  clearBgUpload: () => set({ bgUpload: null, reels: [] }),
+  clearBgUpload: () => set({ bgUpload: null }),
 
 }));
 
