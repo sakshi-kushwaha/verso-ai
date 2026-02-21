@@ -5,6 +5,7 @@ import { Mousewheel, Keyboard } from 'swiper/modules'
 import 'swiper/css'
 
 import api, { getFeed } from '../api'
+import { mapReel } from '../utils/reelMapper'
 import { speak } from '../services/tts'
 import useStore from '../store/useStore'
 import Tag from '../components/Tag'
@@ -558,20 +559,6 @@ export default function FeedPage() {
   const [initialSlide, setInitialSlide] = useState(0)
   const bookNavState = useRef(location.state)
 
-  const ACCENTS = ['#3B82F6', '#06B6D4', '#F472B6', '#F59E0B', '#10B981', '#8B5CF6']
-
-  const mapReel = (r, i) => ({
-    id: r.id,
-    title: r.title,
-    category: r.category || 'General',
-    pages: r.page_ref || '—',
-    body: r.summary || '',
-    narration: r.narration || r.summary || '',
-    keywords: r.keywords ? r.keywords.split(',').map((k) => k.trim()).filter(Boolean) : [],
-    accent: ACCENTS[i % ACCENTS.length],
-    bgImage: r.bg_image ? `${api.defaults.baseURL}/${r.bg_image}` : null,
-    videoUrl: r.video_path ? `${api.defaults.baseURL}/video/${r.id}` : null,
-  })
 
   const loadReels = async (activeTab = tab) => {
     setInitialLoading(true)

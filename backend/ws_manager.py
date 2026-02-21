@@ -51,5 +51,22 @@ class ConnectionManager:
             except Exception:
                 log.debug("Failed to send WS message for upload %s", upload_id)
 
+    async def broadcast_reel_ready(self, upload_id: int, reel: dict):
+        """Push a reel_ready event so the frontend can display it immediately."""
+        async with self._lock:
+            clients = list(self._subs.get(upload_id, []))
+
+        msg = json.dumps({
+            "type": "reel_ready",
+            "upload_id": upload_id,
+            "reel": reel,
+        })
+
+        for ws in clients:
+            try:
+                await ws.send_text(msg)
+            except Exception:
+                log.debug("Failed to send reel_ready for upload %s", upload_id)
+
 
 manager = ConnectionManager()

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { getUploadStatus } from '../api'
 import { getWsBaseUrl, getAuthToken } from '../api/ws'
 import useStore from '../store/useStore'
+import { mapReel } from '../utils/reelMapper'
 
 const STAGE_LABELS = {
   uploading: 'Uploading...',
@@ -9,6 +10,7 @@ const STAGE_LABELS = {
   analyzing: 'Analyzing...',
   extracting: 'Extracting concepts...',
   generating: 'Generating bites...',
+  composing: 'Composing video...',
   embedding: 'Building knowledge base...',
   done: 'Done!',
 }
@@ -54,6 +56,9 @@ export default function UploadTracker() {
             const msg = JSON.parse(evt.data)
             if (msg.type === 'progress') {
               handleUpdate(msg.progress ?? 0, msg.stage || 'uploading', msg.status)
+            } else if (msg.type === 'reel_ready' && msg.reel) {
+              const mapped = mapReel(msg.reel)
+              useStore.getState().appendReels([mapped])
             }
           } catch {}
         }
