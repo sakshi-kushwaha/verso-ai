@@ -9,9 +9,10 @@ import { STAGE_LABELS } from '../components/UploadTracker'
 
 const ACCENTS = ['#3B82F6', '#06B6D4', '#F472B6', '#F59E0B', '#10B981', '#8B5CF6']
 
-function ProcessingCard({ book }) {
+function ProcessingCard({ book, onDone }) {
   const [progress, setProgress] = useState(0)
   const [stage, setStage] = useState('processing')
+  const [reelsCount, setReelsCount] = useState(0)
 
   useEffect(() => {
     const poll = setInterval(() => {
@@ -19,8 +20,10 @@ function ProcessingCard({ book }) {
         .then((s) => {
           setProgress(s.progress ?? 0)
           setStage(s.stage || 'processing')
+          setReelsCount(s.reels_generated || 0)
           if (s.status === 'done' || s.status === 'error' || s.status === 'partial') {
             clearInterval(poll)
+            if (onDone) onDone()
           }
         })
         .catch(() => {})
@@ -31,6 +34,7 @@ function ProcessingCard({ book }) {
       .then((s) => {
         setProgress(s.progress ?? 0)
         setStage(s.stage || 'processing')
+        setReelsCount(s.reels_generated || 0)
       })
       .catch(() => {})
 
@@ -55,6 +59,11 @@ function ProcessingCard({ book }) {
             <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
               AI Processing
             </span>
+            {reelsCount > 0 && (
+              <span className="text-xs text-text-muted">
+                <span className="font-semibold text-text">{reelsCount}</span> bites ready
+              </span>
+            )}
           </div>
         </div>
         <span className="text-sm font-bold text-primary tabular-nums">{Math.round(progress)}%</span>
@@ -513,6 +522,10 @@ export default function MyBooksPage() {
       .finally(() => setLoading(false))
   }
 
+  const refreshBooks = () => {
+    getUploads().then(setBooks).catch(() => {})
+  }
+
   useEffect(() => {
     loadBooks()
   }, [])
@@ -521,9 +534,7 @@ export default function MyBooksPage() {
   useEffect(() => {
     const hasProcessing = books.some((b) => b.status === 'processing')
     if (hasProcessing) {
-      pollRef.current = setInterval(() => {
-        getUploads().then(setBooks).catch(() => {})
-      }, 5000)
+      pollRef.current = setInterval(refreshBooks, 5000)
     }
     return () => {
       if (pollRef.current) {
@@ -579,7 +590,7 @@ export default function MyBooksPage() {
         <div className="space-y-3">
           {books.map((book) =>
             book.status === 'processing' ? (
-              <ProcessingCard key={book.id} book={book} />
+              <ProcessingCard key={book.id} book={book} onDone={refreshBooks} />
             ) : (
               <BookCard key={book.id} book={book} onClick={() => setSelectedBook(book)} />
             )
