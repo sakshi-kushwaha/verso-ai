@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import useStore from '../store/useStore'
+import { getPredefinedQuestions, setSecurityQuestions } from '../api'
 import './OnboardingPage.css'
 
 const ROLES = [
@@ -20,6 +21,19 @@ export default function OnboardingPage() {
   const [name, setName] = useState(user?.name || '')
   const [selectedRole, setSelectedRole] = useState(null)
 
+  // Security questions state
+  const [predefinedQs, setPredefinedQs] = useState([])
+  const [sq1, setSq1] = useState('')
+  const [sq1Answer, setSq1Answer] = useState('')
+  const [sq2, setSq2] = useState('')
+  const [sq2Answer, setSq2Answer] = useState('')
+  const [sqError, setSqError] = useState('')
+  const [sqLoading, setSqLoading] = useState(false)
+
+  useEffect(() => {
+    getPredefinedQuestions().then(setPredefinedQs).catch(() => {})
+  }, [])
+
   if (!token) return <Navigate to="/login" replace />
   if (onboarded) return <Navigate to="/" replace />
 
@@ -28,9 +42,38 @@ export default function OnboardingPage() {
     setStep(2)
   }
 
-  const handleFinish = (roleId) => {
+  const handleRoleSelect = (roleId) => {
     setSelectedRole(roleId)
-    completeOnboarding(name.trim(), roleId)
+    // Store role temporarily, move to security questions
+    setStep(3)
+  }
+
+  const handleFinish = async () => {
+    if (!sq1 || !sq1Answer.trim() || !sq2 || !sq2Answer.trim()) {
+      setSqError('Please select 2 questions and provide answers')
+      return
+    }
+    if (sq1 === sq2) {
+      setSqError('Please choose two different questions')
+      return
+    }
+    setSqError('')
+    setSqLoading(true)
+    try {
+      await setSecurityQuestions([
+        { question: sq1, answer: sq1Answer.trim() },
+        { question: sq2, answer: sq2Answer.trim() },
+      ])
+    } catch {
+      // Non-blocking — continue onboarding even if this fails
+    }
+    setSqLoading(false)
+    completeOnboarding(name.trim(), selectedRole)
+    navigate('/')
+  }
+
+  const handleSkipSecurity = () => {
+    completeOnboarding(name.trim(), selectedRole)
     navigate('/')
   }
 
@@ -46,6 +89,7 @@ export default function OnboardingPage() {
         <div className="ob-progress">
           <div className={`ob-dot${step >= 1 ? ' active' : ''}`} />
           <div className={`ob-dot${step >= 2 ? ' active' : ''}`} />
+          <div className={`ob-dot${step >= 3 ? ' active' : ''}`} />
         </div>
 
         {step === 1 && (
@@ -85,7 +129,7 @@ export default function OnboardingPage() {
                 <button
                   key={role.id}
                   className={`ob-role-card${selectedRole === role.id ? ' selected' : ''}`}
-                  onClick={() => handleFinish(role.id)}
+                  onClick={() => handleRoleSelect(role.id)}
                 >
                   <span className="ob-role-emoji">{role.emoji}</span>
                   <div>
@@ -95,6 +139,65 @@ export default function OnboardingPage() {
                 </button>
               ))}
             </div>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div className="ob-card ob-fade-in">
+            <div className="ob-emoji">{'\uD83D\uDD12'}</div>
+            <h1 className="ob-title">Security Questions</h1>
+            <p className="ob-subtitle">Set up 2 questions to reset your password if you forget it.</p>
+
+            {sqError && <div className="ob-error">{sqError}</div>}
+
+            <div className="ob-sq-group">
+              <label className="ob-sq-label">Question 1</label>
+              <select className="ob-select" value={sq1} onChange={(e) => setSq1(e.target.value)}>
+                <option value="">Choose a question...</option>
+                {predefinedQs.filter((q) => q !== sq2).map((q) => (
+                  <option key={q} value={q}>{q}</option>
+                ))}
+              </select>
+              {sq1 && (
+                <input
+                  type="text"
+                  className="ob-input ob-sq-input"
+                  placeholder="Your answer"
+                  value={sq1Answer}
+                  onChange={(e) => setSq1Answer(e.target.value)}
+                />
+              )}
+            </div>
+
+            <div className="ob-sq-group">
+              <label className="ob-sq-label">Question 2</label>
+              <select className="ob-select" value={sq2} onChange={(e) => setSq2(e.target.value)}>
+                <option value="">Choose a question...</option>
+                {predefinedQs.filter((q) => q !== sq1).map((q) => (
+                  <option key={q} value={q}>{q}</option>
+                ))}
+              </select>
+              {sq2 && (
+                <input
+                  type="text"
+                  className="ob-input ob-sq-input"
+                  placeholder="Your answer"
+                  value={sq2Answer}
+                  onChange={(e) => setSq2Answer(e.target.value)}
+                />
+              )}
+            </div>
+
+            <button
+              className="ob-btn-primary"
+              disabled={!sq1 || !sq1Answer.trim() || !sq2 || !sq2Answer.trim() || sqLoading}
+              onClick={handleFinish}
+            >
+              <span>{sqLoading ? 'Saving...' : 'Finish Setup'}</span>
+            </button>
+            <button className="ob-btn-skip" onClick={handleSkipSecurity} type="button">
+              Skip for now
+            </button>
           </div>
         )}
       </div>

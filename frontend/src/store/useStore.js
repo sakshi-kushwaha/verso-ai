@@ -1,19 +1,23 @@
 import { create } from 'zustand';
-import { getBookmarks, addBookmark as apiAddBookmark, removeBookmark as apiRemoveBookmark, trackInteraction, getLikedReels } from '../api';
+import { getBookmarks, addBookmark as apiAddBookmark, removeBookmark as apiRemoveBookmark, trackInteraction, getLikedReels, logoutApi } from '../api';
 import { clearAudioCache } from '../services/audioCache';
 
 const useStore = create((set, get) => ({
   // --- Auth ---
   user: JSON.parse(localStorage.getItem('verso_user') || 'null'),
   token: localStorage.getItem('verso_token') || null,
-  setAuth: (user, token) => {
+  setAuth: (user, token, refreshToken) => {
     localStorage.setItem('verso_user', JSON.stringify(user));
     localStorage.setItem('verso_token', token);
+    if (refreshToken) localStorage.setItem('verso_refresh_token', refreshToken);
     set({ user, token });
   },
   logout: () => {
+    const refreshToken = localStorage.getItem('verso_refresh_token');
+    if (refreshToken) logoutApi(refreshToken);
     localStorage.removeItem('verso_user');
     localStorage.removeItem('verso_token');
+    localStorage.removeItem('verso_refresh_token');
     localStorage.removeItem('verso_display_name');
     localStorage.removeItem('verso_user_role');
     localStorage.removeItem('verso_onboarded');

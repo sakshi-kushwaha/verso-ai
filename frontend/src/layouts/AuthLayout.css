@@ -261,6 +261,82 @@
   position: relative; z-index: 1;
 }
 
+/* ─── AUTH OPTIONS (remember me + forgot) ─── */
+.auth-options {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 0.8rem; position: relative; z-index: 1;
+}
+
+.remember-me {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.82rem; color: var(--text-secondary); cursor: pointer;
+}
+
+.remember-me input[type="checkbox"] {
+  width: 16px; height: 16px; accent-color: var(--accent-cyan);
+  cursor: pointer;
+}
+
+.forgot-link {
+  background: none; border: none;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 0.82rem; color: var(--accent-cyan);
+  cursor: pointer; transition: color 0.2s;
+}
+.forgot-link:hover { color: var(--accent-blue); }
+
+/* ─── FORGOT PASSWORD FLOW ─── */
+.forgot-flow { position: relative; z-index: 1; }
+
+.forgot-back {
+  display: flex; align-items: center; gap: 0.4rem;
+  background: none; border: none;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 0.82rem; color: var(--text-secondary);
+  cursor: pointer; margin-bottom: 1.2rem; padding: 0;
+  transition: color 0.2s;
+}
+.forgot-back:hover { color: var(--accent-cyan); }
+.forgot-back svg {
+  fill: none; stroke: currentColor;
+  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+
+.forgot-title {
+  font-size: 1.15rem; font-weight: 700; color: var(--text-primary);
+  margin-bottom: 1.4rem;
+}
+
+.forgot-success {
+  color: #22c55e; font-size: 0.9rem; line-height: 1.6;
+  margin-bottom: 1.2rem;
+}
+
+/* ─── PASSWORD STRENGTH ─── */
+.pw-strength { margin-top: 0.6rem; }
+
+.pw-strength-bar {
+  height: 4px; background: rgba(255,255,255,0.06);
+  border-radius: 2px; overflow: hidden; margin-bottom: 0.4rem;
+}
+.pw-strength-fill {
+  height: 100%; border-radius: 2px;
+  transition: width 0.3s ease, background 0.3s ease;
+}
+
+.pw-strength-meta {
+  font-size: 0.72rem; margin-bottom: 0.3rem;
+}
+
+.pw-strength-checks {
+  display: flex; flex-wrap: wrap; gap: 0.3rem 0.8rem;
+}
+.pw-check {
+  font-size: 0.72rem; color: var(--text-dim);
+  transition: color 0.2s;
+}
+.pw-check.ok { color: #22c55e; }
+
 /* ─── RESPONSIVE ─── */
 @media (max-width: 520px) {
   .login-container { padding: 1.2rem; }

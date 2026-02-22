@@ -175,7 +175,36 @@ def init_db():
             created_at TEXT DEFAULT (datetime('now')),
             UNIQUE(user_id, reel_id)
         );
+
+        CREATE TABLE IF NOT EXISTS refresh_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            token_hash TEXT NOT NULL UNIQUE,
+            device_info TEXT,
+            ip_address TEXT,
+            created_at TEXT DEFAULT (datetime('now')),
+            expires_at TEXT NOT NULL,
+            revoked INTEGER DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_rt_user ON refresh_tokens(user_id);
+        CREATE INDEX IF NOT EXISTS idx_rt_hash ON refresh_tokens(token_hash);
+
+        CREATE TABLE IF NOT EXISTS security_questions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            question TEXT NOT NULL,
+            answer_hash TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_sq_user ON security_questions(user_id);
     """)
+
+    # Migration: add lockout columns to users
+    user_cols = [row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()]
+    if "failed_login_attempts" not in user_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER DEFAULT 0")
+    if "locked_until" not in user_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN locked_until TEXT")
 
     # Backfill: fix gold standard reels to appear in Explore tab
     conn.execute("UPDATE uploads SET doc_type = 'seed' WHERE filename = '__gold_standard__' AND (doc_type IS NULL OR doc_type != 'seed')")
