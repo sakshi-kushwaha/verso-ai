@@ -51,84 +51,61 @@ def _wrap_text(text, font, max_width):
     return lines or [""]
 
 
-def _create_overlay_png(width: int, height: int, title: str, summary: str,
-                        category: str, out_path: str):
-    """Create a transparent PNG overlay with gradient + text matching the feed UI."""
+def _create_title_overlay(width: int, height: int, title: str, one_liner: str,
+                          out_path: str):
+    """Create a transparent PNG overlay with gradient + title + one-liner at bottom.
+
+    Matches the feed UI layout — no category pill, no summary.
+    """
     overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
 
     margin = int(width * 0.04)
     max_text_w = width - margin * 2
-    bottom_pad = int(height * 0.04)
+    bottom_pad = int(height * 0.05)
 
-    # Prepare fonts
-    cat_font = _resolve_font(int(height * 0.018))
     title_font = _resolve_font(int(height * 0.026))
-    summary_font = _resolve_font(int(height * 0.016))
-
-    # Prepare text
-    cat_text = (category or "General").upper()
-    cat_bbox = cat_font.getbbox(cat_text)
-    cat_w = cat_bbox[2] - cat_bbox[0]
-    cat_h = cat_bbox[3] - cat_bbox[1]
-    tag_pad_x, tag_pad_y = 12, 5
+    liner_font = _resolve_font(int(height * 0.016))
 
     title_lines = _wrap_text(title or "", title_font, max_text_w)[:2]
     title_line_h = int(height * 0.030)
 
-    summary_text = (summary or "")[:160]
-    if len(summary or "") > 160:
-        summary_text += "..."
-    summary_lines = _wrap_text(summary_text, summary_font, max_text_w)[:3]
-    summary_line_h = int(height * 0.022)
+    liner_lines = _wrap_text(one_liner or "", liner_font, max_text_w)[:2]
+    liner_line_h = int(height * 0.022)
 
-    # Calculate total text block height (bottom-up layout)
-    gap_tag_title = int(height * 0.012)
-    gap_title_summary = int(height * 0.006)
-
-    tag_block_h = cat_h + tag_pad_y * 2
+    gap = int(height * 0.008)
     title_block_h = len(title_lines) * title_line_h
-    summary_block_h = len(summary_lines) * summary_line_h
-    total_h = tag_block_h + gap_tag_title + title_block_h + gap_title_summary + summary_block_h
+    liner_block_h = len(liner_lines) * liner_line_h
+    total_h = title_block_h + gap + liner_block_h
 
-    # Position text block so it ends at bottom_pad from bottom edge
     block_top = height - bottom_pad - total_h
 
-    # Smooth gradient — starts well above the text block
-    gradient_top = max(0, block_top - int(height * 0.15))
+    # Smooth gradient — starts well above the text
+    gradient_top = max(0, block_top - int(height * 0.12))
     for y in range(gradient_top, height):
         progress = (y - gradient_top) / (height - gradient_top)
-        alpha = int(210 * progress)
+        alpha = int(180 * progress)
         draw.line([(0, y), (width, y)], fill=(0, 0, 0, alpha))
 
-    # Draw category tag pill
-    tag_y = block_top
-    draw.rounded_rectangle(
-        [margin, tag_y, margin + cat_w + tag_pad_x * 2, tag_y + tag_block_h],
-        radius=8, fill=(99, 102, 241, 200),
-    )
-    draw.text((margin + tag_pad_x, tag_y + tag_pad_y), cat_text, font=cat_font, fill=(255, 255, 255))
-
     # Draw title
-    title_y = tag_y + tag_block_h + gap_tag_title
+    title_y = block_top
     for line in title_lines:
         draw.text((margin, title_y), line, font=title_font, fill=(255, 255, 255))
         title_y += title_line_h
 
-    # Draw summary
-    summary_y = title_y + gap_title_summary
-    for line in summary_lines:
-        draw.text((margin, summary_y), line, font=summary_font, fill=(255, 255, 255, 180))
-        summary_y += summary_line_h
+    # Draw one-liner
+    liner_y = title_y + gap
+    for line in liner_lines:
+        draw.text((margin, liner_y), line, font=liner_font, fill=(255, 255, 255, 160))
+        liner_y += liner_line_h
 
     overlay.save(out_path, "PNG")
 
 
-def _burn_text_into_video(source_path: str, out_path: str,
-                          title: str, summary: str, category: str) -> bool:
-    """Re-encode video with Pillow-rendered overlay (gradient + text) composited via ffmpeg."""
+def _burn_title_into_video(source_path: str, out_path: str,
+                           title: str, one_liner: str) -> bool:
+    """Re-encode video with title + one-liner overlay at bottom."""
     try:
-        # Get video dimensions with ffprobe
         probe = subprocess.run(
             ["ffprobe", "-v", "quiet", "-select_streams", "v:0",
              "-show_entries", "stream=width,height", "-of", "csv=p=0", source_path],
@@ -142,7 +119,7 @@ def _burn_text_into_video(source_path: str, out_path: str,
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
             overlay_path = os.path.join(tmpdir, "overlay.png")
-            _create_overlay_png(vid_w, vid_h, title, summary, category, overlay_path)
+            _create_title_overlay(vid_w, vid_h, title, one_liner, overlay_path)
 
             cmd = [
                 "ffmpeg", "-y",
@@ -161,7 +138,7 @@ def _burn_text_into_video(source_path: str, out_path: str,
             subprocess.run(cmd, check=True, capture_output=True, timeout=120)
             return True
     except Exception as e:
-        log.error("Failed to burn text into video: %s", e)
+        log.error("Failed to burn title into video: %s", e)
         return False
 
 
@@ -180,8 +157,6 @@ def serve_video(reel_id: int):
 
     video_path = row["video_path"]
 
-    # Path is stored relative to cwd (e.g. "data/video_cache/reel_1.mp4") — use as-is
-
     if not os.path.exists(video_path) or os.path.getsize(video_path) == 0:
         raise HTTPException(status_code=404, detail="Video file missing")
 
@@ -197,7 +172,7 @@ def download_video(reel_id: int):
     conn = get_db()
     try:
         row = conn.execute(
-            "SELECT video_path, title, summary, category FROM reels WHERE id = ?", (reel_id,)
+            "SELECT video_path, title, one_liner FROM reels WHERE id = ?", (reel_id,)
         ).fetchone()
     finally:
         conn.close()
@@ -212,26 +187,19 @@ def download_video(reel_id: int):
 
     safe_title = re.sub(r'[^a-zA-Z0-9 ]', '', row["title"] or "reel").strip() or "reel"
 
-    # Check for cached download with text overlay
+    # Build download with title + one-liner overlay
     DOWNLOAD_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     download_path = str(DOWNLOAD_CACHE_DIR / f"reel_{reel_id}.mp4")
 
-    # Regenerate if download cache is missing or older than the source video
-    stale = False
-    if os.path.exists(download_path) and os.path.getsize(download_path) > 0:
-        stale = os.path.getmtime(video_path) > os.path.getmtime(download_path)
-    if not os.path.exists(download_path) or os.path.getsize(download_path) == 0 or stale:
-        # Burn title, category, and summary into the video
-        success = _burn_text_into_video(
-            source_path=video_path,
-            out_path=download_path,
-            title=row["title"] or "",
-            summary=row["summary"] or "",
-            category=row["category"] or "General",
-        )
-        if not success:
-            # Fallback: serve original video without text
-            download_path = video_path
+    # Always regenerate — source video or metadata may have changed
+    success = _burn_title_into_video(
+        source_path=video_path,
+        out_path=download_path,
+        title=row["title"] or "",
+        one_liner=row["one_liner"] or "",
+    )
+    if not success:
+        download_path = video_path
 
     return FileResponse(
         path=download_path,
