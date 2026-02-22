@@ -19,8 +19,10 @@ export default function ChatPage() {
   const [summary, setSummary] = useState(null)
   const [pastSummaries, setPastSummaries] = useState([])
   const [listening, setListening] = useState(false)
+  const [interimText, setInterimText] = useState('')
   const endRef = useRef(null)
   const recognitionRef = useRef(null)
+  const inputBeforeListenRef = useRef('')
   const wsRef = useRef(null)
   const pendingSourcesRef = useRef([])
   const streamingRef = useRef(false)
@@ -215,14 +217,38 @@ export default function ChatPage() {
     if (!SpeechRecognition) return
     const recognition = new SpeechRecognition()
     recognition.lang = 'en-US'
-    recognition.interimResults = false
-    recognition.continuous = false
+    recognition.interimResults = true
+    recognition.continuous = true
+    inputBeforeListenRef.current = input
     recognition.onresult = (e) => {
-      const transcript = e.results[0][0].transcript
-      setInput((prev) => prev ? `${prev} ${transcript}` : transcript)
+      let interim = ''
+      let final = ''
+      for (let i = 0; i < e.results.length; i++) {
+        const transcript = e.results[i][0].transcript
+        if (e.results[i].isFinal) {
+          final += transcript
+        } else {
+          interim += transcript
+        }
+      }
+      if (final) {
+        const base = inputBeforeListenRef.current
+        const newInput = base ? `${base} ${final}` : final
+        setInput(newInput)
+        inputBeforeListenRef.current = newInput
+        setInterimText('')
+      } else {
+        setInterimText(interim)
+      }
     }
-    recognition.onend = () => setListening(false)
-    recognition.onerror = () => setListening(false)
+    recognition.onend = () => {
+      setListening(false)
+      setInterimText('')
+    }
+    recognition.onerror = () => {
+      setListening(false)
+      setInterimText('')
+    }
     recognitionRef.current = recognition
     recognition.start()
     setListening(true)
@@ -401,10 +427,10 @@ export default function ChatPage() {
         )}
         <div className={`flex items-center gap-3 bg-surface-alt rounded-xl px-4 py-2 border border-border ${inputDisabled ? 'opacity-50' : ''}`}>
           <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
+            value={listening && interimText ? `${input} ${interimText}`.trim() : input}
+            onChange={(e) => { if (!listening) setInput(e.target.value) }}
             onKeyDown={handleKeyDown}
-            placeholder={inputDisabled ? 'Chat unavailable' : 'Ask about your document...'}
+            placeholder={listening ? 'Listening...' : inputDisabled ? 'Chat unavailable' : 'Ask about your document...'}
             disabled={inputDisabled}
             className="flex-1 bg-transparent outline-none text-sm text-text placeholder:text-text-muted/50 disabled:cursor-not-allowed"
           />
