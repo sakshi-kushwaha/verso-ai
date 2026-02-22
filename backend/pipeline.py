@@ -144,18 +144,21 @@ def _try_compose_video(reel_id: int, reel: dict, subject_category: str):
         log.warning("Video composition failed for reel %d: %s", reel_id, e)
 
 
-def _compose_and_notify(upload_id: int, reel_id: int, reel: dict, subject_category: str,
+def _compose_video_only(upload_id: int, reel_id: int, reel: dict, subject_category: str,
                         segments: list[dict] | None = None):
-    """Run video composition + WS notification in the thread pool.
+    """Run video composition in the thread pool.
 
-    If segments are provided (from merged LLM call), use them directly for
-    multi-clip composition without an extra LLM call.
+    Reel-ready notification is sent earlier (right after DB save) so the
+    frontend can display reels in real-time before video compositing finishes.
     """
     if segments:
         _try_compose_video_with_segments(reel_id, reel, subject_category, segments)
     else:
         _try_compose_video(reel_id, reel, subject_category)
-    _notify_reel_ready(upload_id, reel_id)
+
+
+# Keep old name as alias for backward compatibility
+_compose_and_notify = _compose_video_only
 
 
 def _try_compose_video_with_segments(reel_id: int, reel: dict, subject_category: str,
@@ -332,6 +335,8 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
             for reel, bg_image in zip(topic_reels, bg_paths):
                 reel_id = _save_reel(upload_id, reel, i + 1, bg_image, source_text=topic_text)
                 saved_reels.append((reel_id, reel))
+                # Notify frontend immediately so reels appear in real-time
+                _notify_reel_ready(upload_id, reel_id)
 
             for fc in result.get("flashcards", []):
                 _save_flashcard(upload_id, fc)
@@ -341,7 +346,7 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
             for reel_id, reel in saved_reels:
                 segments = reel.get("segments")
                 fut = _video_executor.submit(
-                    _compose_and_notify, upload_id, reel_id, reel, subject_category, segments,
+                    _compose_video_only, upload_id, reel_id, reel, subject_category, segments,
                 )
                 pending_futures.append(fut)
 

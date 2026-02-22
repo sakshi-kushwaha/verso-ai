@@ -46,8 +46,9 @@ export default function UploadPage() {
       setBgUpload({ id, filename: file.name, progress: 0, stage: 'uploading', status: 'processing' })
       setFile(null)
       navigate('/')
-    } catch {
-      setError('Upload failed. Please try again.')
+    } catch (err) {
+      const msg = err?.response?.data?.detail
+      setError(msg || 'Upload failed. Please try again.')
     } finally {
       setUploading(false)
     }

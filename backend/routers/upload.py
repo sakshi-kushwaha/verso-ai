@@ -16,6 +16,16 @@ ALLOWED_EXTENSIONS = {".pdf", ".docx"}
 
 @router.post("/upload")
 async def upload_document(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    # Restrict to one upload at a time per user
+    conn = get_db()
+    active = conn.execute(
+        "SELECT id FROM uploads WHERE user_id = ? AND status = 'processing'",
+        (user["id"],),
+    ).fetchone()
+    conn.close()
+    if active:
+        raise HTTPException(409, "You already have a document being processed. Please wait for it to finish.")
+
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(400, "Only PDF and DOCX files are supported")

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Help, ChevDown } from '../components/Icons'
+import MobileBackButton from '../components/MobileBackButton'
 
 const faqs = [
   {
@@ -66,7 +67,8 @@ export default function HelpPage() {
   const [openIdx, setOpenIdx] = useState(null)
 
   return (
-    <div className="max-w-xl mx-auto p-6 pt-10 fade-up">
+    <div className="max-w-xl mx-auto px-4 sm:px-6 pt-8 sm:pt-10 pb-20 sm:pb-6 fade-up">
+      <MobileBackButton />
       <div className="flex items-center gap-3 mb-1">
         <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
           <Help />

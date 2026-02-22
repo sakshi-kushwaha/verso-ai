@@ -29,21 +29,46 @@ function wrapCanvasText(ctx, text, x, y, maxW, lineH) {
   return y + lineH
 }
 
-async function downloadBite(reel, isGradient = false) {
+async function downloadBite(reel, isGradient = false, onProgress = null) {
   const safeName = reel.title.replace(/[^a-zA-Z0-9 ]/g, '').trim() || 'bite'
 
   if (reel.videoUrl && !isGradient) {
-    // Video bite — fetch blob then trigger download (avoids server timeout on first encode)
+    // Video bite — fetch with progress tracking
     const baseURL = api.defaults.baseURL || ''
     const res = await fetch(`${baseURL}/video/${reel.id}/download`)
     if (!res.ok) throw new Error('Download failed')
-    const blob = await res.blob()
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${safeName}.mp4`
-    a.click()
-    URL.revokeObjectURL(url)
+    const contentLength = res.headers.get('content-length')
+    const total = contentLength ? parseInt(contentLength, 10) : 0
+
+    if (total && onProgress && res.body) {
+      const reader = res.body.getReader()
+      const chunks = []
+      let received = 0
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        chunks.push(value)
+        received += value.length
+        onProgress(Math.min(99, Math.round((received / total) * 100)))
+      }
+      const blob = new Blob(chunks)
+      onProgress(100)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${safeName}.mp4`
+      a.click()
+      URL.revokeObjectURL(url)
+    } else {
+      const blob = await res.blob()
+      onProgress?.(100)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${safeName}.mp4`
+      a.click()
+      URL.revokeObjectURL(url)
+    }
   } else {
     // Text bite — render as PNG using Canvas
     const c = document.createElement('canvas')
@@ -113,6 +138,66 @@ async function downloadBite(reel, isGradient = false) {
 }
 import { Spinner, ErrorState, EmptyState } from '../components/StateScreens'
 
+/* ── Circular progress ring for download button ── */
+function DownloadProgressRing({ progress, size = 40, stroke = 3 }) {
+  const r = (size - stroke) / 2
+  const circ = 2 * Math.PI * r
+  const offset = circ - (progress / 100) * circ
+  return (
+    <svg width={size} height={size} className="absolute inset-0 -rotate-90 pointer-events-none">
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth={stroke} />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#00e5ff" strokeWidth={stroke}
+        strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
+        className="transition-[stroke-dashoffset] duration-200" />
+    </svg>
+  )
+}
+
+/* ── Download toast notifications ── */
+function DownloadToast({ message, type }) {
+  if (!message) return null
+  return (
+    <div className={`fixed top-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl text-sm font-medium shadow-lg backdrop-blur-sm fade-up ${
+      type === 'success' ? 'bg-emerald-500/90 text-white' : type === 'error' ? 'bg-red-500/90 text-white' : 'bg-white/15 text-white'
+    }`}>
+      {message}
+    </div>
+  )
+}
+
+/* ── Shared download hook ── */
+function useDownload() {
+  const [downloading, setDownloading] = useState(false)
+  const [dlProgress, setDlProgress] = useState(0)
+  const [toast, setToast] = useState(null)
+  const toastTimer = useRef(null)
+
+  const showToast = (message, type = 'info') => {
+    clearTimeout(toastTimer.current)
+    setToast({ message, type })
+    toastTimer.current = setTimeout(() => setToast(null), 2500)
+  }
+
+  const startDownload = async (reel, isGradient = false) => {
+    if (downloading) return
+    setDownloading(true)
+    setDlProgress(0)
+    showToast('Downloading...')
+    try {
+      await downloadBite(reel, isGradient, (p) => setDlProgress(p))
+      showToast('Download complete!', 'success')
+    } catch {
+      showToast('Download failed', 'error')
+    } finally {
+      setTimeout(() => { setDownloading(false); setDlProgress(0) }, 600)
+    }
+  }
+
+  useEffect(() => { return () => clearTimeout(toastTimer.current) }, [])
+
+  return { downloading, dlProgress, toast, startDownload }
+}
+
 function VideoReelCard({ reel, index, total, isActive, onVideoError }) {
   const videoRef = useRef(null)
   const [paused, setPaused] = useState(false)
@@ -121,7 +206,7 @@ function VideoReelCard({ reel, index, total, isActive, onVideoError }) {
   const saved = bookmarks.has(reel.id)
   const liked = likes.has(reel.id)
   const [progress, setProgress] = useState(0)
-  const [downloading, setDownloading] = useState(false)
+  const { downloading, dlProgress, toast, startDownload } = useDownload()
   const seekingRef = useRef(false)
   const progressBarRef = useRef(null)
 
@@ -204,6 +289,7 @@ function VideoReelCard({ reel, index, total, isActive, onVideoError }) {
 
   return (
     <div className="flex items-center justify-center h-full bg-black">
+      <DownloadToast {...toast} />
       <div className="relative w-full max-w-[480px] h-full bg-gray-900">
 
         {/* Full-screen video */}
@@ -266,14 +352,15 @@ function VideoReelCard({ reel, index, total, isActive, onVideoError }) {
               {liked ? <HeartFill /> : <Heart />}
             </div>
           </button>
-          <button onClick={async () => {
-            if (downloading) return
-            setDownloading(true)
-            try { await downloadBite(reel) } catch {} finally { setDownloading(false) }
-          }} className="cursor-pointer">
-            <div className={`w-10 h-10 rounded-full backdrop-blur-sm flex items-center justify-center text-white ${downloading ? 'bg-primary/40 animate-pulse' : 'bg-black/40'}`}>
-              <Download />
+          <button onClick={() => startDownload(reel)} disabled={downloading} className="cursor-pointer relative">
+            <div className={`w-10 h-10 rounded-full backdrop-blur-sm flex items-center justify-center text-white ${downloading ? 'bg-primary/30' : 'bg-black/40'}`}>
+              {downloading ? (
+                <span className="text-[10px] font-bold tabular-nums">{dlProgress}%</span>
+              ) : (
+                <Download />
+              )}
             </div>
+            {downloading && <DownloadProgressRing progress={dlProgress} />}
           </button>
           <button onClick={() => toggleBookmark(reel.id)} className="cursor-pointer">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
@@ -315,6 +402,7 @@ function ReelCard({ reel, index, total }) {
   const ttsRef = useRef(null)
   const { bookmarks, toggleBookmark, likes, toggleLike } = useStore()
   const saved = bookmarks.has(reel.id)
+  const { downloading, dlProgress, toast, startDownload } = useDownload()
   const liked = likes.has(reel.id)
 
   const handleAudio = async () => {
@@ -365,6 +453,7 @@ function ReelCard({ reel, index, total }) {
 
   return (
     <div className="flex items-center justify-center p-4 md:p-8 h-full">
+      <DownloadToast {...toast} />
       <div className="w-full max-w-lg h-4/5 fade-up">
         <div className="bg-surface rounded-2xl p-6 md:p-8 border border-border relative overflow-hidden h-full flex flex-col">
           {hasBg && (
@@ -430,13 +519,19 @@ function ReelCard({ reel, index, total }) {
                 {audioLoading ? 'Loading...' : playing ? 'Pause' : 'Listen'}
               </button>
               <button
-                onClick={() => downloadBite(reel)}
-                className={`flex items-center gap-1.5 text-sm transition-colors cursor-pointer ${
-                  hasBg ? 'text-white/70 hover:text-white' : 'text-text-muted hover:text-primary'
-                }`}
+                onClick={() => startDownload(reel)}
+                disabled={downloading}
+                className={`flex items-center gap-1.5 text-sm transition-colors cursor-pointer relative ${
+                  downloading
+                    ? (hasBg ? 'text-primary' : 'text-primary')
+                    : (hasBg ? 'text-white/70 hover:text-white' : 'text-text-muted hover:text-primary')
+                } ${downloading ? 'opacity-80' : ''}`}
               >
-                <Download />
-                Download
+                <span className="relative inline-flex items-center justify-center w-[18px] h-[18px]">
+                  <Download />
+                  {downloading && <DownloadProgressRing progress={dlProgress} size={18} stroke={2} />}
+                </span>
+                {downloading ? `${dlProgress}%` : 'Download'}
               </button>
               <button
                 onClick={() => toggleLike(reel.id)}
@@ -472,6 +567,7 @@ function GradientPostCard({ reel, index, total, isActive }) {
   const { bookmarks, toggleBookmark, likes, toggleLike } = useStore()
   const saved = bookmarks.has(reel.id)
   const liked = likes.has(reel.id)
+  const { downloading, dlProgress, toast, startDownload } = useDownload()
   const [animKey, setAnimKey] = useState(0)
 
   // Replay staggered animations when slide becomes active
@@ -486,6 +582,7 @@ function GradientPostCard({ reel, index, total, isActive }) {
 
   return (
     <div className="flex items-center justify-center h-full bg-black">
+      <DownloadToast {...toast} />
       <div className="relative w-full max-w-[480px] h-full overflow-hidden flex flex-col bg-[#0A0F1A]">
         {/* Stock image background */}
         <div
@@ -565,11 +662,17 @@ function GradientPostCard({ reel, index, total, isActive }) {
               {liked ? <HeartFill /> : <Heart />}
             </button>
             <button
-              onClick={() => downloadBite(reel, true)}
-              className="flex items-center gap-1.5 px-4 py-2.5 rounded-full text-sm font-medium transition-colors cursor-pointer bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white/80"
+              onClick={() => startDownload(reel, true)}
+              disabled={downloading}
+              className={`flex items-center gap-1.5 px-4 py-2.5 rounded-full text-sm font-medium transition-colors cursor-pointer backdrop-blur-sm ${
+                downloading ? 'bg-primary/20 text-primary' : 'bg-white/10 hover:bg-white/20 text-white/80'
+              }`}
             >
-              <Download />
-              Download
+              <span className="relative inline-flex items-center justify-center w-[18px] h-[18px]">
+                <Download />
+                {downloading && <DownloadProgressRing progress={dlProgress} size={18} stroke={2} />}
+              </span>
+              {downloading ? `${dlProgress}%` : 'Download'}
             </button>
             <button
               onClick={() => toggleBookmark(reel.id)}

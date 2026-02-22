@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Send, Sparkle, ChevDown, Mic, MicOff } from '../components/Icons'
+import { Send, Sparkle, ChevDown, Mic, MicOff, ArrowL } from '../components/Icons'
 import { askChat, getChatHistory, getChatStatus, getChatSummary, getUploads, startNewChatSession } from '../api'
 import { getWsBaseUrl, getAuthToken } from '../api/ws'
 
@@ -29,16 +29,17 @@ export default function ChatPage() {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, typing])
 
-  // Fetch uploads on mount
+  // Fetch uploads on mount — only show completed documents in chat
   useEffect(() => {
     getUploads()
       .then((list) => {
-        setUploads(list)
+        const ready = list.filter((u) => u.status === 'done')
+        setUploads(ready)
         const paramId = Number(searchParams.get('upload'))
-        if (paramId && list.some((u) => u.id === paramId)) {
+        if (paramId && ready.some((u) => u.id === paramId)) {
           setUploadId(paramId)
-        } else if (list.length > 0) {
-          setUploadId(list[0].id)
+        } else if (ready.length > 0) {
+          setUploadId(ready[0].id)
         }
       })
       .catch(() => {})
@@ -268,9 +269,15 @@ export default function ChatPage() {
   const used = limit && remaining !== null ? limit - remaining : 0
 
   return (
-    <div className="flex flex-col h-screen">
+    <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center gap-3 px-6 py-4 border-b border-border bg-surface/50 backdrop-blur-sm">
+      <div className="flex items-center gap-3 px-4 sm:px-6 py-4 border-b border-border bg-surface/50 backdrop-blur-sm">
+        <button
+          onClick={() => window.history.back()}
+          className="sm:hidden flex items-center text-text-muted hover:text-primary cursor-pointer transition-colors"
+        >
+          <ArrowL />
+        </button>
         <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary">
           <Sparkle />
         </div>
@@ -313,7 +320,7 @@ export default function ChatPage() {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+      <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-6 space-y-4">
         {pastSummaries.length > 0 && (
           <div className="space-y-2 mb-2">
             {pastSummaries.map((s, i) => (
@@ -363,7 +370,7 @@ export default function ChatPage() {
       </div>
 
       {/* Input bar */}
-      <div className="px-6 py-4 border-t border-border bg-surface/50 backdrop-blur-sm">
+      <div className="px-4 sm:px-6 py-4 border-t border-border bg-surface/50 backdrop-blur-sm">
         {!qaReady && uploadId && (
           <p className="text-xs text-warning mb-2">Document is still processing. Chat will be available once complete.</p>
         )}

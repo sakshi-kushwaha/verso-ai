@@ -1,10 +1,10 @@
 import { useEffect, useRef } from 'react'
-import { getUploadStatus } from '../api'
+import { getUploadStatus, getUploads } from '../api'
 import { getWsBaseUrl, getAuthToken } from '../api/ws'
 import useStore from '../store/useStore'
 import { mapReel } from '../utils/reelMapper'
 
-const STAGE_LABELS = {
+export const STAGE_LABELS = {
   uploading: 'Uploading...',
   parsing: 'Parsing...',
   analyzing: 'Analyzing...',
@@ -17,10 +17,45 @@ const STAGE_LABELS = {
 
 export default function UploadTracker() {
   const bgUpload = useStore((s) => s.bgUpload)
+  const setBgUpload = useStore((s) => s.setBgUpload)
   const updateBgUpload = useStore((s) => s.updateBgUpload)
   const clearBgUpload = useStore((s) => s.clearBgUpload)
   const wsRef = useRef(null)
   const pollRef = useRef(null)
+  const restoredRef = useRef(false)
+
+  // Restore bgUpload from backend on page refresh
+  useEffect(() => {
+    if (restoredRef.current || bgUpload) return
+    restoredRef.current = true
+
+    getUploads()
+      .then((list) => {
+        const processing = list.find((u) => u.status === 'processing')
+        if (processing) {
+          // Fetch detailed status (with progress/stage)
+          getUploadStatus(processing.id).then((status) => {
+            setBgUpload({
+              id: processing.id,
+              filename: processing.filename,
+              progress: status.progress ?? 0,
+              stage: status.stage || 'processing',
+              status: status.status,
+            })
+          }).catch(() => {
+            // Fallback with basic info
+            setBgUpload({
+              id: processing.id,
+              filename: processing.filename,
+              progress: 0,
+              stage: 'processing',
+              status: 'processing',
+            })
+          })
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (!bgUpload || bgUpload.status === 'done') return

@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { getMe } from '../api'
 import useStore from '../store/useStore'
 import Button from '../components/Button'
+import MobileBackButton from '../components/MobileBackButton'
 import { Spinner, ErrorState } from '../components/StateScreens'
-import { User } from '../components/Icons'
+import { User, Help, ArrowR } from '../components/Icons'
 
 export default function ProfilePage() {
   const navigate = useNavigate()
@@ -31,8 +32,8 @@ export default function ProfilePage() {
     navigate('/login')
   }
 
-  if (loading) return <div className="max-w-xl mx-auto p-6 pt-10"><Spinner text="Loading profile..." /></div>
-  if (error) return <div className="max-w-xl mx-auto p-6 pt-10"><ErrorState onRetry={load} /></div>
+  if (loading) return <div className="max-w-xl mx-auto px-4 sm:px-6 pt-8 sm:pt-10"><Spinner text="Loading profile..." /></div>
+  if (error) return <div className="max-w-xl mx-auto px-4 sm:px-6 pt-8 sm:pt-10"><ErrorState onRetry={load} /></div>
 
   const initial = (profile?.name || storeUser?.name || '?')[0].toUpperCase()
   const joined = profile?.created_at
@@ -41,7 +42,8 @@ export default function ProfilePage() {
 
   return (
     <>
-      <div className="max-w-xl mx-auto p-6 pt-10 fade-up">
+      <div className="max-w-xl mx-auto px-4 sm:px-6 pt-8 sm:pt-10 pb-20 sm:pb-6 fade-up">
+        <MobileBackButton />
         <h1 className="text-2xl font-bold font-display mb-1">Profile</h1>
         <p className="text-text-muted text-sm mb-8">Your account details</p>
 
@@ -72,6 +74,18 @@ export default function ProfilePage() {
           ))}
         </div>
 
+        {/* Help link */}
+        <Link to="/help" className="flex items-center gap-3 bg-surface rounded-xl p-4 border border-border mb-6 hover:border-primary/30 transition-colors">
+          <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+            <Help />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold">Help & FAQ</p>
+            <p className="text-text-muted text-xs">Frequently asked questions</p>
+          </div>
+          <span className="text-text-muted"><ArrowR /></span>
+        </Link>
+
         {/* Logout */}
         <Button full variant="danger" onClick={() => setShowConfirm(true)} className="mt-4">
           Logout
@@ -81,7 +95,7 @@ export default function ProfilePage() {
       {/* Confirmation modal — outside page container for proper full-screen overlay */}
       {showConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowConfirm(false)}>
-          <div className="bg-surface rounded-2xl p-8 border border-border w-80 text-center fade-up shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-surface rounded-2xl p-8 border border-border w-full max-w-xs mx-4 text-center fade-up shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold font-display mb-2">Logout</h3>
             <p className="text-text-muted text-sm mb-6">Are you sure you want to logout?</p>
             <div className="flex gap-3">
