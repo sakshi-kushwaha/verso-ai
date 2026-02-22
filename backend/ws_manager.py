@@ -68,5 +68,22 @@ class ConnectionManager:
             except Exception:
                 log.debug("Failed to send reel_ready for upload %s", upload_id)
 
+    async def broadcast_flashcard_ready(self, upload_id: int, flashcard: dict):
+        """Push a flashcard_ready event so the frontend can display it immediately."""
+        async with self._lock:
+            clients = list(self._subs.get(upload_id, []))
+
+        msg = json.dumps({
+            "type": "flashcard_ready",
+            "upload_id": upload_id,
+            "flashcard": flashcard,
+        })
+
+        for ws in clients:
+            try:
+                await ws.send_text(msg)
+            except Exception:
+                log.debug("Failed to send flashcard_ready for upload %s", upload_id)
+
 
 manager = ConnectionManager()

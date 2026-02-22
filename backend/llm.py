@@ -5,7 +5,7 @@ import logging
 import re
 import time
 import httpx
-from config import OLLAMA_HOST, LLM_MODEL, CLASSIFICATION_MODEL, REEL_MODEL, LLM_TIMEOUT
+from config import OLLAMA_HOST, LLM_MODEL, CLASSIFICATION_MODEL, REEL_MODEL, LLM_TIMEOUT, REEL_LLM_TIMEOUT, CLASSIFICATION_TIMEOUT
 from database import get_db
 from prompts import (
     DOC_TYPE_PROMPT,
@@ -79,6 +79,11 @@ def llm_call(prompt: str, json_mode: bool = False, timeout: float = None) -> str
             log.warning("Ollama call timed out after %ss (attempt %d/%d)", timeout, attempt + 1, 1 + MAX_RETRIES)
             if attempt < MAX_RETRIES:
                 time.sleep(min(2 ** attempt, 10))
+        except httpx.HTTPStatusError as e:
+            last_error = e
+            log.warning("Ollama HTTP error %s (attempt %d/%d): %s", e.response.status_code, attempt + 1, 1 + MAX_RETRIES, e)
+            if attempt < MAX_RETRIES:
+                time.sleep(min(2 ** attempt, 10))
 
     if isinstance(last_error, httpx.ConnectError):
         raise OllamaUnavailableError(f"Cannot reach Ollama at {OLLAMA_HOST}") from last_error
@@ -93,7 +98,7 @@ def clean_classification_response(text: str) -> str:
     return first_word
 
 
-def classification_llm_call(prompt: str, timeout: float = 60.0) -> str:
+def classification_llm_call(prompt: str, timeout: float = CLASSIFICATION_TIMEOUT) -> str:
     """LLM call using the lightweight classification model (thinking disabled)."""
     payload = {
         "model": CLASSIFICATION_MODEL,
@@ -127,14 +132,19 @@ def classification_llm_call(prompt: str, timeout: float = 60.0) -> str:
             log.warning("Classification call timed out after %ss (attempt %d/%d)", timeout, attempt + 1, 1 + MAX_RETRIES)
             if attempt < MAX_RETRIES:
                 time.sleep(min(2 ** attempt, 10))
+        except httpx.HTTPStatusError as e:
+            last_error = e
+            log.warning("Classification HTTP error %s (attempt %d/%d): %s", e.response.status_code, attempt + 1, 1 + MAX_RETRIES, e)
+            if attempt < MAX_RETRIES:
+                time.sleep(min(2 ** attempt, 10))
 
     if isinstance(last_error, httpx.ConnectError):
         raise OllamaUnavailableError(f"Cannot reach Ollama at {OLLAMA_HOST}") from last_error
     raise last_error
 
 
-def reel_llm_call(prompt: str, timeout: float = 600.0, system: str = None,
-                   num_predict: int = 800, json_mode: bool = True) -> str:
+def reel_llm_call(prompt: str, timeout: float = REEL_LLM_TIMEOUT, system: str = None,
+                   num_predict: int = 600, json_mode: bool = True) -> str:
     """LLM call using the reel model. JSON mode on by default."""
     payload = {
         "model": REEL_MODEL,
@@ -173,6 +183,11 @@ def reel_llm_call(prompt: str, timeout: float = 600.0, system: str = None,
             log.warning("Reel LLM call timed out after %ss (attempt %d/%d)", timeout, attempt + 1, 1 + MAX_RETRIES)
             if attempt < MAX_RETRIES:
                 time.sleep(min(2 ** attempt, 10))
+        except httpx.HTTPStatusError as e:
+            last_error = e
+            log.warning("Reel LLM HTTP error %s (attempt %d/%d): %s", e.response.status_code, attempt + 1, 1 + MAX_RETRIES, e)
+            if attempt < MAX_RETRIES:
+                time.sleep(min(2 ** attempt, 10))
 
     if isinstance(last_error, httpx.ConnectError):
         raise OllamaUnavailableError(f"Cannot reach Ollama at {OLLAMA_HOST}") from last_error
@@ -185,8 +200,8 @@ def detect_doc_type(text: str) -> str:
         prompt = DOC_TYPE_PROMPT.format(text=text[:2000])
         raw = classification_llm_call(prompt)
         result = clean_classification_response(raw)
-    except (OllamaUnavailableError, httpx.TimeoutException):
-        log.warning("Doc type detection failed, defaulting to 'general'")
+    except Exception:
+        log.warning("Doc type detection failed, defaulting to 'general'", exc_info=True)
         return "general"
 
     valid = {"textbook", "research_paper", "business", "fiction", "technical", "general"}
@@ -205,8 +220,8 @@ def detect_subject_category(text: str) -> str:
         prompt = SUBJECT_CATEGORY_PROMPT.format(text=text[:2000])
         raw = classification_llm_call(prompt)
         result = clean_classification_response(raw)
-    except (OllamaUnavailableError, httpx.TimeoutException):
-        log.warning("Subject category detection failed, defaulting to 'general'")
+    except Exception:
+        log.warning("Subject category detection failed, defaulting to 'general'", exc_info=True)
         return "general"
 
     for v in VALID_CATEGORIES:
@@ -227,8 +242,8 @@ def detect_doc_classification(text: str) -> tuple[str, str]:
         raw = classification_llm_call(prompt)
         cleaned = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL).strip()
         words = cleaned.lower().split()
-    except (OllamaUnavailableError, httpx.TimeoutException):
-        log.warning("Combined classification failed, defaulting to general/general")
+    except Exception:
+        log.warning("Combined classification failed, defaulting to general/general", exc_info=True)
         return ("general", "general")
 
     doc_type = "general"
@@ -338,7 +353,9 @@ def parse_llm_json(text: str) -> dict:
     for reel in parsed["reels"]:
         if isinstance(reel, dict) and "title" in reel and "summary" in reel:
             reel.setdefault("narration", reel["summary"])
-            reel.setdefault("one_liner", reel["title"])
+            # one_liner should be a catchy tagline; fall back to truncated summary
+            if not reel.get("one_liner") or reel.get("one_liner") == reel.get("title"):
+                reel["one_liner"] = reel["summary"][:120]
             reel.setdefault("category", "general")
             reel.setdefault("keywords", "")
             validated_reels.append(reel)
@@ -376,46 +393,61 @@ def extract_topics(full_text: str, num_topics: int = 5) -> list[dict]:
     """Extract key topics from document text using LLM.
 
     Returns list of {"topic": "...", "keywords": "..."} dicts.
+    Retries once if the LLM returns significantly fewer topics than requested.
     """
     sampled = _sample_document(full_text, max_chars=6000)
-    prompt = TOPIC_EXTRACTION_PROMPT.format(
-        text=sampled,
-        num_topics=num_topics,
-    )
 
-    # Scale num_predict with topic count (each topic needs ~30 tokens)
-    predict = max(400, num_topics * 50)
-    try:
-        result = reel_llm_call(prompt, timeout=120.0, num_predict=predict)
-    except (OllamaUnavailableError, httpx.TimeoutException):
-        log.warning("Topic extraction failed — LLM unavailable")
-        return []
+    def _do_extract(n: int, sample_text: str) -> list[dict]:
+        prompt = TOPIC_EXTRACTION_PROMPT.format(
+            text=sample_text,
+            num_topics=n,
+        )
+        # Scale num_predict with topic count (each topic needs ~30 tokens)
+        predict = max(400, n * 50)
+        # Scale timeout: at ~4 tok/s on CPU, 5000 tokens needs ~20 min
+        timeout = max(120.0, predict / 3.0)
+        try:
+            result = reel_llm_call(prompt, timeout=timeout, num_predict=predict)
+        except (OllamaUnavailableError, httpx.TimeoutException):
+            log.warning("Topic extraction failed — LLM unavailable (timeout=%.0fs, predict=%d)", timeout, predict)
+            return []
 
-    parsed = None
-    try:
-        parsed = json.loads(result)
-    except json.JSONDecodeError:
-        match = re.search(r"\{[\s\S]*\}", result)
-        if match:
-            try:
-                parsed = json.loads(match.group())
-            except json.JSONDecodeError:
-                pass
+        parsed = None
+        try:
+            parsed = json.loads(result)
+        except json.JSONDecodeError:
+            match = re.search(r"\{[\s\S]*\}", result)
+            if match:
+                try:
+                    parsed = json.loads(match.group())
+                except json.JSONDecodeError:
+                    pass
 
-    if not parsed or "topics" not in parsed:
-        log.warning("Topic extraction returned invalid JSON")
-        return []
+        if not parsed or "topics" not in parsed:
+            log.warning("Topic extraction returned invalid JSON")
+            return []
 
-    topics = []
-    for t in parsed["topics"]:
-        if isinstance(t, dict) and "topic" in t:
-            topics.append({
-                "topic": str(t["topic"])[:100],
-                "keywords": str(t.get("keywords", "")),
-            })
+        topics = []
+        for t in parsed["topics"]:
+            if isinstance(t, dict) and "topic" in t:
+                topics.append({
+                    "topic": str(t["topic"])[:100],
+                    "keywords": str(t.get("keywords", "")),
+                })
+        return topics[:n]
 
-    log.info("Extracted %d topics from document", len(topics))
-    return topics[:num_topics]
+    topics = _do_extract(num_topics, sampled)
+
+    # If we got significantly fewer topics than requested, retry with a larger sample
+    if num_topics > 5 and len(topics) < num_topics * 0.5:
+        log.warning("Got only %d/%d topics, retrying with larger sample", len(topics), num_topics)
+        bigger_sample = _sample_document(full_text, max_chars=10000)
+        retry_topics = _do_extract(num_topics, bigger_sample)
+        if len(retry_topics) > len(topics):
+            topics = retry_topics
+
+    log.info("Extracted %d topics from document (requested %d)", len(topics), num_topics)
+    return topics
 
 
 def gather_topic_content(topic: dict, full_text: str, max_chars: int = 3000) -> str:
@@ -615,7 +647,7 @@ def generate_reel_script(text: str, category: str, clips: list[dict],
     )
 
     try:
-        result = reel_llm_call(prompt, timeout=300.0)
+        result = reel_llm_call(prompt, timeout=180.0)
     except (OllamaUnavailableError, httpx.TimeoutException):
         log.warning("Reel script generation failed (LLM error)")
         return None
@@ -713,7 +745,7 @@ def generate_mixed_reel_script(
     )
 
     try:
-        result = reel_llm_call(prompt, timeout=300.0)
+        result = reel_llm_call(prompt, timeout=180.0)
     except (OllamaUnavailableError, httpx.TimeoutException):
         log.warning("Mixed reel script generation failed, falling back to video-only")
         return generate_reel_script(text, category, clips)

@@ -1,3 +1,4 @@
+import logging
 import os
 import asyncio
 from contextlib import asynccontextmanager
@@ -7,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from config import EMBEDDINGS_DIR, AUDIO_CACHE_DIR, VIDEO_CACHE_DIR
 from database import init_db
+
 from routers.audio import router as audio_router
 from routers.upload import router as upload_router
 from routers.feed import router as feed_router
@@ -24,6 +26,13 @@ STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Configure logging so pipeline/llm/video modules are visible in docker logs
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        force=True,
+    )
     EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
     AUDIO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     VIDEO_CACHE_DIR.mkdir(parents=True, exist_ok=True)

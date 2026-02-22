@@ -84,10 +84,11 @@ def assign_images(reels: list, upload_category: str) -> list:
     """Assign background image paths to a list of reels.
 
     Returns a list of relative paths (e.g. 'bg-images/science/01.jpg') or None.
-    Avoids consecutive reels getting the same image.
+    Uses shuffle-based round-robin to maximize variety across reels.
     """
     results = []
-    prev_image = None
+    # Cache shuffled image lists per category for round-robin assignment
+    _cat_queues: dict[str, list] = {}
 
     for reel in reels:
         cat = _resolve_category(reel.get("category", ""), upload_category)
@@ -95,13 +96,15 @@ def assign_images(reels: list, upload_category: str) -> list:
 
         if not images:
             results.append(None)
-            prev_image = None
             continue
 
-        # Avoid same image as previous reel
-        candidates = [img for img in images if img != prev_image] or images
-        chosen = random.choice(candidates)
-        prev_image = chosen
+        # Initialize or refill the shuffled queue for this category
+        if cat not in _cat_queues or not _cat_queues[cat]:
+            shuffled = images[:]
+            random.shuffle(shuffled)
+            _cat_queues[cat] = shuffled
+
+        chosen = _cat_queues[cat].pop()
         results.append(f"bg-images/{cat}/{chosen}")
 
     return results

@@ -172,7 +172,7 @@ def download_video(reel_id: int):
     conn = get_db()
     try:
         row = conn.execute(
-            "SELECT video_path, title, one_liner FROM reels WHERE id = ?", (reel_id,)
+            "SELECT video_path, title, one_liner, summary FROM reels WHERE id = ?", (reel_id,)
         ).fetchone()
     finally:
         conn.close()
@@ -191,12 +191,18 @@ def download_video(reel_id: int):
     DOWNLOAD_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     download_path = str(DOWNLOAD_CACHE_DIR / f"reel_{reel_id}.mp4")
 
+    # Fallback: use truncated summary if one_liner is empty
+    title_text = row["title"] or ""
+    one_liner_text = row["one_liner"] or ""
+    if not one_liner_text.strip() and row["summary"]:
+        one_liner_text = row["summary"][:120]
+
     # Always regenerate — source video or metadata may have changed
     success = _burn_title_into_video(
         source_path=video_path,
         out_path=download_path,
-        title=row["title"] or "",
-        one_liner=row["one_liner"] or "",
+        title=title_text,
+        one_liner=one_liner_text,
     )
     if not success:
         download_path = video_path

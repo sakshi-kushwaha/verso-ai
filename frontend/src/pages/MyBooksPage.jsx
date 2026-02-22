@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getUploads, getUploadStatus, getFeed, getFlashcards, getDocSummary, getSummaryAudio } from '../api'
 import api from '../api'
@@ -6,45 +6,94 @@ import Button from '../components/Button'
 import { File, Upload, ArrowL, ArrowR, Cards, Chat, Volume, Pause, Play, Grid, Sparkle } from '../components/Icons'
 import { Spinner, ErrorState, EmptyState } from '../components/StateScreens'
 import { STAGE_LABELS } from '../components/UploadTracker'
+import { getWsBaseUrl, getAuthToken } from '../api/ws'
 
 const ACCENTS = ['#3B82F6', '#06B6D4', '#F472B6', '#F59E0B', '#10B981', '#8B5CF6']
 
-function ProcessingCard({ book, onDone }) {
+function useUploadWs(uploadId, { onProgress, onReelReady, onFlashcardReady, onDone }) {
+  const wsRef = useRef(null)
+  const pollRef = useRef(null)
+
+  useEffect(() => {
+    if (!uploadId) return
+
+    const cleanup = () => {
+      if (wsRef.current) { try { wsRef.current.close() } catch {} wsRef.current = null }
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+    }
+
+    const handleMsg = (evt) => {
+      try {
+        const msg = JSON.parse(evt.data)
+        if (msg.type === 'progress') {
+          onProgress?.(msg.progress ?? 0, msg.stage || 'processing', msg.status)
+          if (msg.status === 'done' || msg.status === 'error' || msg.status === 'partial') {
+            cleanup()
+            onDone?.(msg.status)
+          }
+        } else if (msg.type === 'reel_ready' && msg.reel) {
+          onReelReady?.(msg.reel)
+        } else if (msg.type === 'flashcard_ready' && msg.flashcard) {
+          onFlashcardReady?.(msg.flashcard)
+        }
+      } catch {}
+    }
+
+    const startPolling = () => {
+      pollRef.current = setInterval(() => {
+        getUploadStatus(uploadId)
+          .then((s) => {
+            onProgress?.(s.progress ?? 0, s.stage || 'processing', s.status)
+            if (s.status === 'done' || s.status === 'error' || s.status === 'partial') {
+              cleanup()
+              onDone?.(s.status)
+            }
+          })
+          .catch(() => {})
+      }, 3000)
+    }
+
+    // Try WebSocket first
+    const token = getAuthToken()
+    if (token) {
+      try {
+        const ws = new WebSocket(`${getWsBaseUrl()}/ws/upload/${uploadId}?token=${token}`)
+        wsRef.current = ws
+        ws.onmessage = handleMsg
+        ws.onerror = () => { ws.close(); wsRef.current = null; startPolling() }
+        ws.onclose = () => { wsRef.current = null }
+      } catch { startPolling() }
+    } else {
+      startPolling()
+    }
+
+    // Initial status fetch
+    getUploadStatus(uploadId)
+      .then((s) => onProgress?.(s.progress ?? 0, s.stage || 'processing', s.status))
+      .catch(() => {})
+
+    return cleanup
+  }, [uploadId])
+}
+
+function ProcessingCard({ book, onDone, onClick }) {
   const [progress, setProgress] = useState(0)
   const [stage, setStage] = useState('processing')
   const [reelsCount, setReelsCount] = useState(0)
 
-  useEffect(() => {
-    const poll = setInterval(() => {
-      getUploadStatus(book.id)
-        .then((s) => {
-          setProgress(s.progress ?? 0)
-          setStage(s.stage || 'processing')
-          setReelsCount(s.reels_generated || 0)
-          if (s.status === 'done' || s.status === 'error' || s.status === 'partial') {
-            clearInterval(poll)
-            if (onDone) onDone()
-          }
-        })
-        .catch(() => {})
-    }, 2000)
-
-    // Initial fetch
-    getUploadStatus(book.id)
-      .then((s) => {
-        setProgress(s.progress ?? 0)
-        setStage(s.stage || 'processing')
-        setReelsCount(s.reels_generated || 0)
-      })
-      .catch(() => {})
-
-    return () => clearInterval(poll)
-  }, [book.id])
+  useUploadWs(book.id, {
+    onProgress: (p, s) => { setProgress(p); setStage(s) },
+    onReelReady: () => setReelsCount((c) => c + 1),
+    onDone: () => { if (onDone) onDone() },
+  })
 
   const label = STAGE_LABELS[stage] || 'Processing...'
 
   return (
-    <div className="bg-surface rounded-xl border border-primary/20 p-4 relative overflow-hidden">
+    <div
+      onClick={onClick}
+      className="bg-surface rounded-xl border border-primary/20 p-4 relative overflow-hidden cursor-pointer hover:border-primary/40 transition-all"
+    >
       {/* Shimmer overlay */}
       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-primary/5 to-transparent animate-shimmer pointer-events-none" />
 
@@ -69,7 +118,7 @@ function ProcessingCard({ book, onDone }) {
         <span className="text-sm font-bold text-primary tabular-nums">{Math.round(progress)}%</span>
       </div>
 
-      {/* AI thinking dots */}
+      {/* AI thinking dots + View link */}
       <div className="relative flex items-center gap-2 mt-3 px-1">
         <div className="flex gap-1">
           {[0, 1, 2].map((i) => (
@@ -81,6 +130,9 @@ function ProcessingCard({ book, onDone }) {
           ))}
         </div>
         <span className="text-xs text-primary/80">{label}</span>
+        <span className="ml-auto flex items-center gap-1 text-xs text-primary font-medium">
+          View <ArrowR />
+        </span>
       </div>
 
       {/* Progress bar */}
@@ -95,11 +147,18 @@ function ProcessingCard({ book, onDone }) {
 }
 
 function BookCard({ book, onClick }) {
+  const navigate = useNavigate()
   const statusColors = {
     done: 'bg-success/10 text-success',
     error: 'bg-danger/10 text-danger',
+    partial: 'bg-amber-500/10 text-amber-400',
   }
-  const statusLabel = book.status === 'done' ? 'Completed' : book.status
+  const statusLabels = {
+    done: 'Completed',
+    error: 'Failed',
+    partial: 'Partial',
+  }
+  const statusLabel = statusLabels[book.status] || book.status
 
   return (
     <div
@@ -123,7 +182,19 @@ function BookCard({ book, onClick }) {
         </div>
       </div>
 
-      {book.status === 'done' && (
+      {book.status === 'error' && (
+        <div className="flex items-center gap-3 mt-3 pt-3 border-t border-border">
+          <span className="text-xs text-text-muted flex-1">Processing timed out or failed</span>
+          <button
+            className="text-xs text-primary font-medium hover:opacity-80 transition-opacity"
+            onClick={(e) => { e.stopPropagation(); navigate('/upload') }}
+          >
+            Re-upload
+          </button>
+        </div>
+      )}
+
+      {(book.status === 'done' || book.status === 'partial') && (
         <div className="flex items-center gap-4 mt-3 pt-3 border-t border-border">
           <span className="text-xs text-text-muted">
             <span className="font-semibold text-text">{book.reel_count || 0}</span> bites
@@ -231,7 +302,7 @@ function BookSummary({ bookId, initialSummary }) {
             Retry
           </button>
         </div>
-        <p className="text-xs text-text-muted mt-2">Summary generation timed out. Click retry to try again.</p>
+        <p className="text-xs text-text-muted mt-2">Summary not available yet. Click retry to try again.</p>
       </div>
     )
   }
@@ -396,9 +467,10 @@ function BookDetail({ book, onBack }) {
   const [reels, setReels] = useState([])
   const [flashcards, setFlashcards] = useState([])
   const [loading, setLoading] = useState(true)
+  const [status, setStatus] = useState(book.status)
+  const isProcessing = status === 'processing'
 
-  useEffect(() => {
-    setLoading(true)
+  const fetchContent = () => {
     Promise.all([
       getFeed(1, 50, book.id).then(d => d.reels || []).catch(() => []),
       getFlashcards(book.id).catch(() => []),
@@ -407,7 +479,19 @@ function BookDetail({ book, onBack }) {
       setFlashcards(Array.isArray(f) ? f : f.flashcards || [])
       setLoading(false)
     })
+  }
+
+  useEffect(() => {
+    setLoading(true)
+    fetchContent()
   }, [book.id])
+
+  // Real-time updates via WebSocket while processing
+  useUploadWs(isProcessing ? book.id : null, {
+    onReelReady: (reel) => setReels((prev) => [...prev, reel]),
+    onFlashcardReady: (fc) => setFlashcards((prev) => [...prev, fc]),
+    onDone: (s) => setStatus(s),
+  })
 
   const handleReelClick = (index) => {
     navigate('/', { state: { uploadId: book.id, startReelIndex: index } })
@@ -439,8 +523,24 @@ function BookDetail({ book, onBack }) {
         </div>
       </div>
 
-      {/* Summary */}
-      <BookSummary bookId={book.id} initialSummary={book.doc_summary || null} />
+      {/* Error banner for failed uploads */}
+      {book.status === 'error' && (
+        <div className="bg-danger/5 border border-danger/20 rounded-xl p-4 mb-4">
+          <p className="text-sm text-danger font-medium">Processing failed</p>
+          <p className="text-xs text-text-muted mt-1">This document couldn't be fully processed. Try re-uploading it.</p>
+          <button
+            className="mt-2 text-xs text-primary font-medium hover:opacity-80 transition-opacity"
+            onClick={() => navigate('/upload')}
+          >
+            Re-upload document
+          </button>
+        </div>
+      )}
+
+      {/* Summary — only show if we have content or the upload completed */}
+      {(book.doc_summary || book.reel_count > 0 || book.status === 'done') && (
+        <BookSummary bookId={book.id} initialSummary={book.doc_summary || null} />
+      )}
 
       {/* Icon Tab Bar */}
       <div className="mb-4">
@@ -477,22 +577,56 @@ function BookDetail({ book, onBack }) {
         <Spinner text="Loading content..." />
       ) : tab === 'reels' ? (
         reels.length === 0 ? (
-          <EmptyState title="No bites yet" subtitle="Bites will appear once processing is complete" />
+          isProcessing ? (
+            <div className="text-center py-8">
+              <div className="flex justify-center gap-1.5 mb-3">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="w-2 h-2 rounded-full bg-primary animate-pulse" style={{ animationDelay: `${i * 0.2}s` }} />
+                ))}
+              </div>
+              <p className="text-sm text-text-muted">Generating bites... they'll appear here in real-time</p>
+            </div>
+          ) : (
+            <EmptyState title="No bites yet" subtitle="Bites will appear once processing is complete" />
+          )
         ) : (
-          <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
-            {reels.map((reel, i) => (
-              <ReelThumbnail
-                key={reel.id}
-                reel={reel}
-                accent={ACCENTS[i % ACCENTS.length]}
-                onClick={() => handleReelClick(i)}
-              />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+              {reels.map((reel, i) => (
+                <ReelThumbnail
+                  key={reel.id}
+                  reel={reel}
+                  accent={ACCENTS[i % ACCENTS.length]}
+                  onClick={() => handleReelClick(i)}
+                />
+              ))}
+            </div>
+            {isProcessing && (
+              <div className="flex items-center justify-center gap-2 mt-4 py-3">
+                <div className="flex gap-1">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" style={{ animationDelay: `${i * 0.2}s` }} />
+                  ))}
+                </div>
+                <span className="text-xs text-primary/80">Generating more bites...</span>
+              </div>
+            )}
+          </>
         )
       ) : (
         flashcards.length === 0 ? (
-          <EmptyState title="No flashcards yet" subtitle="Flashcards will appear once processing is complete" />
+          isProcessing ? (
+            <div className="text-center py-8">
+              <div className="flex justify-center gap-1.5 mb-3">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="w-2 h-2 rounded-full bg-primary animate-pulse" style={{ animationDelay: `${i * 0.2}s` }} />
+                ))}
+              </div>
+              <p className="text-sm text-text-muted">Generating flashcards...</p>
+            </div>
+          ) : (
+            <EmptyState title="No flashcards yet" subtitle="Flashcards will appear once processing is complete" />
+          )
         ) : (
           <div className="space-y-3">
             {flashcards.map((fc, i) => (
@@ -590,7 +724,7 @@ export default function MyBooksPage() {
         <div className="space-y-3">
           {books.map((book) =>
             book.status === 'processing' ? (
-              <ProcessingCard key={book.id} book={book} onDone={refreshBooks} />
+              <ProcessingCard key={book.id} book={book} onDone={refreshBooks} onClick={() => setSelectedBook(book)} />
             ) : (
               <BookCard key={book.id} book={book} onClick={() => setSelectedBook(book)} />
             )
