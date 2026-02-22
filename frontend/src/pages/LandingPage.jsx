@@ -133,7 +133,7 @@ export default function LandingPage() {
           <li><a href="#how">How It Works</a></li>
           <li><a href="#features">Features</a></li>
           <li><a href="#local">Local AI</a></li>
-          <li><Link to="/login" className="nav-cta">Try Verso</Link></li>
+          <li><Link to="/login" className="nav-cta">Login</Link></li>
         </ul>
       </nav>
 
@@ -142,7 +142,7 @@ export default function LandingPage() {
         <div className="hero-badge"><span className="dot" />100% Local AI — Your Data Never Leaves Your Device</div>
         <h1>Learn Smarter,<br /><span className="gradient-text">Scroll Better.</span></h1>
         <p className="hero-sub">
-          Verso AI — An app that transforms documents into reels-style learning. Swipeable summaries,
+          Verso AI — An app that transforms documents into bite-sized learning. Scrollable summaries,
           flashcards, audio narration, and AI chat — so you absorb more from every page. Fully local,
           fully private, entirely yours.
         </p>
@@ -265,7 +265,7 @@ export default function LandingPage() {
           <div className="stat-grid">
             <div className="stat-card"><div className="stat-number">~15%</div><div className="stat-label">Average retention from passive reading</div></div>
             <div className="stat-card"><div className="stat-number">73%</div><div className="stat-label">Prefer short-form content for learning</div></div>
-            <div className="stat-card"><div className="stat-number">0</div><div className="stat-label">Tools that make documents feel like scrolling a feed</div></div>
+            <div className="stat-card"><div className="stat-number">3</div><div className="stat-label">Ways to learn from one upload — bites, flashcards, chat</div></div>
             <div className="stat-card"><div className="stat-number">100%</div><div className="stat-label">Of your data stays on your device</div></div>
           </div>
         </div>
@@ -274,7 +274,7 @@ export default function LandingPage() {
       {/* ═══ HOW IT WORKS ═══ */}
       <section className="how-it-works" id="how">
         <div className="section-label reveal">How It Works</div>
-        <h2 className="section-title reveal" style={{ textAlign: 'center' }}>From PDF to feed in seconds</h2>
+        <h2 className="section-title reveal" style={{ textAlign: 'center' }}>From PDF to feed in minutes</h2>
         <p className="section-desc reveal" style={{ textAlign: 'center' }}>Four steps. Zero cloud. All intelligence, all local.</p>
         <div className="steps-container reveal">
           <div className="step-card">
@@ -294,8 +294,8 @@ export default function LandingPage() {
           <div className="step-card">
             <div className="step-icon learn">{'\uD83D\uDCF1'}</div>
             <div className="step-number">03</div>
-            <div className="step-title">Swipe &amp; Learn</div>
-            <div className="step-desc">Scroll through your personalized reel feed. Each reel is a bite-sized learning moment with audio.</div>
+            <div className="step-title">Scroll &amp; Learn</div>
+            <div className="step-desc">Scroll through your personalized feed. Each bite is a short learning moment with audio.</div>
           </div>
           <div className="step-connector">&rarr;</div>
           <div className="step-card">
@@ -314,8 +314,8 @@ export default function LandingPage() {
         <div className="features-grid reveal">
           <div className="feature-card highlight">
             <span className="feature-emoji">{'\uD83C\uDFAC'}</span>
-            <div className="feature-name">Swipeable Reel Feed</div>
-            <div className="feature-desc">Full-screen vertical swipe experience — just like Instagram or TikTok. Each reel is a structured learning moment with title, summary, category badge, keywords, and page reference. Auto-play audio. Infinite scroll.</div>
+            <div className="feature-name">Scrollable Bite Feed</div>
+            <div className="feature-desc">Full-screen vertical scroll experience — just like Instagram or TikTok. Each bite is a structured learning moment with title, summary, category badge, keywords, and page reference. Auto-play audio. Infinite scroll.</div>
             <span className="feature-tag">Core Experience</span>
           </div>
           <div className="feature-card">
@@ -326,33 +326,33 @@ export default function LandingPage() {
           <div className="feature-card">
             <span className="feature-emoji">{'\uD83C\uDFB4'}</span>
             <div className="feature-name">Auto Flashcards</div>
-            <div className="feature-desc">Every reel generates question/answer flashcards for active recall and self-testing from a dedicated tab.</div>
+            <div className="feature-desc">Every bite generates question/answer flashcards for active recall and self-testing from a dedicated tab.</div>
           </div>
           <div className="feature-card">
             <span className="feature-emoji">{'\uD83D\uDCAC'}</span>
-            <div className="feature-name">RAG Chat Q&amp;A</div>
-            <div className="feature-desc">Ask anything about your document. Get grounded answers with source citations and page references. All local.</div>
+            <div className="feature-name">Document Chat</div>
+            <div className="feature-desc">Ask anything about your document. Get answers with exact page references and citations. All local.</div>
           </div>
           <div className="feature-card highlight">
             <span className="feature-emoji">{'\uD83C\uDFA7'}</span>
             <div className="feature-name">Audio Narration</div>
-            <div className="feature-desc">Every reel comes with neural text-to-speech narration. Hit play and learn while commuting, cooking, or working out. Generated locally, cached for instant replay.</div>
+            <div className="feature-desc">Every bite comes with neural text-to-speech narration. Hit play and learn while commuting, cooking, or working out. Generated locally, cached for instant replay.</div>
             <span className="feature-tag">Hands-free Learning</span>
           </div>
           <div className="feature-card">
             <span className="feature-emoji">{'\uD83D\uDCCB'}</span>
             <div className="feature-name">Progressive Processing</div>
-            <div className="feature-desc">Reels appear within seconds of upload — you start learning before the document is fully processed.</div>
+            <div className="feature-desc">Bites appear within minutes of upload — you start learning before the document is fully processed.</div>
           </div>
           <div className="feature-card">
             <span className="feature-emoji">{'\uD83D\uDD16'}</span>
             <div className="feature-name">Bookmarks &amp; Progress</div>
-            <div className="feature-desc">Save any reel or flashcard. Track your reading progress across all uploads.</div>
+            <div className="feature-desc">Save any bite or flashcard. Track your reading progress across all uploads.</div>
           </div>
           <div className="feature-card">
             <span className="feature-emoji">{'\uD83D\uDCE5'}</span>
             <div className="feature-name">Download &amp; Save</div>
-            <div className="feature-desc">Export reels, flashcards, and audio as bundled packages for truly offline use anywhere.</div>
+            <div className="feature-desc">Export bites, flashcards, and audio as bundled packages for truly offline use anywhere.</div>
           </div>
         </div>
       </section>
@@ -379,28 +379,15 @@ export default function LandingPage() {
           <div>
             <div className="section-label">The Algorithm</div>
             <h2 className="section-title">We don&rsquo;t ask what you like. We learn from what you do.</h2>
-            <p className="section-desc">New users land on a feed of 100 pre-loaded reels across 10 subjects. As you scroll, skip, bookmark, and listen — Verso&rsquo;s algorithm learns your preferences in real-time.</p>
-            <p className="section-desc" style={{ marginTop: '0.6rem', fontStyle: 'italic', color: 'var(--accent-cyan)', fontSize: '0.9rem' }}>No onboarding quiz. Just scroll.</p>
+            <p className="section-desc">New users land on a feed of 150+ pre-loaded bites across 11 subjects. As you scroll, skip, bookmark, and listen — Verso&rsquo;s algorithm learns your preferences in real-time.</p>
           </div>
           <div className="algo-visual">
-            <div className="algo-step"><div className="algo-step-num">1</div><div className="algo-step-text"><strong>You scroll reels</strong> — science, history, business, medicine, tech...</div></div>
+            <div className="algo-step"><div className="algo-step-num">1</div><div className="algo-step-text"><strong>You scroll bites</strong> — science, history, business, medicine, tech...</div></div>
             <div className="algo-step"><div className="algo-step-num">2</div><div className="algo-step-text"><strong>We track signals</strong> — watch time, skips, bookmarks, audio plays</div></div>
             <div className="algo-step"><div className="algo-step-num">3</div><div className="algo-step-text"><strong>Preferences emerge</strong> — after ~10 interactions, we know your style</div></div>
-            <div className="algo-step"><div className="algo-step-num">4</div><div className="algo-step-text"><strong>Your PDF reels adapt</strong> — generated to match how you actually learn</div></div>
-            <div className="algo-step"><div className="algo-step-num">5</div><div className="algo-step-text"><strong>Feed evolves</strong> — platform + your reels, ranked by your behavior</div></div>
+            <div className="algo-step"><div className="algo-step-num">4</div><div className="algo-step-text"><strong>Your PDF bites adapt</strong> — generated to match how you actually learn</div></div>
+            <div className="algo-step"><div className="algo-step-num">5</div><div className="algo-step-text"><strong>Feed evolves</strong> — platform + your bites, ranked by your behavior</div></div>
           </div>
-        </div>
-      </section>
-
-      {/* ═══ TECH STACK ═══ */}
-      <section className="tech-stack">
-        <div className="section-label reveal">Built With</div>
-        <h2 className="section-title reveal" style={{ textAlign: 'center' }}>Lean stack, maximum impact</h2>
-        <p className="section-desc reveal" style={{ textAlign: 'center', marginBottom: '0.5rem' }}>~3.0–3.3 GB peak RAM &bull; Fully local/offline &bull; No external API calls</p>
-        <div className="tech-grid reveal">
-          {['FastAPI', 'Ollama', 'Qwen 2.5', 'ChromaDB', 'ffmpeg', 'Edge-TTS / Piper', 'PyMuPDF', 'python-docx', 'nomic-embed-text', 'React (Vite)', 'Zustand', 'Swiper.js', 'Tailwind CSS v4', 'Axios', 'WebSocket'].map((t) => (
-            <div key={t} className="tech-chip">{t}</div>
-          ))}
         </div>
       </section>
 
@@ -410,12 +397,7 @@ export default function LandingPage() {
           <div className="logo-icon"><VersoLogo id="vg4" size={24} /></div>
           <div className="logo-text">Verso <span>AI</span></div>
         </div>
-        <p>Built for the Local AI Hackathon 2026 — 100% offline, 100% private</p>
-        <div className="footer-links">
-          <a href="#">GitHub</a>
-          <a href="#">Docs</a>
-          <a href="#">Demo</a>
-        </div>
+        <p>100% offline. 100% private.</p>
       </footer>
 
     </div>

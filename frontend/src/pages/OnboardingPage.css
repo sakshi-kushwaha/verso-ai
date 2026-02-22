@@ -1,0 +1,202 @@
+/* ═══════════════════════════════════════════
+   Verso AI — Onboarding Page Styles
+   ═══════════════════════════════════════════ */
+
+.onboarding-page {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  background: #040810;
+  color: #e8eaf6;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ─── ORBS ─── */
+.onboarding-orbs { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.ob-orb { position: absolute; border-radius: 50%; filter: blur(80px); animation: obOrbFloat 20s ease-in-out infinite; }
+.ob-orb-1 { width: 500px; height: 500px; background: radial-gradient(circle, rgba(0,229,255,0.07) 0%, transparent 70%); top: -150px; left: -100px; }
+.ob-orb-2 { width: 400px; height: 400px; background: radial-gradient(circle, rgba(124,77,255,0.06) 0%, transparent 70%); bottom: -100px; right: -100px; animation-delay: -10s; }
+@keyframes obOrbFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(60px, -40px) scale(1.1); }
+  50% { transform: translate(-30px, 50px) scale(0.95); }
+  75% { transform: translate(40px, 20px) scale(1.05); }
+}
+
+/* ─── CONTAINER ─── */
+.onboarding-container {
+  position: relative; z-index: 1;
+  width: 100%; max-width: 440px;
+  padding: 2rem;
+}
+
+/* ─── PROGRESS DOTS ─── */
+.ob-progress {
+  display: flex; justify-content: center; gap: 0.5rem;
+  margin-bottom: 2rem;
+}
+.ob-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.1);
+  transition: all 0.4s ease;
+}
+.ob-dot.active {
+  background: #00e5ff;
+  box-shadow: 0 0 8px rgba(0,229,255,0.4);
+}
+
+/* ─── CARD ─── */
+.ob-card {
+  background: rgba(13, 21, 40, 0.65);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255,255,255,0.04);
+  border-radius: 24px;
+  padding: 2.5rem 2.2rem;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.ob-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, #00e5ff, #3d5afe, #7c4dff);
+  opacity: 0.7;
+}
+
+/* ─── ANIMATION ─── */
+.ob-fade-in {
+  animation: obFadeIn 0.5s ease-out both;
+}
+@keyframes obFadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── CONTENT ─── */
+.ob-emoji {
+  font-size: 2.5rem;
+  margin-bottom: 1.2rem;
+}
+.ob-title {
+  font-family: 'Source Serif 4', serif;
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.5rem;
+}
+.ob-subtitle {
+  font-size: 0.9rem;
+  color: #8892b0;
+  margin-bottom: 2rem;
+}
+
+/* ─── INPUT ─── */
+.ob-input {
+  width: 100%;
+  padding: 0.85rem 1.2rem;
+  background: #0b1225;
+  border: 1px solid rgba(255,255,255,0.04);
+  border-radius: 12px;
+  color: #e8eaf6;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 1rem;
+  text-align: center;
+  outline: none;
+  transition: all 0.3s ease;
+  margin-bottom: 1.5rem;
+}
+.ob-input::placeholder { color: #4a5580; }
+.ob-input:focus {
+  border-color: rgba(0, 229, 255, 0.12);
+  box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.06);
+}
+
+/* ─── PRIMARY BUTTON ─── */
+.ob-btn-primary {
+  width: 100%;
+  padding: 0.9rem 2rem;
+  background: linear-gradient(135deg, #00e5ff, #3d5afe);
+  color: #040810;
+  border: none; border-radius: 14px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-weight: 700; font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.35s ease;
+  position: relative; overflow: hidden;
+}
+.ob-btn-primary::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(135deg, #3d5afe, #7c4dff);
+  opacity: 0; transition: opacity 0.35s ease;
+}
+.ob-btn-primary:hover::before { opacity: 1; }
+.ob-btn-primary:hover {
+  transform: translateY(-2px);
+  color: white;
+  box-shadow: 0 8px 32px rgba(0, 229, 255, 0.25);
+}
+.ob-btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+.ob-btn-primary:disabled:hover::before { opacity: 0; }
+.ob-btn-primary:disabled:hover { box-shadow: none; color: #040810; }
+.ob-btn-primary span {
+  position: relative; z-index: 1;
+  display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+}
+.ob-btn-primary span svg {
+  width: 18px; height: 18px;
+  fill: none; stroke: currentColor;
+  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+
+/* ─── ROLE CARDS ─── */
+.ob-roles {
+  display: flex; flex-direction: column;
+  gap: 0.8rem;
+}
+.ob-role-card {
+  display: flex; align-items: center; gap: 1rem;
+  padding: 1.1rem 1.3rem;
+  background: #0b1225;
+  border: 1px solid rgba(255,255,255,0.04);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-align: left;
+  color: #e8eaf6;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
+.ob-role-card:hover {
+  border-color: rgba(0, 229, 255, 0.15);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+}
+.ob-role-card.selected {
+  border-color: #00e5ff;
+  background: rgba(0, 229, 255, 0.06);
+}
+.ob-role-emoji {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+.ob-role-label {
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-bottom: 0.15rem;
+}
+.ob-role-desc {
+  font-size: 0.78rem;
+  color: #8892b0;
+}
+
+/* ─── RESPONSIVE ─── */
+@media (max-width: 520px) {
+  .onboarding-container { padding: 1.2rem; }
+  .ob-card { padding: 2rem 1.5rem; border-radius: 20px; }
+  .ob-title { font-size: 1.4rem; }
+}
