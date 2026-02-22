@@ -613,7 +613,7 @@ export default function FeedPage() {
     setInitialLoading(true)
     setError(false)
     try {
-      const data = await getFeed(1, 10, null, activeTab)
+      const data = await getFeed(1, 200, null, activeTab)
       if (data.reels?.length) {
         const mapped = data.reels.map(mapReel)
         setReels(mapped)
@@ -677,7 +677,7 @@ export default function FeedPage() {
     if (!hasMore || loading) return
     setLoading(true)
     try {
-      const data = await getFeed(feedPage + 1, 5, null, tab)
+      const data = await getFeed(feedPage + 1, 50, null, tab)
       if (data.reels?.length) {
         appendReels(data.reels.map(mapReel))
       }
