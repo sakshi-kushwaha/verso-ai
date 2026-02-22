@@ -7,7 +7,7 @@ router = APIRouter()
 
 
 @router.get("/feed")
-def get_feed(page: int = Query(1, ge=1), limit: int = Query(5, ge=1, le=50),
+def get_feed(page: int = Query(1, ge=1), limit: int = Query(5, ge=1, le=200),
              upload_id: int = Query(None),
              tab: str = Query("all"),
              user: dict = Depends(get_current_user)):

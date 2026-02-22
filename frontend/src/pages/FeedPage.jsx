@@ -606,13 +606,14 @@ export default function FeedPage() {
   const [failedVideos, setFailedVideos] = useState(new Set())
   const [initialSlide, setInitialSlide] = useState(0)
   const bookNavState = useRef(location.state)
+  const swiperRef = useRef(null)
 
 
   const loadReels = async (activeTab = tab) => {
     setInitialLoading(true)
     setError(false)
     try {
-      const data = await getFeed(1, 10, null, activeTab)
+      const data = await getFeed(1, 200, null, activeTab)
       if (data.reels?.length) {
         const mapped = data.reels.map(mapReel)
         setReels(mapped)
@@ -666,12 +667,17 @@ export default function FeedPage() {
     loadReels()
   }, [])
 
+  // Update Swiper when new reels arrive (e.g. via WebSocket reel_ready)
+  useEffect(() => {
+    if (swiperRef.current) swiperRef.current.update()
+  }, [reels.length])
+
   // Load more when reaching end
   const handleReachEnd = async () => {
     if (!hasMore || loading) return
     setLoading(true)
     try {
-      const data = await getFeed(feedPage + 1, 5, null, tab)
+      const data = await getFeed(feedPage + 1, 50, null, tab)
       if (data.reels?.length) {
         appendReels(data.reels.map(mapReel))
       }
@@ -747,10 +753,10 @@ export default function FeedPage() {
         speed={400}
         initialSlide={initialSlide}
         className="h-full flex-1"
+        onSwiper={(swiper) => { swiperRef.current = swiper }}
         onReachEnd={handleReachEnd}
         onSlideChange={(swiper) => {
           setActiveIndex(swiper.activeIndex)
-          swiper.allowSlideNext = swiper.activeIndex < reels.length - 1
           const reel = reels[swiper.activeIndex]
           if (reel) onSlideEnter(reel.id)
         }}

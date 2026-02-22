@@ -142,7 +142,7 @@ def reel_llm_call(prompt: str, timeout: float = 600.0, system: str = None,
         "stream": False,
         "options": {
             "temperature": 0.3,
-            "num_ctx": 2048,
+            "num_ctx": 4096,
             "num_predict": num_predict,
             "repeat_penalty": 1.1,
         },
