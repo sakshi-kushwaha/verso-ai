@@ -27,6 +27,14 @@ const navItems = [
   { to: '/bookmarks', icon: Bookmark, label: 'Saved' },
 ]
 
+const mobileNavItems = [
+  { to: '/', icon: Home, label: 'Feed' },
+  { to: '/books', icon: Book, label: 'Collections' },
+  { to: '/upload', icon: Upload, label: 'Upload' },
+  { to: '/bookmarks', icon: Bookmark, label: 'Saved' },
+  { to: '/profile', icon: User, label: 'Profile' },
+]
+
 const sidebarLinkClass = ({ isActive }) => `nav-item ${isActive ? 'active' : ''}`
 const mobileLinkClass = ({ isActive }) => `mob-nav-item ${isActive ? 'active' : ''}`
 
@@ -92,7 +100,7 @@ export default function MainLayout() {
 
         {/* ═══ MOBILE BOTTOM NAV ═══ */}
         <nav className="app-mobile-nav">
-          {navItems.map(({ to, icon: Icon }) => (
+          {mobileNavItems.map(({ to, icon: Icon }) => (
             <NavLink key={to} to={to} className={mobileLinkClass} end={to === '/'}>
               <Icon />
             </NavLink>

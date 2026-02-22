@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getFlashcards } from '../api'
 import Button from '../components/Button'
+import MobileBackButton from '../components/MobileBackButton'
 import Tag from '../components/Tag'
 import { ArrowL, ArrowR, Flip } from '../components/Icons'
 import { Spinner, ErrorState, EmptyState } from '../components/StateScreens'
@@ -47,7 +48,8 @@ export default function FlashcardsPage() {
   const next = () => { setIndex(Math.min(cards.length - 1, index + 1)); setFlipped(false) }
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-6 fade-up">
+    <div className="flex flex-col items-center justify-center min-h-screen px-4 sm:px-6 py-6 fade-up">
+      <div className="self-start"><MobileBackButton /></div>
       {/* Counter */}
       <p className="text-text-muted text-sm font-mono mb-6">
         {index + 1} / {cards.length}

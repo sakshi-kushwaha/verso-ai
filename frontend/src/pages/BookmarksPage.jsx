@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import useStore from '../store/useStore'
 import Tag from '../components/Tag'
+import MobileBackButton from '../components/MobileBackButton'
 import { Bookmark, BookmarkFill, Cards } from '../components/Icons'
 import { Spinner, EmptyState } from '../components/StateScreens'
 
@@ -19,14 +20,15 @@ export default function BookmarksPage() {
 
   if (loading) {
     return (
-      <div className="max-w-xl mx-auto p-6 pt-10">
+      <div className="max-w-xl mx-auto px-4 sm:px-6 pt-8 sm:pt-10">
         <Spinner text="Loading saved items..." />
       </div>
     )
   }
 
   return (
-    <div className="max-w-xl mx-auto p-6 pt-10 fade-up">
+    <div className="max-w-xl mx-auto px-4 sm:px-6 pt-8 sm:pt-10 pb-20 sm:pb-6 fade-up">
+      <MobileBackButton />
       <h1 className="text-2xl font-bold font-display mb-1">Saved</h1>
       <p className="text-text-muted text-sm mb-8">Your bookmarked bites and flashcards</p>
 

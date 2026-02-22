@@ -360,4 +360,7 @@
     width: 20px;
     height: 20px;
   }
+  .app-mobile-nav {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
 }
