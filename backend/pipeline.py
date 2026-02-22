@@ -1,4 +1,5 @@
 import logging
+import math
 import os
 import random
 import asyncio
@@ -266,7 +267,8 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
         _update_progress(upload_id, 20, "extracting")
 
         # Decide number of reels based on document length
-        num_topics = min(max(3, len(pages) // 3), 15)
+        # ~1 reel per 2.5 pages: 10 pages → 4, 100 pages → 40, 700 pages → 100
+        num_topics = min(max(3, int(len(pages) * 0.4)), 100)
 
         try:
             topics = extract_topics(full_text, num_topics=num_topics)
