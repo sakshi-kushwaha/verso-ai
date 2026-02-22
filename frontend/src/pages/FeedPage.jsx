@@ -117,11 +117,10 @@ function VideoReelCard({ reel, index, total, isActive, onVideoError }) {
   const videoRef = useRef(null)
   const [paused, setPaused] = useState(false)
   const [buffering, setBuffering] = useState(true)
-  const { bookmarks, toggleBookmark, likes, toggleLike } = useStore()
+  const { bookmarks, toggleBookmark, likes, toggleLike, muted, toggleMuted } = useStore()
   const saved = bookmarks.has(reel.id)
   const liked = likes.has(reel.id)
   const [progress, setProgress] = useState(0)
-  const [muted, setMuted] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const seekingRef = useRef(false)
   const progressBarRef = useRef(null)
@@ -131,10 +130,9 @@ function VideoReelCard({ reel, index, total, isActive, onVideoError }) {
     if (!videoRef.current) return
     if (isActive) {
       videoRef.current.currentTime = 0
-      videoRef.current.muted = false
+      videoRef.current.muted = muted
       setProgress(0)
       setPaused(false)
-      setMuted(false)
       videoRef.current.play().catch(() => {})
     } else {
       videoRef.current.pause()
@@ -152,11 +150,14 @@ function VideoReelCard({ reel, index, total, isActive, onVideoError }) {
     }
   }, [])
 
+  // Sync video element muted state when global mute changes
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.muted = muted
+  }, [muted])
+
   const toggleMute = useCallback(() => {
-    if (!videoRef.current) return
-    videoRef.current.muted = !videoRef.current.muted
-    setMuted(videoRef.current.muted)
-  }, [])
+    toggleMuted()
+  }, [toggleMuted])
 
   const seekToX = useCallback((clientX) => {
     if (!videoRef.current || !videoRef.current.duration || !isFinite(videoRef.current.duration)) return

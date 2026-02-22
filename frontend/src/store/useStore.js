@@ -121,6 +121,11 @@ const useStore = create((set, get) => ({
       }
     }),
 
+  // --- Playback ---
+  muted: false,
+  setMuted: (val) => set({ muted: val }),
+  toggleMuted: () => set((state) => ({ muted: !state.muted })),
+
   // --- Upload ---
   currentUpload: null, // { id, status, progress }
   setUploadStatus: (upload) => set({ currentUpload: upload }),
