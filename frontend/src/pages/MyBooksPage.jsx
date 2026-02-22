@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { getUploads, getFeed, getFlashcards, getDocSummary, getSummaryAudio } from '../api'
 import api from '../api'
 import Button from '../components/Button'
-import { File, Upload, ArrowL, Cards, Chat, Volume, Pause, Play, Grid } from '../components/Icons'
+import { File, Upload, ArrowL, ArrowR, Cards, Chat, Volume, Pause, Play, Grid } from '../components/Icons'
 import { Spinner, ErrorState, EmptyState } from '../components/StateScreens'
 
 const ACCENTS = ['#3B82F6', '#06B6D4', '#F472B6', '#F59E0B', '#10B981', '#8B5CF6']
@@ -51,6 +51,9 @@ function BookCard({ book, onClick }) {
               <span className="font-semibold text-text">{book.total_pages}</span> pages
             </span>
           )}
+          <span className="ml-auto flex items-center gap-1 text-xs text-primary font-medium">
+            View <ArrowR />
+          </span>
         </div>
       )}
     </div>
@@ -464,9 +467,11 @@ export default function MyBooksPage() {
           <h1 className="text-xl sm:text-2xl font-bold font-display mb-1">My Collections</h1>
           <p className="text-text-muted text-sm">{books.length} document{books.length !== 1 ? 's' : ''} uploaded</p>
         </div>
-        <Button variant="secondary" onClick={() => navigate('/upload')}>
-          <Upload /> Upload
-        </Button>
+        <div className="hidden sm:block">
+          <Button variant="secondary" onClick={() => navigate('/upload')}>
+            <Upload /> Upload
+          </Button>
+        </div>
       </div>
 
       {books.length === 0 ? (
