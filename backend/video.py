@@ -590,8 +590,9 @@ def compose_reel_video(
     sound_effect_path: str | None = None,
     tts_audio_path: str | None = None,
     category: str | None = None,
+    narration: str | None = None,
 ) -> str:
-    """Compose a video reel: stock video + TTS narration + background music → MP4.
+    """Compose a video reel: stock video + TTS narration + captions + background music → MP4.
 
     Video duration adapts to TTS narration length (10-30s).
     Memory budget: ~200-250MB per encode at 1080x1920 with 2 threads.
@@ -607,6 +608,9 @@ def compose_reel_video(
     duration = _get_tts_duration(tts_audio_path)
     bg_freq, bg_type = AUDIO_PROFILES.get(category or "", DEFAULT_PROFILE)
 
+    # Use narration for captions; fall back to summary if narration is empty
+    caption_text = (narration or summary or "").strip()
+
     with tempfile.TemporaryDirectory() as tmpdir:
         # Generate background music matching video duration
         bg_music_path = os.path.join(tmpdir, "bg_music.wav")
@@ -617,10 +621,34 @@ def compose_reel_video(
         filter_parts = []
 
         # Scale video to 1080x1920 with lanczos for sharp upscaling
+        video_label = "vscaled"
         filter_parts.append(
             f"[0:v]scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase:flags=lanczos,"
-            f"crop={WIDTH}:{HEIGHT},setsar=1[vout]"
+            f"crop={WIDTH}:{HEIGHT},setsar=1[{video_label}]"
         )
+
+        # Add ASS captions if we have text to display
+        if caption_text:
+            ass_path = os.path.join(tmpdir, "captions.ass")
+            caption_style = reel_id % len(_CAPTION_STYLES)
+            raw_tts_dur = _get_raw_audio_duration(tts_audio_path) or (duration - 1.5)
+            # Load Edge-TTS word timestamps if available
+            word_ts = None
+            if tts_audio_path:
+                from tts.engine import get_word_timestamps
+                word_ts = get_word_timestamps(tts_audio_path)
+            if _create_ass_captions(caption_text, raw_tts_dur, ass_path, WIDTH, HEIGHT,
+                                     style_idx=caption_style,
+                                     word_timestamps=word_ts):
+                ass_esc = ass_path.replace("\\", "/").replace(":", "\\:")
+                filter_parts.append(
+                    f"[{video_label}]ass={ass_esc}"
+                    f":fontsdir=/usr/share/fonts/truetype/dejavu[vout]"
+                )
+            else:
+                filter_parts.append(f"[{video_label}]null[vout]")
+        else:
+            filter_parts.append(f"[{video_label}]null[vout]")
 
         audio_layers = []
         audio_idx = 1

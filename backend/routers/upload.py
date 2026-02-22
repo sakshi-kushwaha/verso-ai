@@ -1,12 +1,14 @@
 import os
 import json
 import shutil
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, WebSocket, WebSocketDisconnect
 from database import get_db
 from pipeline import process_upload, TEMP_DIR
 from auth import get_current_user
 from ws_auth import ws_authenticate
 from ws_manager import manager
+from config import STALE_UPLOAD_MINUTES
 
 router = APIRouter()
 
@@ -14,8 +16,23 @@ MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 ALLOWED_EXTENSIONS = {".pdf", ".docx"}
 
 
+def _expire_stale_uploads(user_id: int):
+    """Auto-mark uploads stuck in 'processing' for too long as failed."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(minutes=STALE_UPLOAD_MINUTES)).strftime("%Y-%m-%d %H:%M:%S")
+    conn = get_db()
+    conn.execute(
+        "UPDATE uploads SET status = 'error', error_message = 'Processing timed out. Please try uploading again.' "
+        "WHERE user_id = ? AND status = 'processing' AND created_at < ?",
+        (user_id, cutoff),
+    )
+    conn.commit()
+    conn.close()
+
+
 @router.post("/upload")
 async def upload_document(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    # Expire any stuck uploads before checking for active ones
+    _expire_stale_uploads(user["id"])
     # Restrict to one upload at a time per user
     conn = get_db()
     active = conn.execute(
@@ -58,6 +75,7 @@ async def upload_document(file: UploadFile = File(...), user: dict = Depends(get
 
 @router.get("/uploads")
 def list_uploads(user: dict = Depends(get_current_user)):
+    _expire_stale_uploads(user["id"])
     conn = get_db()
     rows = conn.execute(
         """SELECT u.id, u.filename, u.status, u.doc_type, u.total_pages, u.qa_ready, u.created_at,
@@ -75,6 +93,7 @@ def list_uploads(user: dict = Depends(get_current_user)):
 
 @router.get("/upload/status/{upload_id}")
 def get_upload_status(upload_id: int, user: dict = Depends(get_current_user)):
+    _expire_stale_uploads(user["id"])
     conn = get_db()
     row = conn.execute("SELECT * FROM uploads WHERE id = ? AND user_id = ?", (upload_id, user["id"])).fetchone()
     if not row:

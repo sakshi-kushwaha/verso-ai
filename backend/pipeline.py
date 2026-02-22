@@ -4,6 +4,7 @@ import os
 import random
 import asyncio
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from database import get_db
 import httpx
@@ -20,16 +21,17 @@ from bg_images import assign_images, _resolve_category
 from rag import embed_chunks
 from video import compose_reel_video, compose_multi_clip_reel, get_clips_for_category
 from tts.engine import generate_audio
-from config import STOCK_VIDEOS_DIR
+from config import STOCK_VIDEOS_DIR, PIPELINE_TIMEOUT as _PIPELINE_TIMEOUT
 from ws_manager import manager
 
 log = logging.getLogger(__name__)
 
 TEMP_DIR = os.path.join(os.path.dirname(__file__), "data", "temp")
 BATCH_SIZE = 3
+PIPELINE_TIMEOUT = _PIPELINE_TIMEOUT  # from config, default 20 min
 
 # Thread pool for overlapping TTS+ffmpeg with LLM calls
-_video_executor = ThreadPoolExecutor(max_workers=1)
+_video_executor = ThreadPoolExecutor(max_workers=2)
 
 # Set by main.py lifespan — the running asyncio event loop
 _event_loop: asyncio.AbstractEventLoop | None = None
@@ -63,8 +65,11 @@ def _get_user_prefs(user_id: int) -> dict:
     return dict(row)
 
 
+_stock_video_queues: dict[str, list] = {}  # category -> shuffled list of video paths
+
+
 def _pick_stock_video(reel_category: str, upload_category: str) -> str | None:
-    """Pick a random stock video matching the reel's category."""
+    """Pick a stock video matching the reel's category using shuffle-based round-robin."""
     cat = _resolve_category(reel_category, upload_category)
     folder = STOCK_VIDEOS_DIR / cat
     if not folder.is_dir():
@@ -74,7 +79,14 @@ def _pick_stock_video(reel_category: str, upload_category: str) -> str | None:
     videos = [f for f in folder.iterdir() if f.suffix.lower() == ".mp4"]
     if not videos:
         return None
-    return str(random.choice(videos))
+
+    # Refill shuffled queue when empty to ensure variety across reels
+    if cat not in _stock_video_queues or not _stock_video_queues[cat]:
+        shuffled = videos[:]
+        random.shuffle(shuffled)
+        _stock_video_queues[cat] = shuffled
+
+    return str(_stock_video_queues[cat].pop())
 
 
 def _try_compose_video(reel_id: int, reel: dict, subject_category: str):
@@ -134,6 +146,7 @@ def _try_compose_video(reel_id: int, reel: dict, subject_category: str):
             stock_video_path=stock_video,
             tts_audio_path=str(tts_path) if tts_path else None,
             category=reel.get("category"),
+            narration=narration,
         )
         conn = get_db()
         conn.execute("UPDATE reels SET video_path = ? WHERE id = ?", (video_path, reel_id))
@@ -225,6 +238,7 @@ def _try_compose_video_with_segments(reel_id: int, reel: dict, subject_category:
             stock_video_path=stock_video,
             tts_audio_path=str(tts_path) if tts_path else None,
             category=reel.get("category"),
+            narration=narration,
         )
         conn = get_db()
         conn.execute("UPDATE reels SET video_path = ? WHERE id = ?", (video_path, reel_id))
@@ -237,6 +251,11 @@ def _try_compose_video_with_segments(reel_id: int, reel: dict, subject_category:
 
 def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
     try:
+        pipeline_start = time.monotonic()
+
+        # Reset stock video queues so each upload gets fresh variety
+        _stock_video_queues.clear()
+
         # Step 0: Fetch user preferences for personalized generation
         prefs = _get_user_prefs(user_id)
 
@@ -259,6 +278,15 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
 
         _update_pages(upload_id, len(pages))
 
+        # Step 1.5: Quick Ollama health check — fail fast if LLM is unreachable
+        _update_progress(upload_id, 10, "checking")
+        try:
+            httpx.get(f"{os.getenv('OLLAMA_HOST', 'http://localhost:11434')}/api/tags", timeout=10)
+        except Exception:
+            log.error("Ollama is unreachable for upload %s", upload_id)
+            _update_status(upload_id, "error", "AI service is unavailable. Please try again later.")
+            return
+
         # Step 2: Detect doc type + subject category in ONE LLM call
         _update_progress(upload_id, 15, "analyzing")
         full_text = "\n".join(p["text"] for p in pages)
@@ -278,6 +306,9 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
         except OllamaUnavailableError:
             _update_status(upload_id, "error", "Ollama is unavailable. Please try again later.")
             return
+        except Exception:
+            log.exception("Topic extraction failed for upload %s, using fallback", upload_id)
+            topics = []
 
         if not topics:
             # Fallback: treat the whole document as one topic
@@ -296,6 +327,21 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
         pending_futures = []
 
         for i, topic in enumerate(topics):
+            # Check total pipeline timeout
+            elapsed = time.monotonic() - pipeline_start
+            if elapsed > PIPELINE_TIMEOUT:
+                log.warning("Pipeline timeout after %.0fs at topic %d/%d for upload %s",
+                            elapsed, i + 1, len(topics), upload_id)
+                if reels_completed > 0:
+                    _update_status(
+                        upload_id, "partial",
+                        f"Generated {reels_completed}/{len(topics)} reels before timeout. "
+                        "Partial reels are available.",
+                    )
+                else:
+                    _update_status(upload_id, "error", "Processing timed out. Please try again later.")
+                break
+
             topic_progress = 20 + int(((i + 1) / len(topics)) * 50)
             _update_progress(upload_id, topic_progress, "generating")
 
@@ -339,7 +385,8 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
                 _notify_reel_ready(upload_id, reel_id)
 
             for fc in result.get("flashcards", []):
-                _save_flashcard(upload_id, fc)
+                fc_id = _save_flashcard(upload_id, fc)
+                _notify_flashcard_ready(upload_id, fc_id, fc)
 
             # Submit video composition to thread pool (overlaps with next LLM call)
             _update_progress(upload_id, topic_progress + 2, "composing")
@@ -412,7 +459,20 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
 
     except Exception as e:
         log.exception("Pipeline error for upload %s", upload_id)
-        _update_status(upload_id, "error", f"Unexpected error: {type(e).__name__}")
+        try:
+            _update_status(upload_id, "error", f"Unexpected error: {type(e).__name__}")
+        except Exception:
+            # Last resort: direct DB update if _update_status fails
+            try:
+                conn = get_db()
+                conn.execute(
+                    "UPDATE uploads SET status = 'error', error_message = ? WHERE id = ?",
+                    (f"Unexpected error: {type(e).__name__}", upload_id),
+                )
+                conn.commit()
+                conn.close()
+            except Exception:
+                log.error("Failed to update error status for upload %s", upload_id)
 
     finally:
         try:
@@ -439,6 +499,21 @@ def _notify_reel_ready(upload_id: int, reel_id: int):
         )
     except Exception:
         log.debug("WS reel_ready failed for upload %s reel %s", upload_id, reel_id)
+
+
+def _notify_flashcard_ready(upload_id: int, fc_id: int, fc: dict):
+    """Push a flashcard_ready event to WebSocket subscribers."""
+    loop = _event_loop
+    if loop is None or loop.is_closed():
+        return
+    fc_data = {"id": fc_id, "upload_id": upload_id, "question": fc.get("question", ""), "answer": fc.get("answer", "")}
+    try:
+        asyncio.run_coroutine_threadsafe(
+            manager.broadcast_flashcard_ready(upload_id, fc_data),
+            loop,
+        )
+    except Exception:
+        log.debug("WS flashcard_ready failed for upload %s fc %s", upload_id, fc_id)
 
 
 def _notify_progress(upload_id: int, progress: int, stage: str, status: str | None = None, error: str | None = None):
@@ -514,14 +589,16 @@ def _save_reel(upload_id: int, reel: dict, page_ref: int, bg_image: str = None, 
     return reel_id
 
 
-def _save_flashcard(upload_id: int, fc: dict):
+def _save_flashcard(upload_id: int, fc: dict) -> int:
     conn = get_db()
     conn.execute(
         "INSERT INTO flashcards (upload_id, question, answer) VALUES (?, ?, ?)",
         (upload_id, fc.get("question", ""), fc.get("answer", "")),
     )
+    fc_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
     conn.commit()
     conn.close()
+    return fc_id
 
 
 def _save_doc_summary(upload_id: int, summary: str):

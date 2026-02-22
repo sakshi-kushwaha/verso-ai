@@ -74,5 +74,10 @@ LLM_TIMEOUT: float = 300.0
 # Chat
 MAX_EXCHANGES_PER_DOC: int = 10
 
-# Timeouts
-OLLAMA_EMBED_TIMEOUT: float = 30.0
+# Timeouts — tuned for CPU-only (8GB). Override via env for faster machines.
+# At ~4 tok/s on CPU, 800 tokens ≈ 200s + model load. Allow 300s per LLM call.
+OLLAMA_EMBED_TIMEOUT: float = 60.0  # extra time for model load on single-model Ollama
+REEL_LLM_TIMEOUT: float = float(os.getenv("REEL_LLM_TIMEOUT", "300"))       # per LLM call
+CLASSIFICATION_TIMEOUT: float = float(os.getenv("CLASSIFICATION_TIMEOUT", "90"))
+PIPELINE_TIMEOUT: float = float(os.getenv("PIPELINE_TIMEOUT", "3600"))       # 60 min total
+STALE_UPLOAD_MINUTES: int = int(os.getenv("STALE_UPLOAD_MINUTES", "30"))
