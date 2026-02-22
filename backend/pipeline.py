@@ -320,7 +320,11 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
                 reels_failed += 1
                 continue
 
-            topic_reels = result.get("reels", [])
+            topic_reels = [r for r in result.get("reels", []) if r.get("title") != "Summary"]
+            if not topic_reels:
+                log.warning("All reels for topic %r were garbage (title='Summary'), skipping", topic["topic"])
+                reels_failed += 1
+                continue
             bg_paths = assign_images(topic_reels, subject_category)
             saved_reels = []
             for reel, bg_image in zip(topic_reels, bg_paths):
