@@ -29,16 +29,17 @@ export default function ChatPage() {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, typing])
 
-  // Fetch uploads on mount
+  // Fetch uploads on mount — only show completed documents in chat
   useEffect(() => {
     getUploads()
       .then((list) => {
-        setUploads(list)
+        const ready = list.filter((u) => u.status === 'done')
+        setUploads(ready)
         const paramId = Number(searchParams.get('upload'))
-        if (paramId && list.some((u) => u.id === paramId)) {
+        if (paramId && ready.some((u) => u.id === paramId)) {
           setUploadId(paramId)
-        } else if (list.length > 0) {
-          setUploadId(list[0].id)
+        } else if (ready.length > 0) {
+          setUploadId(ready[0].id)
         }
       })
       .catch(() => {})
