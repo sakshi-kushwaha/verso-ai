@@ -464,7 +464,7 @@ def get_gold_few_shot(category: str = "general") -> str:
     try:
         conn = get_db()
         rows = conn.execute(
-            "SELECT title, summary, narration, category, keywords, source_text "
+            "SELECT title, summary, narration, one_liner, category, keywords, source_text "
             "FROM reels WHERE upload_id = ("
             "  SELECT id FROM uploads WHERE filename = '__gold_standard__' LIMIT 1"
             ") AND LOWER(category) = LOWER(?) LIMIT 2",
@@ -473,7 +473,7 @@ def get_gold_few_shot(category: str = "general") -> str:
 
         if not rows:
             rows = conn.execute(
-                "SELECT title, summary, narration, category, keywords, source_text "
+                "SELECT title, summary, narration, one_liner, category, keywords, source_text "
                 "FROM reels WHERE upload_id = ("
                 "  SELECT id FROM uploads WHERE filename = '__gold_standard__' LIMIT 1"
                 ") ORDER BY RANDOM() LIMIT 2",
@@ -487,11 +487,13 @@ def get_gold_few_shot(category: str = "general") -> str:
         examples = []
         for i, row in enumerate(rows, 1):
             source = (row["source_text"] or row["summary"] or "")[:300]
+            one_liner = row["one_liner"] or row["title"]
             output = json.dumps({
                 "reels": [{
                     "title": row["title"],
                     "summary": row["summary"],
                     "narration": row["narration"],
+                    "one_liner": one_liner,
                     "category": row["category"],
                     "keywords": row["keywords"],
                 }],

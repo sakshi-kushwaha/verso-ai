@@ -91,9 +91,9 @@ RULES:
    - End with a memorable takeaway or a reflective thought — not a dry fact.
    - No bullet points, no special symbols, no abbreviations, no parentheses.
 
-8. "one_liner" is a single catchy sentence (under 15 words) that captures the reel's key insight. Not a repeat of the title — add new context or a surprising angle.
+8. "one_liner" is a single catchy sentence (under 15 words) that captures the reel's most surprising or counterintuitive insight. It must NOT repeat the title — instead, reveal WHY the topic matters or add a twist the reader wouldn't expect. Bad: "How Plants Make Food" → "Plants make food from sunlight." Good: "How Plants Make Food" → "Remove one leaf reaction and all complex life on Earth collapses."
 
-Schema: {{"reels":[{{"title":"short catchy title","summary":"key idea summary","narration":"spoken version of summary","one_liner":"one punchy sentence describing the key takeaway","category":"topic area","keywords":"comma separated"}}],"flashcards":[{{"question":"question about content?","answer":"detailed answer at least 10 words long"}}]}}
+Schema: {{"reels":[{{"title":"short catchy title","summary":"key idea summary","narration":"spoken version of summary","one_liner":"one punchy sentence with a surprising angle","category":"topic area","keywords":"comma separated"}}],"flashcards":[{{"question":"question about content?","answer":"detailed answer at least 10 words long"}}]}}
 
 Relevant text about "{topic}":
 {text}
@@ -145,7 +145,7 @@ FLASHCARD_DIFFICULTY_INSTRUCTIONS = {
 
 REEL_FEW_SHOT = """Example:
 Input: "Photosynthesis is the process by which plants convert light energy into chemical energy. Chlorophyll in the leaves absorbs sunlight. The plant uses CO2 from air and water from soil to produce glucose and oxygen."
-Output: {{"reels":[{{"title":"How Plants Make Food","summary":"Photosynthesis converts light energy into chemical energy using chlorophyll. Plants absorb CO2 and water to produce glucose and oxygen, powering life on Earth.","narration":"Here's the thing about plants — they're basically solar-powered food factories. Chlorophyll in their leaves grabs sunlight... then the plant pulls in carbon dioxide from the air and water from the soil. Mix those together with light energy, and you get glucose for food and oxygen for us to breathe. Without this one reaction, life as we know it simply wouldn't exist.","category":"Biology","keywords":"photosynthesis, chlorophyll, glucose, oxygen"}}],"flashcards":[{{"question":"What are the inputs and outputs of photosynthesis?","answer":"Inputs: light energy, CO2, and water. Outputs: glucose and oxygen."}}]}}"""
+Output: {{"reels":[{{"title":"How Plants Make Food","summary":"Photosynthesis converts light energy into chemical energy using chlorophyll. Plants absorb CO2 and water to produce glucose and oxygen, powering life on Earth.","narration":"Here's the thing about plants — they're basically solar-powered food factories. Chlorophyll in their leaves grabs sunlight... then the plant pulls in carbon dioxide from the air and water from the soil. Mix those together with light energy, and you get glucose for food and oxygen for us to breathe. Without this one reaction, life as we know it simply wouldn't exist.","one_liner":"Remove one leaf reaction and all complex life on Earth collapses.","category":"Biology","keywords":"photosynthesis, chlorophyll, glucose, oxygen"}}],"flashcards":[{{"question":"What are the inputs and outputs of photosynthesis?","answer":"Inputs: light energy, CO2, and water. Outputs: glucose and oxygen."}}]}}"""
 
 # ---------------------------------------------------------------------------
 # System prompt for reel model (critical rules get highest attention here)
@@ -268,7 +268,7 @@ RULES:
 9. Each segment "duration" is in seconds. Durations MUST sum to exactly {total_duration}.
 10. Each duration must be at least 2 seconds.
 11. "overlay" is short text shown on screen (max 8 words per segment).
-12. "one_liner" is a single catchy sentence (under 15 words) that captures the reel's key insight. Not a repeat of the title — add new context or a surprising angle.
+12. "one_liner" is a single catchy sentence (under 15 words) that captures the reel's most surprising or counterintuitive insight. It must NOT repeat the title — instead, reveal WHY the topic matters or add a twist the reader wouldn't expect. Bad: "How Plants Make Food" → "Plants make food from sunlight." Good: "How Plants Make Food" → "Remove one leaf reaction and all complex life on Earth collapses."
 
 Schema: {{"reels":[{{"title":"short catchy title","summary":"key idea summary","narration":"spoken version of summary","one_liner":"one punchy sentence describing the key takeaway","category":"topic area","keywords":"comma separated","segments":[{{"clip":"filename.mp4","overlay":"short text","duration":5}}]}}],"flashcards":[{{"question":"question about content?","answer":"detailed answer at least 10 words long"}}]}}
 
@@ -321,7 +321,9 @@ RULES:
    – End with a memorable takeaway or a reflective thought — not a dry summary.
    – No bullet points, no special symbols, no abbreviations, no parentheses.
 
-Schema: {{"reels":[{{"title":"short catchy title","summary":"key idea summary","narration":"spoken version of summary","category":"topic","keywords":"comma separated"}}],"flashcards":[{{"question":"question about content?","answer":"detailed answer at least 10 words long"}}]}}
+7. "one_liner" is a single catchy sentence (under 15 words) that captures the reel's most surprising or counterintuitive insight. It must NOT repeat the title — instead, reveal WHY the topic matters or add a twist the reader wouldn't expect.
+
+Schema: {{"reels":[{{"title":"short catchy title","summary":"key idea summary","narration":"spoken version of summary","one_liner":"one punchy sentence with a surprising angle","category":"topic","keywords":"comma separated"}}],"flashcards":[{{"question":"question about content?","answer":"detailed answer at least 10 words long"}}]}}
 
 Text:
 {text}
