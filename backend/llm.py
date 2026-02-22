@@ -528,8 +528,17 @@ def generate_topic_reel(topic: str, topic_text: str, doc_type: str, prefs: dict,
         few_shot=few_shot,
     )
 
-    result = reel_llm_call(prompt)
-    return parse_llm_json(result)
+    max_parse_attempts = 3
+    for attempt in range(max_parse_attempts):
+        result = reel_llm_call(prompt)
+        parsed = parse_llm_json(result)
+        if parsed["reels"] and parsed["reels"][0].get("title") == "Summary" and len(parsed["reels"]) == 1:
+            if attempt < max_parse_attempts - 1:
+                log.warning("Topic reel returned unparseable JSON (attempt %d/%d), retrying", attempt + 1, max_parse_attempts)
+                time.sleep(min(2 ** attempt, 10))
+                continue
+        return parsed
+    return parsed
 
 
 def generate_topic_reel_with_clips(
@@ -566,8 +575,17 @@ def generate_topic_reel_with_clips(
         total_duration=15,
     )
 
-    result = reel_llm_call(prompt, system=REEL_SYSTEM_PROMPT)
-    return parse_llm_json(result)
+    max_parse_attempts = 3
+    for attempt in range(max_parse_attempts):
+        result = reel_llm_call(prompt, system=REEL_SYSTEM_PROMPT)
+        parsed = parse_llm_json(result)
+        if parsed["reels"] and parsed["reels"][0].get("title") == "Summary" and len(parsed["reels"]) == 1:
+            if attempt < max_parse_attempts - 1:
+                log.warning("Topic reel with clips returned unparseable JSON (attempt %d/%d), retrying", attempt + 1, max_parse_attempts)
+                time.sleep(min(2 ** attempt, 10))
+                continue
+        return parsed
+    return parsed
 
 
 def generate_reel_script(text: str, category: str, clips: list[dict],
