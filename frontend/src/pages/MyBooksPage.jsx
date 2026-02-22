@@ -1,20 +1,96 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getUploads, getFeed, getFlashcards, getDocSummary, getSummaryAudio } from '../api'
+import { getUploads, getUploadStatus, getFeed, getFlashcards, getDocSummary, getSummaryAudio } from '../api'
 import api from '../api'
 import Button from '../components/Button'
-import { File, Upload, ArrowL, ArrowR, Cards, Chat, Volume, Pause, Play, Grid } from '../components/Icons'
+import { File, Upload, ArrowL, ArrowR, Cards, Chat, Volume, Pause, Play, Grid, Sparkle } from '../components/Icons'
 import { Spinner, ErrorState, EmptyState } from '../components/StateScreens'
+import { STAGE_LABELS } from '../components/UploadTracker'
 
 const ACCENTS = ['#3B82F6', '#06B6D4', '#F472B6', '#F59E0B', '#10B981', '#8B5CF6']
+
+function ProcessingCard({ book }) {
+  const [progress, setProgress] = useState(0)
+  const [stage, setStage] = useState('processing')
+
+  useEffect(() => {
+    const poll = setInterval(() => {
+      getUploadStatus(book.id)
+        .then((s) => {
+          setProgress(s.progress ?? 0)
+          setStage(s.stage || 'processing')
+          if (s.status === 'done' || s.status === 'error' || s.status === 'partial') {
+            clearInterval(poll)
+          }
+        })
+        .catch(() => {})
+    }, 2000)
+
+    // Initial fetch
+    getUploadStatus(book.id)
+      .then((s) => {
+        setProgress(s.progress ?? 0)
+        setStage(s.stage || 'processing')
+      })
+      .catch(() => {})
+
+    return () => clearInterval(poll)
+  }, [book.id])
+
+  const label = STAGE_LABELS[stage] || 'Processing...'
+
+  return (
+    <div className="bg-surface rounded-xl border border-primary/20 p-4 relative overflow-hidden">
+      {/* Shimmer overlay */}
+      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-primary/5 to-transparent animate-shimmer pointer-events-none" />
+
+      <div className="relative flex items-start gap-3">
+        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0 relative">
+          <Sparkle />
+          <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-primary animate-pulse" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-sm truncate">{book.filename}</p>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
+              AI Processing
+            </span>
+          </div>
+        </div>
+        <span className="text-sm font-bold text-primary tabular-nums">{Math.round(progress)}%</span>
+      </div>
+
+      {/* AI thinking dots */}
+      <div className="relative flex items-center gap-2 mt-3 px-1">
+        <div className="flex gap-1">
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"
+              style={{ animationDelay: `${i * 0.2}s` }}
+            />
+          ))}
+        </div>
+        <span className="text-xs text-primary/80">{label}</span>
+      </div>
+
+      {/* Progress bar */}
+      <div className="relative mt-2 h-1.5 rounded-full bg-surface-alt overflow-hidden">
+        <div
+          className="h-full rounded-full bg-primary transition-all duration-700 ease-out"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+    </div>
+  )
+}
 
 function BookCard({ book, onClick }) {
   const statusColors = {
     done: 'bg-success/10 text-success',
-    processing: 'bg-warning/10 text-warning',
     error: 'bg-danger/10 text-danger',
   }
-  const statusLabel = book.status === 'done' ? 'Completed' : book.status === 'processing' ? 'Processing' : book.status
+  const statusLabel = book.status === 'done' ? 'Completed' : book.status
 
   return (
     <div
@@ -426,6 +502,7 @@ export default function MyBooksPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const [selectedBook, setSelectedBook] = useState(null)
+  const pollRef = useRef(null)
 
   const loadBooks = () => {
     setLoading(true)
@@ -439,6 +516,22 @@ export default function MyBooksPage() {
   useEffect(() => {
     loadBooks()
   }, [])
+
+  // Poll to refresh list when any book is still processing
+  useEffect(() => {
+    const hasProcessing = books.some((b) => b.status === 'processing')
+    if (hasProcessing) {
+      pollRef.current = setInterval(() => {
+        getUploads().then(setBooks).catch(() => {})
+      }, 5000)
+    }
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current)
+        pollRef.current = null
+      }
+    }
+  }, [books])
 
   if (selectedBook) {
     return <BookDetail book={selectedBook} onBack={() => setSelectedBook(null)} />
@@ -484,9 +577,13 @@ export default function MyBooksPage() {
         </EmptyState>
       ) : (
         <div className="space-y-3">
-          {books.map((book) => (
-            <BookCard key={book.id} book={book} onClick={() => setSelectedBook(book)} />
-          ))}
+          {books.map((book) =>
+            book.status === 'processing' ? (
+              <ProcessingCard key={book.id} book={book} />
+            ) : (
+              <BookCard key={book.id} book={book} onClick={() => setSelectedBook(book)} />
+            )
+          )}
         </div>
       )}
     </div>
