@@ -1,5 +1,29 @@
 import os
+import secrets
 from pathlib import Path
+
+# ── JWT Secret ──────────────────────────────────────────────
+_ENV_FILE = Path(os.path.dirname(__file__)) / ".env"
+
+
+def _get_or_create_jwt_secret() -> str:
+    """Return JWT secret from env, .env file, or generate one."""
+    val = os.getenv("JWT_SECRET")
+    if val:
+        return val
+    # Try reading from .env file
+    if _ENV_FILE.exists():
+        for line in _ENV_FILE.read_text().splitlines():
+            if line.startswith("JWT_SECRET="):
+                return line.split("=", 1)[1].strip().strip('"').strip("'")
+    # Generate and persist
+    generated = secrets.token_hex(32)
+    with open(_ENV_FILE, "a") as f:
+        f.write(f"\nJWT_SECRET={generated}\n")
+    return generated
+
+
+JWT_SECRET: str = _get_or_create_jwt_secret()
 
 # Ollama
 OLLAMA_HOST: str = os.getenv("OLLAMA_HOST", "http://localhost:11434")
