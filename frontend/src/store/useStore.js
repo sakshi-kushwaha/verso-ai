@@ -14,6 +14,9 @@ const useStore = create((set, get) => ({
   logout: () => {
     localStorage.removeItem('verso_user');
     localStorage.removeItem('verso_token');
+    localStorage.removeItem('verso_display_name');
+    localStorage.removeItem('verso_user_role');
+    localStorage.removeItem('verso_onboarded');
     clearAudioCache();
     set({
       user: null,
@@ -26,7 +29,21 @@ const useStore = create((set, get) => ({
       likes: new Map(),
       currentUpload: null,
       bgUpload: null,
+      displayName: null,
+      userRole: null,
+      onboarded: false,
     });
+  },
+
+  // --- Onboarding ---
+  displayName: localStorage.getItem('verso_display_name') || null,
+  userRole: localStorage.getItem('verso_user_role') || null,
+  onboarded: localStorage.getItem('verso_onboarded') === 'true',
+  completeOnboarding: (name, role) => {
+    localStorage.setItem('verso_display_name', name);
+    localStorage.setItem('verso_user_role', role);
+    localStorage.setItem('verso_onboarded', 'true');
+    set({ displayName: name, userRole: role, onboarded: true });
   },
 
   // --- Bookmarks (API-backed) ---

@@ -13,6 +13,7 @@ import SignupPage from './pages/SignupPage'
 import MyBooksPage from './pages/MyBooksPage'
 import ProfilePage from './pages/ProfilePage'
 import LandingPage from './pages/LandingPage'
+import OnboardingPage from './pages/OnboardingPage'
 import HelpPage from './pages/HelpPage'
 
 function App() {
@@ -32,6 +33,7 @@ function App() {
         </Route>
       </Route>
       <Route path="/welcome" element={<LandingPage />} />
+      <Route path="/onboarding" element={<OnboardingPage />} />
       <Route element={<AuthLayout />}>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
