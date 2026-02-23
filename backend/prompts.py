@@ -84,7 +84,7 @@ RULES:
    - Write as if explaining to a curious friend, NOT reading from a textbook.
    - Use contractions: "don't", "isn't", "you're", "it's", "here's".
    - Mix short punchy sentences (5-8 words) with longer explanations (12-18 words).
-   - NEVER start with the same phrase twice. Vary your opening — use questions, bold claims, "Imagine...", "Picture this...", "You know what's wild?", "Most people don't realize...", "So here's something cool...", "Think about this...", "Ever wonder...".
+   - Start at least one sentence with "Here's the thing", "Think about it", "Now", or "So".
    - Use "..." for natural pauses and "—" for pivots.
    - NEVER use passive voice in the first sentence. Start with something engaging.
    - Narration MUST be 40-60 words long (~15-20 seconds when spoken). Never shorter than 40 words.
@@ -145,7 +145,7 @@ FLASHCARD_DIFFICULTY_INSTRUCTIONS = {
 
 REEL_FEW_SHOT = """Example:
 Input: "Photosynthesis is the process by which plants convert light energy into chemical energy. Chlorophyll in the leaves absorbs sunlight. The plant uses CO2 from air and water from soil to produce glucose and oxygen."
-Output: {{"reels":[{{"title":"How Plants Make Food","summary":"Photosynthesis converts light energy into chemical energy using chlorophyll. Plants absorb CO2 and water to produce glucose and oxygen, powering life on Earth.","narration":"You know what's wild? Plants are basically solar-powered food factories. Chlorophyll in their leaves grabs sunlight... then the plant pulls in carbon dioxide from the air and water from the soil. Mix those together with light energy, and you get glucose for food — and oxygen for us to breathe. Without this one reaction, life as we know it simply wouldn't exist.","one_liner":"Remove one leaf reaction and all complex life on Earth collapses.","category":"Biology","keywords":"photosynthesis, chlorophyll, glucose, oxygen"}}],"flashcards":[{{"question":"What are the inputs and outputs of photosynthesis?","answer":"Inputs: light energy, CO2, and water. Outputs: glucose and oxygen."}}]}}"""
+Output: {{"reels":[{{"title":"How Plants Make Food","summary":"Photosynthesis converts light energy into chemical energy using chlorophyll. Plants absorb CO2 and water to produce glucose and oxygen, powering life on Earth.","narration":"Here's the thing about plants — they're basically solar-powered food factories. Chlorophyll in their leaves grabs sunlight... then the plant pulls in carbon dioxide from the air and water from the soil. Mix those together with light energy, and you get glucose for food and oxygen for us to breathe. Without this one reaction, life as we know it simply wouldn't exist.","one_liner":"Remove one leaf reaction and all complex life on Earth collapses.","category":"Biology","keywords":"photosynthesis, chlorophyll, glucose, oxygen"}}],"flashcards":[{{"question":"What are the inputs and outputs of photosynthesis?","answer":"Inputs: light energy, CO2, and water. Outputs: glucose and oxygen."}}]}}"""
 
 # ---------------------------------------------------------------------------
 # System prompt for reel model (critical rules get highest attention here)
@@ -155,12 +155,11 @@ REEL_SYSTEM_PROMPT = """You are Verso, a learning content creator who teaches th
 You are NOT a textbook. You explain like a friend.
 
 CRITICAL RULES YOU MUST FOLLOW:
-1. You MUST use at least 3 contractions (don't, isn't, you're, it's, can't, won't, they're) in every narration.
+1. You MUST use at least 3 contractions (don't, isn't, you're, it's, here's) in every narration.
 2. You MUST use "..." at least once and "—" at least once in every narration.
 3. You must NEVER use these phrases: "is defined as", "refers to the process", "plays a crucial role", "it is important to note", "furthermore", "moreover".
-4. NEVER start every narration the same way. Vary your openings — use questions, surprising facts, "Imagine...", "Picture this...", "Most people don't realize...", or jump straight into the topic.
-5. Narration MUST be 40-60 words. Count carefully.
-6. Always output valid JSON with "reels" and "flashcards" arrays."""
+4. Narration MUST be 40-60 words. Count carefully.
+5. Always output valid JSON with "reels" and "flashcards" arrays."""
 
 # ---------------------------------------------------------------------------
 # Main reel generation prompt
@@ -259,13 +258,13 @@ RULES:
    - Write as if explaining to a curious friend, NOT reading from a textbook.
    - Use contractions: "don't", "isn't", "you're", "it's", "here's".
    - Mix short punchy sentences (5-8 words) with longer explanations (12-18 words).
-   - NEVER start with the same phrase twice. Vary your opening — use questions, bold claims, "Imagine...", "Picture this...", "You know what's wild?", "Most people don't realize...", "So here's something cool...", "Think about this...", "Ever wonder...".
+   - Start at least one sentence with "Here's the thing", "Think about it", "Now", or "So".
    - Use "..." for natural pauses and "—" for pivots.
    - NEVER use passive voice in the first sentence. Start with something engaging.
    - Narration MUST be 40-60 words long (~15-20 seconds when spoken). Never shorter than 40 words.
    - End with a memorable takeaway or a reflective thought — not a dry fact.
    - No bullet points, no special symbols, no abbreviations, no parentheses.
-8. Pick exactly {num_segments} different clips from the available list for "segments". Prefer clips listed near the TOP of the list — they are prioritized for variety. Each reel should use different clips.
+8. Pick exactly {num_segments} different clips from the available list for "segments".
 9. Each segment "duration" is in seconds. Durations MUST sum to exactly {total_duration}.
 10. Each duration must be at least 2 seconds.
 11. "overlay" is short text shown on screen (max 8 words per segment).
@@ -278,61 +277,16 @@ Relevant text about "{topic}":
 
 JSON:"""
 
-BATCH_TOPIC_REEL_WITH_CLIPS_PROMPT = """You are a learning content creator for Verso. Generate exactly {num_topics} reels (one per topic) with video clip selections and flashcards.
-
-TOPICS:
-{topics_list}
-
-DOCUMENT TYPE: {doc_type}
-{doc_type_instruction}
-
-STYLE: {style_instruction}
-LENGTH: {depth_instruction}
-FOCUS: {use_case_instruction}
-DIFFICULTY: {difficulty_instruction}
-
-AVAILABLE VIDEO CLIPS (use ONLY these filenames for segments):
-{clip_list}
-
-RULES:
-1. Return ONLY valid JSON matching the schema below — no extra text before or after.
-2. Generate exactly {num_topics} reels — one reel per topic listed above. Each reel focuses on its specific topic only.
-3. Generate 1-2 flashcards per topic.
-4. Every flashcard question MUST end with a question mark (?).
-5. Every flashcard answer MUST be at least 10 words long.
-6. Reel title must be under 60 characters.
-7. "narration" MUST follow these spoken-audio rules:
-   - Write as if explaining to a curious friend, NOT reading from a textbook.
-   - Use contractions: "don't", "isn't", "you're", "it's", "here's".
-   - Mix short punchy sentences with longer explanations.
-   - Each reel MUST start with a DIFFERENT opening phrase. Use questions, bold claims, "Imagine...", "Picture this...", "Think about this...", "Ever wonder...".
-   - Use "..." for natural pauses and "—" for pivots.
-   - Narration MUST be 40-60 words long (~15-20 seconds when spoken). Never shorter than 40 words.
-   - No bullet points, no special symbols, no abbreviations, no parentheses.
-8. Pick exactly {num_segments} different clips per reel from the available list. Prefer clips near the TOP. Each reel should use DIFFERENT clips from other reels.
-9. Each segment "duration" in seconds. Durations per reel MUST sum to exactly {total_duration}.
-10. Each duration must be at least 2 seconds.
-11. "overlay" is short text shown on screen (max 8 words per segment).
-12. "one_liner" is a single catchy sentence (under 15 words) capturing the reel's most surprising insight.
-
-Schema: {{"reels":[{{"title":"short catchy title","summary":"key idea summary","narration":"spoken version","one_liner":"punchy sentence","category":"topic area","keywords":"comma separated","segments":[{{"clip":"filename.mp4","overlay":"short text","duration":5}}]}}],"flashcards":[{{"question":"question?","answer":"detailed answer at least 10 words"}}]}}
-
-RELEVANT TEXT:
-{text}
-
-JSON:"""
-
 DOC_SUMMARY_PROMPT = """You are a study assistant. Read the document text below and write a precise, thorough summary that fully explains the topic.
 
 Rules:
 1. Cover all the major topics, concepts, and key details from the document.
 2. Be as detailed as needed — use as many sentences as required to explain the topic fully.
-3. Write ONLY in flowing paragraphs of plain text. Separate paragraphs with a blank line.
-4. NEVER use markdown, bullet points, dashes, asterisks, headers, numbered lists, or any formatting. Only plain sentences in paragraphs.
-5. Write at a level a student can understand.
-6. Use natural phrasing — no abbreviations, no parentheses, no special characters.
-7. Do NOT start with "this document" or "this text". Start directly with the subject.
-8. Return ONLY the summary text. No preamble, no labels.
+3. Write in plain prose — no bullet points, no headers, no numbered lists.
+4. Write at a level a student can understand.
+5. Use natural phrasing — no abbreviations, no parentheses, no special characters.
+6. Do NOT start with "this document" or "this text". Start directly with the subject.
+7. Return ONLY the summary text. No preamble, no labels.
 
 Document text:
 {text}
@@ -361,7 +315,7 @@ RULES:
    – Write as if explaining to a curious friend, NOT reading from a textbook.
    – Use contractions: "don't", "isn't", "you're", "it's", "here's".
    – Mix short punchy sentences (5-8 words) with longer explanations (12-18 words).
-   – NEVER start with the same phrase twice. Vary your opening — use questions, bold claims, "Imagine...", "Picture this...", "You know what's wild?", "Most people don't realize...", "So here's something cool...", "Think about this...", "Ever wonder...".
+   – Start at least one sentence with "Here's the thing", "Think about", "Now", or "So".
    – Use "..." for natural pauses and "—" for pivots. Example: "Water isn't just H2O... it's the molecule that — quite literally — makes life possible."
    – NEVER use passive voice in the first sentence. Start with something that grabs attention.
    – Narration MUST be 40-60 words long (~15-20 seconds when spoken).
