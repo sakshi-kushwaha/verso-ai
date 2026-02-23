@@ -676,6 +676,10 @@ def _save_flashcard(upload_id: int, fc: dict) -> int:
 
 
 def _save_doc_summary(upload_id: int, summary: str):
+    import re
+    # Strip markdown headers/formatting that the LLM sometimes adds
+    summary = re.sub(r'^#{1,6}\s+.*\n?', '', summary, flags=re.MULTILINE).strip()
+    summary = re.sub(r'\*{1,2}([^*]+)\*{1,2}', r'\1', summary)  # strip bold/italic
     conn = get_db()
     conn.execute("UPDATE uploads SET doc_summary = ? WHERE id = ?", (summary, upload_id))
     conn.commit()

@@ -17,14 +17,26 @@ ALLOWED_EXTENSIONS = {".pdf", ".docx"}
 
 
 def _expire_stale_uploads(user_id: int):
-    """Auto-mark uploads stuck in 'processing' for too long as failed."""
+    """Auto-mark uploads stuck in 'processing' for too long as failed or partial."""
     cutoff = (datetime.now(timezone.utc) - timedelta(minutes=STALE_UPLOAD_MINUTES)).strftime("%Y-%m-%d %H:%M:%S")
     conn = get_db()
-    conn.execute(
-        "UPDATE uploads SET status = 'error', error_message = 'Processing timed out. Please try uploading again.' "
-        "WHERE user_id = ? AND status = 'processing' AND created_at < ?",
+    stale = conn.execute(
+        "SELECT id FROM uploads WHERE user_id = ? AND status = 'processing' AND created_at < ?",
         (user_id, cutoff),
-    )
+    ).fetchall()
+    for row in stale:
+        uid = row["id"]
+        reel_count = conn.execute("SELECT COUNT(*) FROM reels WHERE upload_id = ?", (uid,)).fetchone()[0]
+        if reel_count > 0:
+            conn.execute(
+                "UPDATE uploads SET status = 'partial', error_message = ? WHERE id = ?",
+                (f"Generated {reel_count} reels before timeout. Partial reels are available.", uid),
+            )
+        else:
+            conn.execute(
+                "UPDATE uploads SET status = 'error', error_message = 'Processing timed out. Please try uploading again.' WHERE id = ?",
+                (uid,),
+            )
     conn.commit()
     conn.close()
 
