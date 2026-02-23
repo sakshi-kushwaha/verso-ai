@@ -1,4 +1,5 @@
 import logging
+import json
 import math
 import os
 import random
@@ -243,6 +244,23 @@ def _compose_video_only(upload_id: int, reel_id: int, reel: dict, subject_catego
     Reel-ready notification is sent earlier (right after DB save) so the
     frontend can display reels in real-time before video compositing finishes.
     """
+    if not segments:
+        # Attempt to load pre-assigned segments from DB (segments_json)
+        try:
+            conn = get_db()
+            row = conn.execute("SELECT segments_json FROM reels WHERE id = ?", (reel_id,)).fetchone()
+        finally:
+            conn.close()
+        if row and row["segments_json"]:
+            try:
+                parsed = json.loads(row["segments_json"]) if isinstance(row["segments_json"], str) else row["segments_json"]
+                if isinstance(parsed, dict) and "segments" in parsed:
+                    segments = parsed.get("segments")
+                elif isinstance(parsed, list):
+                    segments = parsed
+            except Exception:
+                segments = None
+
     if segments:
         _try_compose_video_with_segments(reel_id, reel, subject_category, segments)
     else:

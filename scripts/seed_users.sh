@@ -41,14 +41,15 @@ for ENTRY in "${USERS[@]}"; do
     RESP=$(curl -s -X POST "${API}/auth/signup" \
         -H "Content-Type: application/json" \
         -d "{\"name\": \"${NAME}\", \"password\": \"${PASSWORD}\"}")
-
     TOKEN=$(echo "$RESP" | $VENV -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
+    REFRESH=$(echo "$RESP" | $VENV -c "import sys,json; print(json.load(sys.stdin).get('refresh_token',''))" 2>/dev/null)
 
     if [ -z "$TOKEN" ]; then
         RESP=$(curl -s -X POST "${API}/auth/login" \
             -H "Content-Type: application/json" \
             -d "{\"name\": \"${NAME}\", \"password\": \"${PASSWORD}\"}")
         TOKEN=$(echo "$RESP" | $VENV -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
+        REFRESH=$(echo "$RESP" | $VENV -c "import sys,json; print(json.load(sys.stdin).get('refresh_token',''))" 2>/dev/null)
         if [ -z "$TOKEN" ]; then
             echo "FAILED"
             echo "  $RESP"
@@ -58,6 +59,36 @@ for ENTRY in "${USERS[@]}"; do
     else
         echo "signed up"
     fi
+
+    # Helpers: refresh token proactively (rotate access+refresh)
+    last_refresh_ts=$(date +%s)
+    refresh_tokens() {
+        if [ -z "$REFRESH" ]; then
+            return
+        fi
+        local R
+        R=$(curl -s -X POST "${API}/auth/refresh" \
+            -H "Content-Type: application/json" \
+            -d "{\"refresh_token\": \"${REFRESH}\"}")
+        local NEWTOK NEWREF
+        NEWTOK=$(echo "$R" | $VENV -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
+        NEWREF=$(echo "$R" | $VENV -c "import sys,json; print(json.load(sys.stdin).get('refresh_token',''))" 2>/dev/null)
+        if [ -n "$NEWTOK" ] && [ -n "$NEWREF" ]; then
+            TOKEN="$NEWTOK"
+            REFRESH="$NEWREF"
+            last_refresh_ts=$(date +%s)
+        fi
+    }
+
+    ensure_fresh_token() {
+        # Refresh every 25 minutes to avoid hitting the 30-minute access token expiry
+        local now ts_diff
+        now=$(date +%s)
+        ts_diff=$((now - last_refresh_ts))
+        if [ $ts_diff -ge 1500 ]; then
+            refresh_tokens
+        fi
+    }
 
     # 2. Set use_case preference directly in DB
     echo -n "  [2] Preferences... "
@@ -74,6 +105,7 @@ print('${USE_CASE} set')
 "
 
     # 3. Get already-uploaded filenames
+    ensure_fresh_token
     EXISTING=$(curl -s "${API}/uploads" -H "Authorization: Bearer ${TOKEN}" | \
         $VENV -c "
 import sys,json
@@ -101,6 +133,7 @@ except: pass
             continue
         fi
 
+        ensure_fresh_token
         echo -n "      up    ${BASENAME}... "
         UP_RESP=$(curl -s -X POST "${API}/upload" \
             -H "Authorization: Bearer ${TOKEN}" \
@@ -117,13 +150,22 @@ except: pass
         # Wait for pipeline (one upload at a time per user)
         echo -n "            waiting... "
         WAITED=0
+        # Also periodically refresh access token while waiting
         while [ $WAITED -lt 1200 ]; do
             sleep 10
             WAITED=$((WAITED + 10))
+            # proactive refresh every 5 minutes
+            if [ $((WAITED % 300)) -eq 0 ]; then
+                ensure_fresh_token
+            fi
 
-            STATUS=$(curl -s "${API}/upload/status/${UP_ID}" \
-                -H "Authorization: Bearer ${TOKEN}" | \
-                $VENV -c "import sys,json; print(json.load(sys.stdin).get('status','unknown'))" 2>/dev/null)
+            RAW=$(curl -s "${API}/upload/status/${UP_ID}" -H "Authorization: Bearer ${TOKEN}")
+            # If token expired, rotate and retry once
+            if echo "$RAW" | grep -q "Token expired"; then
+                refresh_tokens
+                RAW=$(curl -s "${API}/upload/status/${UP_ID}" -H "Authorization: Bearer ${TOKEN}")
+            fi
+            STATUS=$(echo "$RAW" | $VENV -c "import sys,json; print(json.load(sys.stdin).get('status','unknown'))" 2>/dev/null)
 
             if [ "$STATUS" = "done" ]; then
                 REELS=$(curl -s "${API}/upload/status/${UP_ID}" \
@@ -140,6 +182,8 @@ except: pass
         done
 
         [ $WAITED -ge 1200 ] && echo "timeout (1200s)"
+        # After each upload (done/timeout/error), refresh tokens for safety
+        refresh_tokens
     done
 done
 

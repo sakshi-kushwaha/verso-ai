@@ -147,6 +147,10 @@ def init_db():
     if "one_liner" not in reel_cols:
         conn.execute("ALTER TABLE reels ADD COLUMN one_liner TEXT")
 
+    # Migration: add segments_json to reels (for multi-clip composition hints)
+    if "segments_json" not in reel_cols:
+        conn.execute("ALTER TABLE reels ADD COLUMN segments_json TEXT")
+
     # Migration: add doc_summary to uploads (document-level summary)
     if "doc_summary" not in upload_cols:
         conn.execute("ALTER TABLE uploads ADD COLUMN doc_summary TEXT")
