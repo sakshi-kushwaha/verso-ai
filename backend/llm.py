@@ -268,7 +268,7 @@ def generate_doc_summary(full_text: str) -> str | None:
     """
     prompt = DOC_SUMMARY_PROMPT.format(text=full_text[:6000])
     try:
-        result = reel_llm_call(prompt, timeout=120.0, num_predict=300, json_mode=False)
+        result = reel_llm_call(prompt, timeout=180.0, num_predict=600, json_mode=False)
         summary = result.strip()
         if summary and len(summary) > 50 and len(summary) < 3000:
             return summary
