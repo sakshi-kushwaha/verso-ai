@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { getMe, updateProfile, getSessions, revokeSession, revokeAllSessions, deleteAccount } from '../api'
+import { getMe, updateProfile, deleteAccount } from '../api'
 import useStore from '../store/useStore'
 import Button from '../components/Button'
 import MobileBackButton from '../components/MobileBackButton'
@@ -28,9 +28,7 @@ export default function ProfilePage() {
   const [pwMsg, setPwMsg] = useState('')
   const [pwLoading, setPwLoading] = useState(false)
 
-  // Sessions
-  const [sessions, setSessions] = useState([])
-  const [sessionsOpen, setSessionsOpen] = useState(false)
+  // Sessions section removed per request
 
   // Account deletion
   const [showDelete, setShowDelete] = useState(false)
@@ -89,33 +87,7 @@ export default function ProfilePage() {
     }
   }
 
-  const loadSessions = async () => {
-    try {
-      const data = await getSessions()
-      setSessions(data)
-    } catch { /* silent */ }
-  }
-
-  const handleToggleSessions = () => {
-    if (!sessionsOpen) loadSessions()
-    setSessionsOpen(!sessionsOpen)
-  }
-
-  const handleRevokeSession = async (id) => {
-    try {
-      await revokeSession(id)
-      setSessions((prev) => prev.filter((s) => s.id !== id))
-    } catch { /* silent */ }
-  }
-
-  const handleRevokeAll = async () => {
-    const refreshToken = localStorage.getItem('verso_refresh_token')
-    if (!refreshToken) return
-    try {
-      await revokeAllSessions(refreshToken)
-      loadSessions()
-    } catch { /* silent */ }
-  }
+  // Sessions-related handlers removed
 
   const handleDeleteAccount = async () => {
     if (!deletePw) return
@@ -225,64 +197,7 @@ export default function ProfilePage() {
           )}
         </div>
 
-        {/* Sessions */}
-        <div className="bg-surface rounded-xl border border-border mb-4 overflow-hidden">
-          <button
-            className="w-full flex items-center justify-between p-5 text-sm font-semibold hover:bg-bg/50 transition-colors"
-            onClick={handleToggleSessions}
-          >
-            <span>Active Sessions</span>
-            <svg
-              viewBox="0 0 24 24"
-              width="16"
-              height="16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{ transform: sessionsOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}
-            >
-              <path d="M6 9l6 6 6-6" />
-            </svg>
-          </button>
-          {sessionsOpen && (
-            <div className="px-5 pb-5">
-              {sessions.length === 0 ? (
-                <p className="text-text-muted text-xs">No active sessions found</p>
-              ) : (
-                <>
-                  {sessions.map((s) => (
-                    <div key={s.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                      <div>
-                        <p className="text-xs text-text-muted truncate max-w-[200px]">
-                          {s.device_info ? s.device_info.split(' ')[0] : 'Unknown device'}
-                        </p>
-                        <p className="text-xs text-text-muted opacity-60">
-                          {s.ip_address} &middot; {new Date(s.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <button
-                        className="text-xs text-red-400 hover:text-red-300 transition-colors"
-                        onClick={() => handleRevokeSession(s.id)}
-                      >
-                        Revoke
-                      </button>
-                    </div>
-                  ))}
-                  {sessions.length > 1 && (
-                    <button
-                      className="mt-3 text-xs text-red-400 hover:text-red-300 transition-colors"
-                      onClick={handleRevokeAll}
-                    >
-                      Log out all other sessions
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-        </div>
+        {/* Active Sessions section removed */}
 
         {/* Help link */}
         <Link to="/help" className="flex items-center gap-3 bg-surface rounded-xl p-4 border border-border mb-6 hover:border-primary/30 transition-colors">
