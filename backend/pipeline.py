@@ -30,7 +30,8 @@ BATCH_SIZE = 3
 PIPELINE_TIMEOUT = _PIPELINE_TIMEOUT  # from config, default 20 min
 
 # Thread pool for overlapping TTS+ffmpeg with LLM calls
-_video_executor = ThreadPoolExecutor(max_workers=3)
+_video_executor = ThreadPoolExecutor(max_workers=1)
+
 
 # Set by main.py lifespan — the running asyncio event loop
 _event_loop: asyncio.AbstractEventLoop | None = None
@@ -354,7 +355,7 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
         # Decide number of reels based on document length
         # ~1 reel per 3 pages: 10 pages → 3, 26 pages → 8, 50 pages → 16
         # Each reel takes ~2-3 min on CPU, so keep count practical
-        num_topics = min(max(3, int(len(pages) * 0.3)), 30)
+        num_topics = min(max(3, int(len(pages) * 0.3)), 100)
 
         try:
             topics = extract_topics(full_text, num_topics=num_topics)
@@ -465,7 +466,6 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
         # Deferred: doc summary + embedding in background
         def _deferred_tasks():
             try:
-                # Generate doc summary (deferred from before reel loop)
                 _update_progress(upload_id, 96, "summarizing")
                 doc_summary = generate_doc_summary(full_text)
                 if doc_summary:
