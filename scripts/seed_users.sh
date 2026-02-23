@@ -60,7 +60,21 @@ for ENTRY in "${USERS[@]}"; do
         echo "signed up"
     fi
 
-    # Helpers: refresh token proactively (rotate access+refresh)
+    # Helpers: refresh token proactively (rotate access+refresh) and re-login on failure
+    relogin() {
+        local R
+        R=$(curl -s -X POST "${API}/auth/login" \
+            -H "Content-Type: application/json" \
+            -d "{\"name\": \"${NAME}\", \"password\": \"${PASSWORD}\"}")
+        local NEWTOK NEWREF
+        NEWTOK=$(echo "$R" | $VENV -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
+        NEWREF=$(echo "$R" | $VENV -c "import sys,json; print(json.load(sys.stdin).get('refresh_token',''))" 2>/dev/null)
+        if [ -n "$NEWTOK" ] && [ -n "$NEWREF" ]; then
+            TOKEN="$NEWTOK"; REFRESH="$NEWREF"; last_refresh_ts=$(date +%s)
+            return 0
+        fi
+        return 1
+    }
     last_refresh_ts=$(date +%s)
     refresh_tokens() {
         if [ -z "$REFRESH" ]; then
@@ -74,9 +88,10 @@ for ENTRY in "${USERS[@]}"; do
         NEWTOK=$(echo "$R" | $VENV -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
         NEWREF=$(echo "$R" | $VENV -c "import sys,json; print(json.load(sys.stdin).get('refresh_token',''))" 2>/dev/null)
         if [ -n "$NEWTOK" ] && [ -n "$NEWREF" ]; then
-            TOKEN="$NEWTOK"
-            REFRESH="$NEWREF"
-            last_refresh_ts=$(date +%s)
+            TOKEN="$NEWTOK"; REFRESH="$NEWREF"; last_refresh_ts=$(date +%s)
+        else
+            # Refresh failed — try re-login once
+            relogin || true
         fi
     }
 
@@ -106,7 +121,12 @@ print('${USE_CASE} set')
 
     # 3. Get already-uploaded filenames
     ensure_fresh_token
-    EXISTING=$(curl -s "${API}/uploads" -H "Authorization: Bearer ${TOKEN}" | \
+    EXISTING_RAW=$(curl -s "${API}/uploads" -H "Authorization: Bearer ${TOKEN}")
+    if echo "$EXISTING_RAW" | grep -qE 'Token expired|Invalid token|Missing auth token'; then
+        refresh_tokens
+        EXISTING_RAW=$(curl -s "${API}/uploads" -H "Authorization: Bearer ${TOKEN}")
+    fi
+    EXISTING=$(echo "$EXISTING_RAW" | \
         $VENV -c "
 import sys,json
 try:
@@ -142,8 +162,18 @@ except: pass
         UP_ID=$(echo "$UP_RESP" | $VENV -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null)
 
         if [ -z "$UP_ID" ]; then
-            echo "FAILED: ${UP_RESP}"
-            continue
+            # If auth issue, refresh or re-login and retry once
+            if echo "$UP_RESP" | grep -qE 'Token expired|Invalid token|Missing auth token'; then
+                refresh_tokens
+                UP_RESP=$(curl -s -X POST "${API}/upload" \
+                    -H "Authorization: Bearer ${TOKEN}" \
+                    -F "file=@${PDF}")
+                UP_ID=$(echo "$UP_RESP" | $VENV -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null)
+            fi
+            if [ -z "$UP_ID" ]; then
+                echo "FAILED: ${UP_RESP}"
+                continue
+            fi
         fi
         echo "id=${UP_ID}, pipeline running"
 
