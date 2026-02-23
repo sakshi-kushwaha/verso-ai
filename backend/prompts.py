@@ -278,6 +278,50 @@ Relevant text about "{topic}":
 
 JSON:"""
 
+BATCH_TOPIC_REEL_WITH_CLIPS_PROMPT = """You are a learning content creator for Verso. Generate exactly {num_topics} reels (one per topic) with video clip selections and flashcards.
+
+TOPICS:
+{topics_list}
+
+DOCUMENT TYPE: {doc_type}
+{doc_type_instruction}
+
+STYLE: {style_instruction}
+LENGTH: {depth_instruction}
+FOCUS: {use_case_instruction}
+DIFFICULTY: {difficulty_instruction}
+
+AVAILABLE VIDEO CLIPS (use ONLY these filenames for segments):
+{clip_list}
+
+RULES:
+1. Return ONLY valid JSON matching the schema below — no extra text before or after.
+2. Generate exactly {num_topics} reels — one reel per topic listed above. Each reel focuses on its specific topic only.
+3. Generate 1-2 flashcards per topic.
+4. Every flashcard question MUST end with a question mark (?).
+5. Every flashcard answer MUST be at least 10 words long.
+6. Reel title must be under 60 characters.
+7. "narration" MUST follow these spoken-audio rules:
+   - Write as if explaining to a curious friend, NOT reading from a textbook.
+   - Use contractions: "don't", "isn't", "you're", "it's", "here's".
+   - Mix short punchy sentences with longer explanations.
+   - Each reel MUST start with a DIFFERENT opening phrase. Use questions, bold claims, "Imagine...", "Picture this...", "Think about this...", "Ever wonder...".
+   - Use "..." for natural pauses and "—" for pivots.
+   - Narration MUST be 40-60 words long (~15-20 seconds when spoken). Never shorter than 40 words.
+   - No bullet points, no special symbols, no abbreviations, no parentheses.
+8. Pick exactly {num_segments} different clips per reel from the available list. Prefer clips near the TOP. Each reel should use DIFFERENT clips from other reels.
+9. Each segment "duration" in seconds. Durations per reel MUST sum to exactly {total_duration}.
+10. Each duration must be at least 2 seconds.
+11. "overlay" is short text shown on screen (max 8 words per segment).
+12. "one_liner" is a single catchy sentence (under 15 words) capturing the reel's most surprising insight.
+
+Schema: {{"reels":[{{"title":"short catchy title","summary":"key idea summary","narration":"spoken version","one_liner":"punchy sentence","category":"topic area","keywords":"comma separated","segments":[{{"clip":"filename.mp4","overlay":"short text","duration":5}}]}}],"flashcards":[{{"question":"question?","answer":"detailed answer at least 10 words"}}]}}
+
+RELEVANT TEXT:
+{text}
+
+JSON:"""
+
 DOC_SUMMARY_PROMPT = """You are a study assistant. Read the document text below and write a precise, thorough summary that fully explains the topic.
 
 Rules:

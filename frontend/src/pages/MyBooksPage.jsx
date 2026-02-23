@@ -27,7 +27,7 @@ function useUploadWs(uploadId, { onProgress, onReelReady, onFlashcardReady, onVi
         const msg = JSON.parse(evt.data)
         if (msg.type === 'progress') {
           onProgress?.(msg.progress ?? 0, msg.stage || 'processing', msg.status)
-          if (msg.status === 'done' || msg.status === 'error' || msg.status === 'partial') {
+          if (msg.status === 'done' || msg.status === 'error') {
             cleanup()
             onDone?.(msg.status)
           }
@@ -46,7 +46,7 @@ function useUploadWs(uploadId, { onProgress, onReelReady, onFlashcardReady, onVi
         getUploadStatus(uploadId)
           .then((s) => {
             onProgress?.(s.progress ?? 0, s.stage || 'processing', s.status)
-            if (s.status === 'done' || s.status === 'error' || s.status === 'partial') {
+            if (s.status === 'done' || s.status === 'error') {
               cleanup()
               onDone?.(s.status)
             }
@@ -154,12 +154,10 @@ function BookCard({ book, onClick, onDelete }) {
   const statusColors = {
     done: 'bg-success/10 text-success',
     error: 'bg-danger/10 text-danger',
-    partial: 'bg-amber-500/10 text-amber-400',
   }
   const statusLabels = {
     done: 'Completed',
     error: 'Failed',
-    partial: 'Partial',
   }
   const statusLabel = statusLabels[book.status] || book.status
 
@@ -243,7 +241,7 @@ function BookCard({ book, onClick, onDelete }) {
         </div>
       )}
 
-      {(book.status === 'done' || book.status === 'partial') && (
+      {book.status === 'done' && (
         <div className="flex items-center gap-4 mt-3 pt-3 border-t border-border">
           <span className="text-xs text-text-muted">
             <span className="font-semibold text-text">{book.reel_count || 0}</span> bites
@@ -384,12 +382,14 @@ function BookSummary({ bookId, initialSummary }) {
       </div>
 
       <div className="relative">
-        <p
-          className="text-sm text-text-secondary leading-relaxed overflow-hidden transition-[max-height] duration-300 ease-in-out"
-          style={{ maxHeight: expanded ? '500px' : '4.5em' }}
+        <div
+          className="text-sm text-text-secondary leading-relaxed overflow-hidden transition-[max-height] duration-300 ease-in-out space-y-2"
+          style={{ maxHeight: expanded ? '2000px' : '4.5em' }}
         >
-          {summary}
-        </p>
+          {summary.split('\n').filter(Boolean).map((para, i) => (
+            <p key={i}>{para}</p>
+          ))}
+        </div>
         {!expanded && (
           <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-surface to-transparent pointer-events-none" />
         )}

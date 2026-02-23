@@ -144,8 +144,8 @@ def classification_llm_call(prompt: str, timeout: float = CLASSIFICATION_TIMEOUT
 
 
 def reel_llm_call(prompt: str, timeout: float = REEL_LLM_TIMEOUT, system: str = None,
-                   num_predict: int = 600, json_mode: bool = True,
-                   num_ctx: int = 4096) -> str:
+                   num_predict: int = 400, json_mode: bool = True,
+                   num_ctx: int = 2048) -> str:
     """LLM call using the reel model. JSON mode on by default."""
     payload = {
         "model": REEL_MODEL,
@@ -163,6 +163,9 @@ def reel_llm_call(prompt: str, timeout: float = REEL_LLM_TIMEOUT, system: str = 
     if system:
         payload["system"] = system
 
+    # Only retry once on timeout (each timeout wastes the full duration)
+    max_timeout_retries = 1
+    timeout_retries = 0
     last_error = None
     for attempt in range(1 + MAX_RETRIES):
         try:
@@ -181,9 +184,11 @@ def reel_llm_call(prompt: str, timeout: float = REEL_LLM_TIMEOUT, system: str = 
                 time.sleep(min(2 ** attempt, 10))
         except httpx.TimeoutException as e:
             last_error = e
+            timeout_retries += 1
             log.warning("Reel LLM call timed out after %ss (attempt %d/%d)", timeout, attempt + 1, 1 + MAX_RETRIES)
-            if attempt < MAX_RETRIES:
-                time.sleep(min(2 ** attempt, 10))
+            if timeout_retries > max_timeout_retries:
+                break  # Don't keep waiting on timeouts
+            time.sleep(2)
         except httpx.HTTPStatusError as e:
             last_error = e
             log.warning("Reel LLM HTTP error %s (attempt %d/%d): %s", e.response.status_code, attempt + 1, 1 + MAX_RETRIES, e)
@@ -266,9 +271,9 @@ def generate_doc_summary(full_text: str) -> str | None:
     Uses LLM_MODEL (qwen2.5:3b) in plain text mode — no JSON formatting.
     Returns the summary string, or None if generation fails.
     """
-    prompt = DOC_SUMMARY_PROMPT.format(text=full_text[:6000])
+    prompt = DOC_SUMMARY_PROMPT.format(text=full_text[:4000])
     try:
-        result = reel_llm_call(prompt, timeout=180.0, num_predict=600, json_mode=False)
+        result = reel_llm_call(prompt, timeout=180.0, num_predict=600, json_mode=False, num_ctx=4096)
         summary = result.strip()
         # Strip any markdown the model may have added (TTS reads these aloud)
         summary = re.sub(r'\*+', '', summary)        # **bold** / *italic*
@@ -420,7 +425,7 @@ def extract_topics(full_text: str, num_topics: int = 5) -> list[dict]:
         batch_size = min(MAX_PER_CALL, remaining)
         # Each batch samples a different region of the document
         offset_frac = batch_num / max(1, (num_topics // MAX_PER_CALL))
-        sample = _sample_document_region(full_text, max_chars=8000, offset_frac=offset_frac)
+        sample = _sample_document_region(full_text, max_chars=5000, offset_frac=offset_frac)
 
         batch_topics = _extract_topics_single(sample, batch_size)
 
@@ -449,21 +454,32 @@ def _sample_document_region(full_text: str, max_chars: int = 8000, offset_frac: 
 
 def _extract_topics_single(text: str, num_topics: int) -> list[dict]:
     """Extract topics in a single LLM call (max ~10 topics)."""
-    sampled = _sample_document(text, max_chars=8000)
+    # Keep text under ~5000 chars so it fits comfortably in 4096 context
+    sampled = _sample_document(text, max_chars=5000)
 
     prompt = TOPIC_EXTRACTION_PROMPT.format(
         text=sampled,
         num_topics=num_topics,
     )
     predict = max(400, num_topics * 50)
-    timeout = max(120.0, predict / 3.0)
-    # Context window: ~2000 tokens for 8000 chars of text + prompt + output
-    ctx = 4096 if num_topics <= 5 else 8192
+    timeout = max(200.0, predict * 1.0)
+    # 4096 context is enough for ~5000 chars text + prompt + output
+    ctx = 4096
     try:
         result = reel_llm_call(prompt, timeout=timeout, num_predict=predict, num_ctx=ctx)
     except (OllamaUnavailableError, httpx.TimeoutException):
-        log.warning("Topic extraction failed — LLM unavailable (timeout=%.0fs, predict=%d)", timeout, predict)
-        return []
+        log.warning("Topic extraction timed out (timeout=%.0fs, predict=%d) — trying with shorter text", timeout, predict)
+        # Retry once with shorter text if full text was too large
+        if len(sampled) > 3000:
+            try:
+                shorter = _sample_document(text, max_chars=3000)
+                prompt2 = TOPIC_EXTRACTION_PROMPT.format(text=shorter, num_topics=num_topics)
+                result = reel_llm_call(prompt2, timeout=timeout, num_predict=predict, num_ctx=ctx)
+            except (OllamaUnavailableError, httpx.TimeoutException):
+                log.warning("Topic extraction retry also failed")
+                return []
+        else:
+            return []
 
     parsed = None
     try:
@@ -586,11 +602,12 @@ def generate_topic_reel(topic: str, topic_text: str, doc_type: str, prefs: dict,
     """Generate a single reel + flashcards for one topic.
 
     Returns parsed dict with "reels" and "flashcards" arrays.
+    Optimized for CPU: uses 2048 context, 400 tokens max, shorter text.
     """
     few_shot = get_gold_few_shot(category)
     prompt = TOPIC_REEL_PROMPT.format(
         topic=topic,
-        text=topic_text[:3000],
+        text=topic_text[:1500],
         doc_type=doc_type,
         doc_type_instruction=DOC_TYPE_INSTRUCTIONS.get(doc_type, DOC_TYPE_INSTRUCTIONS["general"]),
         style_instruction=REEL_STYLE_INSTRUCTIONS.get(prefs.get("learning_style", "mixed"), REEL_STYLE_INSTRUCTIONS["mixed"]),
@@ -600,14 +617,13 @@ def generate_topic_reel(topic: str, topic_text: str, doc_type: str, prefs: dict,
         few_shot=few_shot,
     )
 
-    max_parse_attempts = 3
+    max_parse_attempts = 2
     for attempt in range(max_parse_attempts):
-        result = reel_llm_call(prompt)
+        result = reel_llm_call(prompt, num_predict=400, num_ctx=2048)
         parsed = parse_llm_json(result)
         if parsed["reels"] and parsed["reels"][0].get("title") == "Summary" and len(parsed["reels"]) == 1:
             if attempt < max_parse_attempts - 1:
                 log.warning("Topic reel returned unparseable JSON (attempt %d/%d), retrying", attempt + 1, max_parse_attempts)
-                time.sleep(min(2 ** attempt, 10))
                 continue
         return parsed
     return parsed
@@ -657,6 +673,62 @@ def generate_topic_reel_with_clips(
                 time.sleep(min(2 ** attempt, 10))
                 continue
         return parsed
+    return parsed
+
+
+def generate_batch_topic_reels_with_clips(
+    topics: list[dict], topic_texts: list[str], doc_type: str, prefs: dict,
+    category: str, clips: list[dict],
+) -> dict:
+    """Generate multiple reels + flashcards for a batch of topics in ONE LLM call.
+
+    Returns parsed dict with "reels" and "flashcards" arrays.
+    """
+    from prompts import BATCH_TOPIC_REEL_WITH_CLIPS_PROMPT
+
+    few_shot = get_gold_few_shot(category)
+
+    # Build topics list
+    topics_lines = []
+    for i, (t, txt) in enumerate(zip(topics, topic_texts), 1):
+        topics_lines.append(f"{i}. {t['topic']}")
+    topics_list = "\n".join(topics_lines)
+
+    # Combine topic texts
+    combined_text = "\n\n---\n\n".join(
+        f"Topic: {t['topic']}\n{txt[:2000]}" for t, txt in zip(topics, topic_texts)
+    )
+
+    # Build clip list
+    clip_list_lines = []
+    for i, c in enumerate(clips, 1):
+        clip_list_lines.append(f"{i}. {c['file']} — {c.get('description', 'stock footage')}")
+    clip_list = "\n".join(clip_list_lines)
+
+    num_segments = 3
+    prompt = BATCH_TOPIC_REEL_WITH_CLIPS_PROMPT.format(
+        num_topics=len(topics),
+        topics_list=topics_list,
+        text=combined_text[:8000],
+        doc_type=doc_type,
+        doc_type_instruction=DOC_TYPE_INSTRUCTIONS.get(doc_type, DOC_TYPE_INSTRUCTIONS["general"]),
+        style_instruction=REEL_STYLE_INSTRUCTIONS.get(prefs.get("learning_style", "mixed"), REEL_STYLE_INSTRUCTIONS["mixed"]),
+        depth_instruction=REEL_DEPTH_INSTRUCTIONS.get(prefs.get("content_depth", "balanced"), REEL_DEPTH_INSTRUCTIONS["balanced"]),
+        use_case_instruction=REEL_USE_CASE_INSTRUCTIONS.get(prefs.get("use_case", "learning"), REEL_USE_CASE_INSTRUCTIONS["learning"]),
+        difficulty_instruction=FLASHCARD_DIFFICULTY_INSTRUCTIONS.get(prefs.get("flashcard_difficulty", "medium"), FLASHCARD_DIFFICULTY_INSTRUCTIONS["medium"]),
+        clip_list=clip_list,
+        num_segments=num_segments,
+        total_duration=15,
+    )
+
+    max_parse_attempts = 2
+    for attempt in range(max_parse_attempts):
+        result = reel_llm_call(prompt, system=REEL_SYSTEM_PROMPT)
+        parsed = parse_llm_json(result)
+        if parsed["reels"]:
+            return parsed
+        if attempt < max_parse_attempts - 1:
+            log.warning("Batch reel returned no valid reels (attempt %d/%d), retrying", attempt + 1, max_parse_attempts)
     return parsed
 
 

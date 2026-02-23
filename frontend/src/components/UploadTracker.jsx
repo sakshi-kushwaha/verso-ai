@@ -74,7 +74,7 @@ export default function UploadTracker() {
         cleanup()
         // Auto-clear after a short delay so user sees "Done!"
         setTimeout(() => clearBgUpload(), 2000)
-      } else if (status === 'error' || status === 'partial') {
+      } else if (status === 'error') {
         cleanup()
         setTimeout(() => clearBgUpload(), 4000)
       }
@@ -88,7 +88,7 @@ export default function UploadTracker() {
     // Immediately check current status — catches cases where pipeline died between polls
     getUploadStatus(uploadId)
       .then((s) => {
-        if (s.status === 'error' || s.status === 'partial' || s.status === 'done') {
+        if (s.status === 'error' || s.status === 'done') {
           handleUpdate(s.progress ?? 0, s.stage || 'uploading', s.status)
         }
       })
@@ -147,8 +147,7 @@ export default function UploadTracker() {
   const progress = bgUpload.progress || 0
   const label = STAGE_LABELS[bgUpload.stage] || 'Processing...'
   const isDone = bgUpload.status === 'done'
-  const isError = bgUpload.status === 'error' || bgUpload.status === 'partial'
-
+  const isError = bgUpload.status === 'error'
   return (
     <div className={`fixed top-0 left-0 right-0 z-50 md:left-16 ${isDone ? 'bg-green-500/90' : isError ? 'bg-danger/90' : 'bg-primary/90'} text-white px-4 py-2 flex items-center gap-3 text-sm backdrop-blur-sm`}>
       <div className="flex-1 min-w-0">
