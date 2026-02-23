@@ -43,6 +43,58 @@ def process_upload(upload_id: int, filepath: str, user_id: int = 1):
     thread.start()
 
 
+def resume_orphaned_uploads():
+    """Resume uploads stuck in 'processing' after a server restart.
+
+    For each orphaned upload:
+    - If the temp file still exists → restart the pipeline from scratch
+    - If reels already exist → mark as done (partial but viewable)
+    - Otherwise → mark as error
+    """
+    conn = get_db()
+    try:
+        orphans = conn.execute(
+            "SELECT id, filepath, user_id FROM uploads WHERE status = 'processing'"
+        ).fetchall()
+        if not orphans:
+            return
+
+        for row in orphans:
+            uid, filepath, user_id = row["id"], row["filepath"], row["user_id"]
+            reel_count = conn.execute(
+                "SELECT COUNT(*) FROM reels WHERE upload_id = ?", (uid,)
+            ).fetchone()[0]
+
+            if filepath and os.path.exists(filepath):
+                log.info("Resuming orphaned upload %s from scratch (file: %s)", uid, filepath)
+                # Reset progress so frontend sees it restart
+                conn.execute(
+                    "UPDATE uploads SET progress = 0, stage = 'uploading', error_message = NULL WHERE id = ?",
+                    (uid,),
+                )
+                # Clean up any partial reels/flashcards from the interrupted run
+                conn.execute("DELETE FROM flashcards WHERE upload_id = ?", (uid,))
+                conn.execute("DELETE FROM reels WHERE upload_id = ?", (uid,))
+                conn.commit()
+                process_upload(uid, filepath, user_id or 1)
+            elif reel_count > 0:
+                log.info("Orphaned upload %s has %d reels, marking as done", uid, reel_count)
+                conn.execute(
+                    "UPDATE uploads SET status = 'done', error_message = NULL WHERE id = ?",
+                    (uid,),
+                )
+                conn.commit()
+            else:
+                log.info("Orphaned upload %s has no file or reels, marking as error", uid)
+                conn.execute(
+                    "UPDATE uploads SET status = 'error', error_message = 'Processing was interrupted. Please re-upload.' WHERE id = ?",
+                    (uid,),
+                )
+                conn.commit()
+    finally:
+        conn.close()
+
+
 def _get_user_prefs(user_id: int) -> dict:
     """Fetch user preferences for personalized reel generation."""
     conn = get_db()
@@ -168,6 +220,15 @@ def _compose_video_only(upload_id: int, reel_id: int, reel: dict, subject_catego
         _try_compose_video_with_segments(reel_id, reel, subject_category, segments)
     else:
         _try_compose_video(reel_id, reel, subject_category)
+
+    # After composition, if a video exists, notify clients to swap to video
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT video_path FROM reels WHERE id = ?", (reel_id,)).fetchone()
+    finally:
+        conn.close()
+    if row and row["video_path"]:
+        _notify_video_ready(upload_id, reel_id, row["video_path"])
 
 
 # Keep old name as alias for backward compatibility
@@ -500,6 +561,19 @@ def _notify_reel_ready(upload_id: int, reel_id: int):
         )
     except Exception:
         log.debug("WS reel_ready failed for upload %s reel %s", upload_id, reel_id)
+
+def _notify_video_ready(upload_id: int, reel_id: int, video_path: str):
+    """Push a video_ready event so the frontend can switch from image card to video player."""
+    loop = _event_loop
+    if loop is None or loop.is_closed():
+        return
+    try:
+        asyncio.run_coroutine_threadsafe(
+            manager.broadcast_video_ready(upload_id, reel_id, video_path),
+            loop,
+        )
+    except Exception:
+        log.debug("WS video_ready failed for upload %s reel %s", upload_id, reel_id)
 
 
 def _notify_flashcard_ready(upload_id: int, fc_id: int, fc: dict):
