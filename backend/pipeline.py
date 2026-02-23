@@ -77,10 +77,10 @@ def resume_orphaned_uploads():
             conn.commit()
             process_upload(uid, filepath, user_id or 1)
         elif reel_count > 0:
-            log.info("Orphaned upload %s has %d reels, marking as partial", uid, reel_count)
+            log.info("Orphaned upload %s has %d reels, marking as done", uid, reel_count)
             conn.execute(
-                "UPDATE uploads SET status = 'partial', error_message = ? WHERE id = ?",
-                (f"Generated {reel_count} reels before interruption. Partial reels are available.", uid),
+                "UPDATE uploads SET status = 'done', error_message = NULL WHERE id = ?",
+                (uid,),
             )
             conn.commit()
         else:
@@ -141,14 +141,13 @@ def _pick_stock_video(reel_category: str, upload_category: str) -> str | None:
 
 
 def _try_compose_video(reel_id: int, reel: dict, subject_category: str):
-    """Try to compose a video for a reel. Tries multi-clip first, falls back to single-clip."""
+    """Compose a video for a reel. Picks clips programmatically (no LLM call) then falls back to single-clip."""
     cat = _resolve_category(reel.get("category", ""), subject_category)
 
     # Generate TTS from narration — voice rotates by reel_id for variety
     tts_path = None
     narration = reel.get("narration", reel.get("summary", ""))
     if narration:
-        # Strip markdown formatting so TTS doesn't read "asterisk" etc.
         import re
         narration = re.sub(r'\*+', '', narration).strip()
         try:
@@ -156,31 +155,27 @@ def _try_compose_video(reel_id: int, reel: dict, subject_category: str):
         except Exception:
             log.debug("TTS failed for reel %d, composing without narration", reel_id)
 
-    # Try multi-clip composition first
+    # Try multi-clip composition — pick clips programmatically (no LLM needed)
     try:
         clips = get_clips_for_category(cat)
         if clips and len(clips) >= 2:
-            script = generate_reel_script(
-                text=reel.get("summary", ""),
-                category=cat,
-                clips=clips,
+            random.shuffle(clips)
+            num_segments = min(3, len(clips))
+            segments = [{"clip": clips[i]["file"], "duration": 5} for i in range(num_segments)]
+            video_path = compose_multi_clip_reel(
+                reel_id=reel_id,
+                title=reel.get("title", ""),
                 narration=narration or "",
+                segments=segments,
+                category=cat,
+                tts_audio_path=str(tts_path) if tts_path else None,
             )
-            if script and script.get("segments"):
-                video_path = compose_multi_clip_reel(
-                    reel_id=reel_id,
-                    title=script.get("title", reel.get("title", "")),
-                    narration=script.get("narration", narration or ""),
-                    segments=script["segments"],
-                    category=cat,
-                    tts_audio_path=str(tts_path) if tts_path else None,
-                )
-                conn = get_db()
-                conn.execute("UPDATE reels SET video_path = ? WHERE id = ?", (video_path, reel_id))
-                conn.commit()
-                conn.close()
-                log.info("Composed multi-clip video for reel %d: %s", reel_id, video_path)
-                return
+            conn = get_db()
+            conn.execute("UPDATE reels SET video_path = ? WHERE id = ?", (video_path, reel_id))
+            conn.commit()
+            conn.close()
+            log.info("Composed multi-clip video for reel %d (auto-picked): %s", reel_id, video_path)
+            return
     except Exception as e:
         log.warning("Multi-clip composition failed for reel %d: %s — falling back to single-clip", reel_id, e)
 
@@ -394,14 +389,6 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
             if elapsed > PIPELINE_TIMEOUT:
                 log.warning("Pipeline timeout after %.0fs at topic %d/%d for upload %s",
                             elapsed, i + 1, len(topics), upload_id)
-                if reels_completed > 0:
-                    _update_status(
-                        upload_id, "partial",
-                        f"Generated {reels_completed}/{len(topics)} reels before timeout. "
-                        "Partial reels are available.",
-                    )
-                else:
-                    _update_status(upload_id, "error", "Processing timed out. Please try again later.")
                 break
 
             topic_progress = 20 + int(((i + 1) / len(topics)) * 50)
@@ -517,29 +504,17 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
             except Exception as e:
                 log.warning("Video future failed: %s", e)
 
-        # Handle failures
-        if ollama_down:
-            if reels_completed > 0:
-                _update_status(
-                    upload_id, "partial",
-                    f"Generated {reels_completed}/{len(topics)} reels before Ollama became unavailable. "
-                    "Partial reels are available. Re-upload to retry.",
-                )
-                _update_progress(upload_id, 70, "partial")
-            else:
+        # Handle failures — only error if zero reels were generated
+        if reels_completed == 0:
+            if ollama_down:
                 _update_status(upload_id, "error", "Ollama is unavailable. Please try again later.")
+            else:
+                _update_status(upload_id, "error", "All topic reels failed. Please try again later.")
             return
 
-        if reels_failed and reels_completed > 0:
-            log.info("Upload %s: %d/%d topics succeeded", upload_id, reels_completed, len(topics))
-            _update_status(
-                upload_id, "partial",
-                f"Generated {reels_completed}/{len(topics)} reels. "
-                f"{reels_failed} topics failed and were skipped.",
-            )
-        elif reels_failed and reels_completed == 0:
-            _update_status(upload_id, "error", "All topic reels failed. Please try again later.")
-            return
+        if reels_failed:
+            log.info("Upload %s: %d/%d topics succeeded, %d failed",
+                     upload_id, reels_completed, len(topics), reels_failed)
 
         # Step 4: Mark as done immediately, defer embedding + summary
         _update_progress(upload_id, 95, "done")

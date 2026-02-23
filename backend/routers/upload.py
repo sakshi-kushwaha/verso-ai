@@ -29,8 +29,8 @@ def _expire_stale_uploads(user_id: int):
         reel_count = conn.execute("SELECT COUNT(*) FROM reels WHERE upload_id = ?", (uid,)).fetchone()[0]
         if reel_count > 0:
             conn.execute(
-                "UPDATE uploads SET status = 'partial', error_message = ? WHERE id = ?",
-                (f"Generated {reel_count} reels before timeout. Partial reels are available.", uid),
+                "UPDATE uploads SET status = 'done', error_message = NULL WHERE id = ?",
+                (uid,),
             )
         else:
             conn.execute(
