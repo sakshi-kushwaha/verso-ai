@@ -10,7 +10,7 @@ import { getWsBaseUrl, getAuthToken } from '../api/ws'
 
 const ACCENTS = ['#3B82F6', '#06B6D4', '#F472B6', '#F59E0B', '#10B981', '#8B5CF6']
 
-function useUploadWs(uploadId, { onProgress, onReelReady, onFlashcardReady, onDone }) {
+function useUploadWs(uploadId, { onProgress, onReelReady, onFlashcardReady, onVideoReady, onDone }) {
   const wsRef = useRef(null)
   const pollRef = useRef(null)
 
@@ -35,6 +35,8 @@ function useUploadWs(uploadId, { onProgress, onReelReady, onFlashcardReady, onDo
           onReelReady?.(msg.reel)
         } else if (msg.type === 'flashcard_ready' && msg.flashcard) {
           onFlashcardReady?.(msg.flashcard)
+        } else if (msg.type === 'video_ready' && msg.reel_id) {
+          onVideoReady?.(msg.reel_id, msg.video_path)
         }
       } catch {}
     }
@@ -503,6 +505,13 @@ function BookDetail({ book, onBack }) {
   useUploadWs(isProcessing ? book.id : null, {
     onReelReady: (reel) => setReels((prev) => [...prev, reel]),
     onFlashcardReady: (fc) => setFlashcards((prev) => [...prev, fc]),
+    onVideoReady: (reelId, videoPath) => {
+      if (videoPath) {
+        setReels((prev) => prev.map((r) =>
+          r.id === reelId ? { ...r, video_path: videoPath } : r
+        ))
+      }
+    },
     onDone: (s) => setStatus(s),
   })
 

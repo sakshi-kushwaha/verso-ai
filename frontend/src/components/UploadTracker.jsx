@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { getUploadStatus, getUploads } from '../api'
+import api, { getUploadStatus, getUploads } from '../api'
 import { getWsBaseUrl, getAuthToken } from '../api/ws'
 import useStore from '../store/useStore'
 import { mapReel } from '../utils/reelMapper'
@@ -94,6 +94,9 @@ export default function UploadTracker() {
             } else if (msg.type === 'reel_ready' && msg.reel) {
               const mapped = mapReel(msg.reel)
               useStore.getState().appendReels([mapped])
+            } else if (msg.type === 'video_ready' && msg.reel_id) {
+              const baseURL = api.defaults.baseURL || ''
+              useStore.getState().updateReelVideo(msg.reel_id, `${baseURL}/video/${msg.reel_id}`)
             }
           } catch {}
         }

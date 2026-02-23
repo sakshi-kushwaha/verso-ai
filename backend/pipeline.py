@@ -163,11 +163,20 @@ def _compose_video_only(upload_id: int, reel_id: int, reel: dict, subject_catego
 
     Reel-ready notification is sent earlier (right after DB save) so the
     frontend can display reels in real-time before video compositing finishes.
+    After video is composed, a video_ready event is sent so the frontend
+    can switch from the image card to the video player.
     """
     if segments:
         _try_compose_video_with_segments(reel_id, reel, subject_category, segments)
     else:
         _try_compose_video(reel_id, reel, subject_category)
+
+    # Notify frontend that video is now available
+    conn = get_db()
+    row = conn.execute("SELECT video_path FROM reels WHERE id = ?", (reel_id,)).fetchone()
+    conn.close()
+    if row and row["video_path"]:
+        _notify_video_ready(upload_id, reel_id, row["video_path"])
 
 
 # Keep old name as alias for backward compatibility
@@ -550,6 +559,20 @@ def _notify_reel_ready(upload_id: int, reel_id: int):
         )
     except Exception:
         log.debug("WS reel_ready failed for upload %s reel %s", upload_id, reel_id)
+
+
+def _notify_video_ready(upload_id: int, reel_id: int, video_path: str):
+    """Push a video_ready event so the frontend can switch from image card to video player."""
+    loop = _event_loop
+    if loop is None or loop.is_closed():
+        return
+    try:
+        asyncio.run_coroutine_threadsafe(
+            manager.broadcast_video_ready(upload_id, reel_id, video_path),
+            loop,
+        )
+    except Exception:
+        log.debug("WS video_ready failed for upload %s reel %s", upload_id, reel_id)
 
 
 def _notify_flashcard_ready(upload_id: int, fc_id: int, fc: dict):

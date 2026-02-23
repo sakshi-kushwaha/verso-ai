@@ -142,6 +142,13 @@ const useStore = create((set, get) => ({
       }
     }),
 
+  updateReelVideo: (reelId, videoUrl) =>
+    set((state) => ({
+      reels: state.reels.map((r) =>
+        r.id === reelId ? { ...r, videoUrl } : r
+      ),
+    })),
+
   // --- Playback ---
   muted: false,
   setMuted: (val) => set({ muted: val }),
