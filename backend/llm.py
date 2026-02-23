@@ -267,7 +267,7 @@ def generate_doc_summary(full_text: str) -> str | None:
     """
     prompt = DOC_SUMMARY_PROMPT.format(text=full_text[:6000])
     try:
-        result = reel_llm_call(prompt, timeout=120.0, num_predict=300, json_mode=False)
+        result = reel_llm_call(prompt, timeout=120.0, num_predict=200, json_mode=False)
         summary = result.strip()
         if summary and len(summary) > 50 and len(summary) < 3000:
             return summary
@@ -395,7 +395,9 @@ def extract_topics(full_text: str, num_topics: int = 5) -> list[dict]:
     Returns list of {"topic": "...", "keywords": "..."} dicts.
     Retries once if the LLM returns significantly fewer topics than requested.
     """
-    sampled = _sample_document(full_text, max_chars=6000)
+    # Scale sample size with topic count — 6000 chars is too little for 40+ topics
+    initial_chars = min(max(6000, num_topics * 400), 30000)
+    sampled = _sample_document(full_text, max_chars=initial_chars)
 
     def _do_extract(n: int, sample_text: str) -> list[dict]:
         prompt = TOPIC_EXTRACTION_PROMPT.format(
@@ -439,9 +441,10 @@ def extract_topics(full_text: str, num_topics: int = 5) -> list[dict]:
     topics = _do_extract(num_topics, sampled)
 
     # If we got significantly fewer topics than requested, retry with a larger sample
-    if num_topics > 5 and len(topics) < num_topics * 0.5:
+    if num_topics > 5 and len(topics) < num_topics * 0.7:
         log.warning("Got only %d/%d topics, retrying with larger sample", len(topics), num_topics)
-        bigger_sample = _sample_document(full_text, max_chars=10000)
+        retry_chars = min(initial_chars * 2, 50000)
+        bigger_sample = _sample_document(full_text, max_chars=retry_chars)
         retry_topics = _do_extract(num_topics, bigger_sample)
         if len(retry_topics) > len(topics):
             topics = retry_topics

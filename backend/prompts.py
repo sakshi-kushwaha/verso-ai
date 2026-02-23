@@ -277,15 +277,18 @@ Relevant text about "{topic}":
 
 JSON:"""
 
-DOC_SUMMARY_PROMPT = """You are a study assistant. Read the document text below and write a short summary.
+DOC_SUMMARY_PROMPT = """You are a study assistant. Read the document text below and write a clear, concise summary.
 
 Rules:
-1. Write exactly 3-5 sentences. No more, no less.
-2. Cover the main topic and key takeaways only.
-3. Write in plain prose — no bullet points, no headers, no numbered lists.
-4. Write at a level a student can understand.
-5. Do NOT start with "this document" or "this text". Start directly with the subject.
-6. Return ONLY the summary text. No preamble, no labels.
+1. Write exactly 3-4 sentences as one flowing paragraph.
+2. First sentence: state what the document is about and its main subject.
+3. Middle sentences: cover the most important themes or concepts — not random details.
+4. Last sentence: give the key takeaway or why this topic matters.
+5. Each sentence should connect logically to the next. Do NOT list unrelated facts.
+6. Write in simple, clear language a student can understand.
+7. The summary will be read aloud, so use natural phrasing — no abbreviations, no parentheses, no special characters.
+8. Do NOT start with "this document" or "this text". Start directly with the subject.
+9. Return ONLY the summary text. No preamble, no labels.
 
 Document text:
 {text}

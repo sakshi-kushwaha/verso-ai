@@ -70,62 +70,76 @@ async function downloadBite(reel, isGradient = false, onProgress = null) {
       URL.revokeObjectURL(url)
     }
   } else {
-    // Text bite — render as PNG using Canvas
+    // Text bite — render as PNG matching the feed card appearance
     const c = document.createElement('canvas')
     const ctx = c.getContext('2d')
-    c.width = 480
-    c.height = 640
+    c.width = 1080
+    c.height = 1920
+    const W = c.width, H = c.height
+    const margin = 60
 
-    // Background — dark with subtle accent tint
-    ctx.fillStyle = '#111827'
-    ctx.fillRect(0, 0, 480, 640)
+    // Load the same background image used in the feed card
+    const baseURL = api.defaults.baseURL || ''
+    const bgUrl = reel.bgImage
+      || `${baseURL}/bg-images/general/${String((reel.id % 10) + 1).padStart(2, '0')}.jpg`
 
-    if (!isGradient) {
-      // Top accent bar for plain text cards
-      ctx.fillStyle = reel.accent || '#3B82F6'
-      ctx.fillRect(0, 0, 480, 3)
+    let bgLoaded = false
+    try {
+      const img = new window.Image()
+      img.crossOrigin = 'anonymous'
+      img.src = bgUrl
+      await new Promise((resolve, reject) => {
+        img.onload = resolve
+        img.onerror = reject
+        setTimeout(reject, 5000)
+      })
+      // Draw background (cover)
+      const scale = Math.max(W / img.width, H / img.height)
+      const iw = img.width * scale, ih = img.height * scale
+      ctx.drawImage(img, (W - iw) / 2, (H - ih) / 2, iw, ih)
+      bgLoaded = true
+    } catch {
+      // Fallback: solid dark background
+      ctx.fillStyle = '#0A0F1A'
+      ctx.fillRect(0, 0, W, H)
     }
 
-    // Category
-    ctx.font = 'bold 13px sans-serif'
-    ctx.fillStyle = isGradient ? 'rgba(255,255,255,0.85)' : (reel.accent || '#3B82F6')
-    ctx.fillText(reel.category, 28, 40)
-
-    // Page ref
-    ctx.font = '12px monospace'
-    ctx.fillStyle = '#64748B'
-    ctx.textAlign = 'right'
-    ctx.fillText(`p. ${reel.pages}`, 452, 40)
-    ctx.textAlign = 'left'
+    // Dark gradient overlay (matches GradientPostCard CSS)
+    const grad = ctx.createLinearGradient(0, 0, 0, H)
+    grad.addColorStop(0, 'rgba(0,0,0,0.6)')
+    grad.addColorStop(0.5, 'rgba(0,0,0,0.4)')
+    grad.addColorStop(1, 'rgba(0,0,0,0.8)')
+    ctx.fillStyle = grad
+    ctx.fillRect(0, 0, W, H)
 
     // Title
-    ctx.font = 'bold 24px sans-serif'
-    ctx.fillStyle = '#F8FAFC'
-    let y = wrapCanvasText(ctx, reel.title, 28, 80, 424, 30)
+    ctx.font = 'bold 52px sans-serif'
+    ctx.fillStyle = '#FFFFFF'
+    let y = wrapCanvasText(ctx, reel.title, margin, 160, W - margin * 2, 64)
 
-    // Separator
-    y += 8
-    ctx.strokeStyle = 'rgba(255,255,255,0.15)'
+    // Short separator (matches GradientPostCard)
+    y += 20
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)'
+    ctx.lineWidth = 2
     ctx.beginPath()
-    ctx.moveTo(28, y)
-    ctx.lineTo(isGradient ? 92 : 452, y)
+    ctx.moveTo(margin, y)
+    ctx.lineTo(margin + 160, y)
     ctx.stroke()
-    y += 16
+    y += 32
 
     // Body
-    ctx.font = '15px sans-serif'
-    ctx.fillStyle = '#94A3B8'
-    y = wrapCanvasText(ctx, reel.body, 28, y, 424, 22)
+    ctx.font = '32px sans-serif'
+    ctx.fillStyle = 'rgba(255,255,255,0.75)'
+    y = wrapCanvasText(ctx, reel.body, margin, y, W - margin * 2, 44)
 
-    // Keywords
-    y += 16
-    ctx.font = '12px sans-serif'
-    ctx.fillStyle = '#64748B'
-    const kwText = isGradient
-      ? reel.keywords.map((kw) => '#' + kw.replace(/\s+/g, '')).join('  ')
-      : `Keywords: ${reel.keywords.join(', ')}`
-    ctx.fillText(kwText, 28, y)
+    // Keywords as hashtags
+    y += 40
+    ctx.font = '26px sans-serif'
+    ctx.fillStyle = 'rgba(255,255,255,0.5)'
+    const kwText = reel.keywords.map((kw) => '#' + kw.replace(/\s+/g, '')).join('  ')
+    ctx.fillText(kwText, margin, y)
 
+    onProgress?.(100)
     c.toBlob((blob) => {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
