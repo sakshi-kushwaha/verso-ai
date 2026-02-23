@@ -362,7 +362,7 @@ export default function LandingPage() {
         <div className="local-ai-card reveal">
           <span className="local-ai-icon">{'\uD83D\uDEE1\uFE0F'}</span>
           <h2>Runs <em>entirely</em> on your machine</h2>
-          <p>Verso is built local-first. No cloud APIs. No data uploads. No internet required. Your confidential documents — medical records, legal contracts, proprietary research — never leave your device.</p>
+          <p>Verso is built local-first. No cloud APIs. No data uploads. No internet required.</p>
           <div className="local-pills">
             <div className="local-pill"><span>{'\u2705'}</span> Zero cloud dependency</div>
             <div className="local-pill"><span>{'\uD83D\uDD12'}</span> Complete data privacy</div>
@@ -379,7 +379,7 @@ export default function LandingPage() {
           <div>
             <div className="section-label">The Algorithm</div>
             <h2 className="section-title">We don&rsquo;t ask what you like. We learn from what you do.</h2>
-            <p className="section-desc">New users land on a feed of 150+ pre-loaded bites across 11 subjects. As you scroll, skip, bookmark, and listen — Verso&rsquo;s algorithm learns your preferences in real-time.</p>
+            <p className="section-desc">New users land on a feed of 80+ pre-loaded bites. As you scroll, skip, bookmark, and listen — Verso&rsquo;s algorithm learns your preferences in real-time.</p>
           </div>
           <div className="algo-visual">
             <div className="algo-step"><div className="algo-step-num">1</div><div className="algo-step-text"><strong>You scroll bites</strong> — science, history, business, medicine, tech...</div></div>
@@ -390,16 +390,6 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
-
-      {/* ═══ FOOTER ═══ */}
-      <footer className="landing-footer">
-        <div className="logo">
-          <div className="logo-icon"><VersoLogo id="vg4" size={24} /></div>
-          <div className="logo-text">Verso <span>AI</span></div>
-        </div>
-        <p>100% offline. 100% private.</p>
-      </footer>
-
     </div>
   )
 }
