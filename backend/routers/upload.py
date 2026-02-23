@@ -186,6 +186,45 @@ def get_or_generate_summary(upload_id: int, user: dict = Depends(get_current_use
     return {"summary": summary, "generated": True}
 
 
+@router.delete("/upload/{upload_id}")
+def delete_upload(upload_id: int, user: dict = Depends(get_current_user)):
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id FROM uploads WHERE id = ? AND user_id = ?", (upload_id, user["id"])
+    ).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "Upload not found")
+
+    # Get reel IDs for bookmark + video cleanup
+    reel_ids = [r["id"] for r in conn.execute(
+        "SELECT id FROM reels WHERE upload_id = ?", (upload_id,)
+    ).fetchall()]
+
+    # Delete related data (order matters for foreign key references)
+    if reel_ids:
+        placeholders = ",".join("?" * len(reel_ids))
+        conn.execute(f"DELETE FROM bookmarks WHERE reel_id IN ({placeholders})", reel_ids)
+    conn.execute("DELETE FROM bookmarks WHERE flashcard_id IN (SELECT id FROM flashcards WHERE upload_id = ?)", (upload_id,))
+    conn.execute("DELETE FROM flashcards WHERE upload_id = ?", (upload_id,))
+    conn.execute("DELETE FROM reels WHERE upload_id = ?", (upload_id,))
+    conn.execute("DELETE FROM uploads WHERE id = ?", (upload_id,))
+    conn.commit()
+    conn.close()
+
+    # Clean up cached video files
+    from config import VIDEO_CACHE_DIR
+    for reel_id in reel_ids:
+        video_file = VIDEO_CACHE_DIR / f"reel_{reel_id}.mp4"
+        if video_file.exists():
+            try:
+                video_file.unlink()
+            except OSError:
+                pass
+
+    return {"message": "Document deleted"}
+
+
 @router.websocket("/ws/upload/{upload_id}")
 async def ws_upload_progress(ws: WebSocket, upload_id: int):
     await ws.accept()

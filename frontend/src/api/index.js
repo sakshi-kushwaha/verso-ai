@@ -203,6 +203,11 @@ export async function getUploads() {
   return data
 }
 
+export async function deleteUpload(uploadId) {
+  const { data } = await api.delete(`/upload/${uploadId}`)
+  return data
+}
+
 // Chat Q&A
 export async function askChat(uploadId, question) {
   const { data } = await api.post('/chat/ask', {
