@@ -206,6 +206,10 @@ def init_db():
     if "locked_until" not in user_cols:
         conn.execute("ALTER TABLE users ADD COLUMN locked_until TEXT")
 
+    # Migration: add filepath to uploads (for pipeline resume after restart)
+    if "filepath" not in upload_cols:
+        conn.execute("ALTER TABLE uploads ADD COLUMN filepath TEXT")
+
     # Backfill: fix gold standard reels to appear in Explore tab
     conn.execute("UPDATE uploads SET doc_type = 'seed' WHERE filename = '__gold_standard__' AND (doc_type IS NULL OR doc_type != 'seed')")
 

@@ -73,8 +73,8 @@ async def upload_document(file: UploadFile = File(...), user: dict = Depends(get
 
     conn = get_db()
     cursor = conn.execute(
-        "INSERT INTO uploads (user_id, filename, status) VALUES (?, ?, 'processing')",
-        (user["id"], file.filename),
+        "INSERT INTO uploads (user_id, filename, status, filepath) VALUES (?, ?, 'processing', ?)",
+        (user["id"], file.filename, temp_path),
     )
     upload_id = cursor.lastrowid
     conn.commit()

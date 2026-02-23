@@ -60,6 +60,12 @@ export default function UploadTracker() {
   useEffect(() => {
     if (!bgUpload || bgUpload.status === 'done') return
 
+    // If already in terminal state, auto-clear
+    if (bgUpload.status === 'error' || bgUpload.status === 'partial') {
+      setTimeout(() => clearBgUpload(), 4000)
+      return
+    }
+
     const uploadId = bgUpload.id
 
     const handleUpdate = (progress, stage, status) => {
@@ -78,6 +84,15 @@ export default function UploadTracker() {
       if (wsRef.current) { try { wsRef.current.close() } catch {} wsRef.current = null }
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
     }
+
+    // Immediately check current status — catches cases where pipeline died between polls
+    getUploadStatus(uploadId)
+      .then((s) => {
+        if (s.status === 'error' || s.status === 'partial' || s.status === 'done') {
+          handleUpdate(s.progress ?? 0, s.stage || 'uploading', s.status)
+        }
+      })
+      .catch(() => {})
 
     // Try WebSocket first
     const token = getAuthToken()
@@ -116,7 +131,7 @@ export default function UploadTracker() {
     }
 
     return cleanup
-  }, [bgUpload?.id])
+  }, [bgUpload?.id, bgUpload?.status])
 
   const startPolling = (uploadId, handleUpdate) => {
     pollRef.current = setInterval(async () => {

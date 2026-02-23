@@ -43,6 +43,57 @@ def process_upload(upload_id: int, filepath: str, user_id: int = 1):
     thread.start()
 
 
+def resume_orphaned_uploads():
+    """Resume uploads stuck in 'processing' after a server restart.
+
+    Called once during server startup. For each orphaned upload:
+    - If the temp file still exists → restart the pipeline from scratch
+    - If reels already exist → mark as partial
+    - Otherwise → mark as error
+    """
+    conn = get_db()
+    orphans = conn.execute(
+        "SELECT id, filepath, user_id FROM uploads WHERE status = 'processing'"
+    ).fetchall()
+    if not orphans:
+        conn.close()
+        return
+
+    for row in orphans:
+        uid, filepath, user_id = row["id"], row["filepath"], row["user_id"]
+        reel_count = conn.execute("SELECT COUNT(*) FROM reels WHERE upload_id = ?", (uid,)).fetchone()[0]
+
+        if filepath and os.path.exists(filepath):
+            # Temp file exists — restart pipeline from scratch
+            log.info("Resuming orphaned upload %s from scratch (file: %s)", uid, filepath)
+            # Reset progress so frontend sees it restart
+            conn.execute(
+                "UPDATE uploads SET progress = 0, stage = 'uploading', error_message = NULL WHERE id = ?",
+                (uid,),
+            )
+            # Clean up any partial reels/flashcards from the interrupted run
+            conn.execute("DELETE FROM flashcards WHERE upload_id = ?", (uid,))
+            conn.execute("DELETE FROM reels WHERE upload_id = ?", (uid,))
+            conn.commit()
+            process_upload(uid, filepath, user_id or 1)
+        elif reel_count > 0:
+            log.info("Orphaned upload %s has %d reels, marking as partial", uid, reel_count)
+            conn.execute(
+                "UPDATE uploads SET status = 'partial', error_message = ? WHERE id = ?",
+                (f"Generated {reel_count} reels before interruption. Partial reels are available.", uid),
+            )
+            conn.commit()
+        else:
+            log.info("Orphaned upload %s has no file or reels, marking as error", uid)
+            conn.execute(
+                "UPDATE uploads SET status = 'error', error_message = 'Processing was interrupted. Please re-upload.' WHERE id = ?",
+                (uid,),
+            )
+            conn.commit()
+
+    conn.close()
+
+
 def _get_user_prefs(user_id: int) -> dict:
     """Fetch user preferences for personalized reel generation."""
     conn = get_db()
@@ -535,6 +586,14 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
                 log.error("Failed to update error status for upload %s", upload_id)
 
     finally:
+        # Clear filepath in DB and delete temp file — pipeline completed (success or error)
+        try:
+            conn = get_db()
+            conn.execute("UPDATE uploads SET filepath = NULL WHERE id = ?", (upload_id,))
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
         try:
             os.unlink(filepath)
         except OSError:
