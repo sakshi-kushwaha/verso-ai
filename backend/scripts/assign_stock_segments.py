@@ -15,10 +15,18 @@ from typing import List, Dict, Set, DefaultDict
 from collections import defaultdict
 import os
 
-from database import get_db, init_db
-from video import load_video_catalog, get_clips_for_category
-from config import VIDEO_CACHE_DIR
-from bg_images import _resolve_category
+# Support running as `python -m scripts.assign_stock_segments` (cwd=backend)
+# and as `python -m backend.scripts.assign_stock_segments` (cwd=repo root)
+try:
+    from database import get_db, init_db  # type: ignore
+    from video import load_video_catalog, get_clips_for_category  # type: ignore
+    from config import VIDEO_CACHE_DIR  # type: ignore
+    from bg_images import _resolve_category  # type: ignore
+except ImportError:  # pragma: no cover
+    from backend.database import get_db, init_db
+    from backend.video import load_video_catalog, get_clips_for_category
+    from backend.config import VIDEO_CACHE_DIR
+    from backend.bg_images import _resolve_category
 
 
 def _tokenize(text: str) -> List[str]:
