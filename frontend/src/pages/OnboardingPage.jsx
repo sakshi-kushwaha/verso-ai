@@ -7,7 +7,7 @@ import './OnboardingPage.css'
 const ROLES = [
   { id: 'student', emoji: '\uD83C\uDF93', label: 'Student', desc: 'Studying for exams or courses' },
   { id: 'professional', emoji: '\uD83D\uDCBC', label: 'Professional', desc: 'Learning for work or career' },
-  { id: 'reader', emoji: '\uD83D\uDCDA', label: 'Reading Lover', desc: 'Exploring topics out of curiosity' },
+  { id: 'reader', emoji: '\uD83D\uDCDA', label: 'Explorer', desc: 'Exploring topics out of curiosity' },
 ]
 
 export default function OnboardingPage() {
