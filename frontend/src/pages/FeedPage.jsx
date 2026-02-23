@@ -79,15 +79,18 @@ async function downloadBite(reel, isGradient = false, onProgress = null) {
     const margin = 60
 
     // Load the same background image used in the feed card
+    // Fetch as blob to avoid CORS issues with canvas tainting
     const baseURL = api.defaults.baseURL || ''
     const bgUrl = reel.bgImage
       || `${baseURL}/bg-images/general/${String((reel.id % 10) + 1).padStart(2, '0')}.jpg`
 
     let bgLoaded = false
     try {
+      const resp = await fetch(bgUrl)
+      const blob = await resp.blob()
+      const bmpUrl = URL.createObjectURL(blob)
       const img = new window.Image()
-      img.crossOrigin = 'anonymous'
-      img.src = bgUrl
+      img.src = bmpUrl
       await new Promise((resolve, reject) => {
         img.onload = resolve
         img.onerror = reject
@@ -97,6 +100,7 @@ async function downloadBite(reel, isGradient = false, onProgress = null) {
       const scale = Math.max(W / img.width, H / img.height)
       const iw = img.width * scale, ih = img.height * scale
       ctx.drawImage(img, (W - iw) / 2, (H - ih) / 2, iw, ih)
+      URL.revokeObjectURL(bmpUrl)
       bgLoaded = true
     } catch {
       // Fallback: solid dark background
