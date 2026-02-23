@@ -126,6 +126,18 @@ source "${VENV_DIR}/bin/activate"
 pip install --upgrade -r "${APP_DIR}/backend/requirements.txt" --quiet
 echo "  Done"
 
+# 6. Deployment diagnostics
+echo ""
+echo "[6] Deployment diagnostics..."
+echo "  Git commit: $(cd ${APP_DIR} && git rev-parse --short HEAD) ($(cd ${APP_DIR} && git log -1 --format='%s'))"
+if [ -f "${APP_DIR}/backend/static/index.html" ]; then
+    ASSET_HASH=$(grep -oP 'index-[A-Za-z0-9]+\.js' "${APP_DIR}/backend/static/index.html" | head -1)
+    echo "  Frontend asset: ${ASSET_HASH:-unknown}"
+    echo "  Static dir last modified: $(stat -c '%y' ${APP_DIR}/backend/static/index.html 2>/dev/null || stat -f '%Sm' ${APP_DIR}/backend/static/index.html 2>/dev/null)"
+else
+    echo "  WARNING: backend/static/index.html not found — frontend may not be deployed"
+fi
+
 # Summary
 echo ""
 echo "========================================="

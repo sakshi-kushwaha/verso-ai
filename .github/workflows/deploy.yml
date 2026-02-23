@@ -38,16 +38,6 @@ jobs:
             cp -r /tmp/stock-videos-backup backend/static/stock-videos
           fi
 
-      - name: Upload built static files to EC2
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: backend/static/
-          target: /root/verso-ai/
-          overwrite: true
-
       - name: Set up SSH key
         run: |
           mkdir -p ~/.ssh
@@ -62,6 +52,16 @@ jobs:
             git pull origin main
             bash ec2-setup.sh --deploy
           ENDSSH
+
+      - name: Upload built static files to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: backend/static/
+          target: /root/verso-ai/
+          overwrite: true
 
       - name: Restart server on EC2
         run: |
