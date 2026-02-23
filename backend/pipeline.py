@@ -14,6 +14,7 @@ from llm import (
     generate_doc_summary,
     generate_reels, generate_reel_script,
     extract_topics, gather_topic_content, generate_topic_reel,
+    generate_topic_reel_with_clips,
     OllamaUnavailableError,
 )
 from bg_images import assign_images, _resolve_category
@@ -30,8 +31,7 @@ BATCH_SIZE = 3
 PIPELINE_TIMEOUT = _PIPELINE_TIMEOUT  # from config, default 20 min
 
 # Thread pool for overlapping TTS+ffmpeg with LLM calls
-_video_executor = ThreadPoolExecutor(max_workers=1)
-
+_video_executor = ThreadPoolExecutor(max_workers=2)
 
 # Set by main.py lifespan — the running asyncio event loop
 _event_loop: asyncio.AbstractEventLoop | None = None
@@ -41,57 +41,6 @@ def process_upload(upload_id: int, filepath: str, user_id: int = 1):
     """Run the full pipeline in a background thread."""
     thread = threading.Thread(target=_run_pipeline, args=(upload_id, filepath, user_id), daemon=True)
     thread.start()
-
-
-def resume_orphaned_uploads():
-    """Resume uploads stuck in 'processing' after a server restart.
-
-    Called once during server startup. For each orphaned upload:
-    - If the temp file still exists → restart the pipeline from scratch
-    - If reels already exist → mark as partial
-    - Otherwise → mark as error
-    """
-    conn = get_db()
-    orphans = conn.execute(
-        "SELECT id, filepath, user_id FROM uploads WHERE status = 'processing'"
-    ).fetchall()
-    if not orphans:
-        conn.close()
-        return
-
-    for row in orphans:
-        uid, filepath, user_id = row["id"], row["filepath"], row["user_id"]
-        reel_count = conn.execute("SELECT COUNT(*) FROM reels WHERE upload_id = ?", (uid,)).fetchone()[0]
-
-        if filepath and os.path.exists(filepath):
-            # Temp file exists — restart pipeline from scratch
-            log.info("Resuming orphaned upload %s from scratch (file: %s)", uid, filepath)
-            # Reset progress so frontend sees it restart
-            conn.execute(
-                "UPDATE uploads SET progress = 0, stage = 'uploading', error_message = NULL WHERE id = ?",
-                (uid,),
-            )
-            # Clean up any partial reels/flashcards from the interrupted run
-            conn.execute("DELETE FROM flashcards WHERE upload_id = ?", (uid,))
-            conn.execute("DELETE FROM reels WHERE upload_id = ?", (uid,))
-            conn.commit()
-            process_upload(uid, filepath, user_id or 1)
-        elif reel_count > 0:
-            log.info("Orphaned upload %s has %d reels, marking as done", uid, reel_count)
-            conn.execute(
-                "UPDATE uploads SET status = 'done', error_message = NULL WHERE id = ?",
-                (uid,),
-            )
-            conn.commit()
-        else:
-            log.info("Orphaned upload %s has no file or reels, marking as error", uid)
-            conn.execute(
-                "UPDATE uploads SET status = 'error', error_message = 'Processing was interrupted. Please re-upload.' WHERE id = ?",
-                (uid,),
-            )
-            conn.commit()
-
-    conn.close()
 
 
 def _get_user_prefs(user_id: int) -> dict:
@@ -141,13 +90,14 @@ def _pick_stock_video(reel_category: str, upload_category: str) -> str | None:
 
 
 def _try_compose_video(reel_id: int, reel: dict, subject_category: str):
-    """Compose a video for a reel. Picks clips programmatically (no LLM call) then falls back to single-clip."""
+    """Try to compose a video for a reel. Tries multi-clip first, falls back to single-clip."""
     cat = _resolve_category(reel.get("category", ""), subject_category)
 
     # Generate TTS from narration — voice rotates by reel_id for variety
     tts_path = None
     narration = reel.get("narration", reel.get("summary", ""))
     if narration:
+        # Strip markdown formatting so TTS doesn't read "asterisk" etc.
         import re
         narration = re.sub(r'\*+', '', narration).strip()
         try:
@@ -155,27 +105,31 @@ def _try_compose_video(reel_id: int, reel: dict, subject_category: str):
         except Exception:
             log.debug("TTS failed for reel %d, composing without narration", reel_id)
 
-    # Try multi-clip composition — pick clips programmatically (no LLM needed)
+    # Try multi-clip composition first
     try:
         clips = get_clips_for_category(cat)
         if clips and len(clips) >= 2:
-            random.shuffle(clips)
-            num_segments = min(3, len(clips))
-            segments = [{"clip": clips[i]["file"], "duration": 5} for i in range(num_segments)]
-            video_path = compose_multi_clip_reel(
-                reel_id=reel_id,
-                title=reel.get("title", ""),
-                narration=narration or "",
-                segments=segments,
+            script = generate_reel_script(
+                text=reel.get("summary", ""),
                 category=cat,
-                tts_audio_path=str(tts_path) if tts_path else None,
+                clips=clips,
+                narration=narration or "",
             )
-            conn = get_db()
-            conn.execute("UPDATE reels SET video_path = ? WHERE id = ?", (video_path, reel_id))
-            conn.commit()
-            conn.close()
-            log.info("Composed multi-clip video for reel %d (auto-picked): %s", reel_id, video_path)
-            return
+            if script and script.get("segments"):
+                video_path = compose_multi_clip_reel(
+                    reel_id=reel_id,
+                    title=script.get("title", reel.get("title", "")),
+                    narration=script.get("narration", narration or ""),
+                    segments=script["segments"],
+                    category=cat,
+                    tts_audio_path=str(tts_path) if tts_path else None,
+                )
+                conn = get_db()
+                conn.execute("UPDATE reels SET video_path = ? WHERE id = ?", (video_path, reel_id))
+                conn.commit()
+                conn.close()
+                log.info("Composed multi-clip video for reel %d: %s", reel_id, video_path)
+                return
     except Exception as e:
         log.warning("Multi-clip composition failed for reel %d: %s — falling back to single-clip", reel_id, e)
 
@@ -209,20 +163,11 @@ def _compose_video_only(upload_id: int, reel_id: int, reel: dict, subject_catego
 
     Reel-ready notification is sent earlier (right after DB save) so the
     frontend can display reels in real-time before video compositing finishes.
-    After video is composed, a video_ready event is sent so the frontend
-    can switch from the image card to the video player.
     """
     if segments:
         _try_compose_video_with_segments(reel_id, reel, subject_category, segments)
     else:
         _try_compose_video(reel_id, reel, subject_category)
-
-    # Notify frontend that video is now available
-    conn = get_db()
-    row = conn.execute("SELECT video_path FROM reels WHERE id = ?", (reel_id,)).fetchone()
-    conn.close()
-    if row and row["video_path"]:
-        _notify_video_ready(upload_id, reel_id, row["video_path"])
 
 
 # Keep old name as alias for backward compatibility
@@ -353,9 +298,9 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
         _update_progress(upload_id, 20, "extracting")
 
         # Decide number of reels based on document length
-        # ~1 reel per 3 pages: 10 pages → 3, 26 pages → 8, 50 pages → 16
-        # Each reel takes ~2-3 min on CPU, so keep count practical
-        num_topics = min(max(3, int(len(pages) * 0.3)), 100)
+        # ~1 reel per 2.5 pages: 10 pages → 4, 100 pages → 40, 250 pages → 100
+        # Batched extraction (max 10/call) handles large counts safely
+        num_topics = min(max(3, int(len(pages) * 0.4)), 100)
 
         try:
             topics = extract_topics(full_text, num_topics=num_topics)
@@ -373,6 +318,10 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
         log.info("Upload %s: extracted %d topics — %s",
                  upload_id, len(topics), ", ".join(t["topic"] for t in topics))
 
+        # Pre-fetch clips for the subject category (used by merged LLM call)
+        cat = _resolve_category(subject_category, subject_category)
+        available_clips = get_clips_for_category(cat)
+
         reels_completed = 0
         reels_failed = 0
         ollama_down = False
@@ -384,22 +333,32 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
             if elapsed > PIPELINE_TIMEOUT:
                 log.warning("Pipeline timeout after %.0fs at topic %d/%d for upload %s",
                             elapsed, i + 1, len(topics), upload_id)
+                if reels_completed > 0:
+                    _update_status(
+                        upload_id, "partial",
+                        f"Generated {reels_completed}/{len(topics)} reels before timeout. "
+                        "Partial reels are available.",
+                    )
+                else:
+                    _update_status(upload_id, "error", "Processing timed out. Please try again later.")
                 break
 
             topic_progress = 20 + int(((i + 1) / len(topics)) * 50)
             _update_progress(upload_id, topic_progress, "generating")
 
-            # Gather relevant content for this topic (keep short for fast LLM)
-            topic_text = gather_topic_content(topic, full_text, max_chars=1500)
+            # Gather relevant content for this topic
+            topic_text = gather_topic_content(topic, full_text)
             log.info("Topic %d/%d: %r (%d chars)", i + 1, len(topics), topic["topic"], len(topic_text))
 
-            # Use generate_topic_reel (no clip list in prompt = much faster on CPU)
-            # Video clips are picked programmatically in _try_compose_video
+            # Single merged LLM call: generates reel content + picks clips
             try:
-                result = generate_topic_reel(
-                    topic["topic"], topic_text, doc_type, prefs,
-                    category=subject_category,
-                )
+                if available_clips and len(available_clips) >= 2:
+                    result = generate_topic_reel_with_clips(
+                        topic["topic"], topic_text, doc_type, prefs,
+                        category=subject_category, clips=available_clips,
+                    )
+                else:
+                    result = generate_topic_reel(topic["topic"], topic_text, doc_type, prefs, category=subject_category)
             except OllamaUnavailableError:
                 log.error("Ollama went down at topic %d/%d for upload %s", i + 1, len(topics), upload_id)
                 ollama_down = True
@@ -415,15 +374,15 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
 
             topic_reels = [r for r in result.get("reels", []) if r.get("title") != "Summary"]
             if not topic_reels:
-                log.warning("Topic %r returned no valid reels, skipping", topic["topic"])
+                log.warning("All reels for topic %r were garbage (title='Summary'), skipping", topic["topic"])
                 reels_failed += 1
                 continue
-
             bg_paths = assign_images(topic_reels, subject_category)
             saved_reels = []
             for reel, bg_image in zip(topic_reels, bg_paths):
-                reel_id = _save_reel(upload_id, reel, i + 1, bg_image, source_text=topic_text[:5000])
+                reel_id = _save_reel(upload_id, reel, i + 1, bg_image, source_text=topic_text)
                 saved_reels.append((reel_id, reel))
+                # Notify frontend immediately so reels appear in real-time
                 _notify_reel_ready(upload_id, reel_id)
 
             for fc in result.get("flashcards", []):
@@ -433,12 +392,13 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
             # Submit video composition to thread pool (overlaps with next LLM call)
             _update_progress(upload_id, topic_progress + 2, "composing")
             for reel_id, reel in saved_reels:
+                segments = reel.get("segments")
                 fut = _video_executor.submit(
-                    _compose_video_only, upload_id, reel_id, reel, subject_category, None,
+                    _compose_video_only, upload_id, reel_id, reel, subject_category, segments,
                 )
                 pending_futures.append(fut)
 
-            reels_completed += len(topic_reels)
+            reels_completed += 1
 
         # Wait for all video composition futures to finish
         for fut in pending_futures:
@@ -447,17 +407,29 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
             except Exception as e:
                 log.warning("Video future failed: %s", e)
 
-        # Handle failures — only error if zero reels were generated
-        if reels_completed == 0:
-            if ollama_down:
-                _update_status(upload_id, "error", "Ollama is unavailable. Please try again later.")
+        # Handle failures
+        if ollama_down:
+            if reels_completed > 0:
+                _update_status(
+                    upload_id, "partial",
+                    f"Generated {reels_completed}/{len(topics)} reels before Ollama became unavailable. "
+                    "Partial reels are available. Re-upload to retry.",
+                )
+                _update_progress(upload_id, 70, "partial")
             else:
-                _update_status(upload_id, "error", "All topic reels failed. Please try again later.")
+                _update_status(upload_id, "error", "Ollama is unavailable. Please try again later.")
             return
 
-        if reels_failed:
-            log.info("Upload %s: %d/%d topics succeeded, %d failed",
-                     upload_id, reels_completed, len(topics), reels_failed)
+        if reels_failed and reels_completed > 0:
+            log.info("Upload %s: %d/%d topics succeeded", upload_id, reels_completed, len(topics))
+            _update_status(
+                upload_id, "partial",
+                f"Generated {reels_completed}/{len(topics)} reels. "
+                f"{reels_failed} topics failed and were skipped.",
+            )
+        elif reels_failed and reels_completed == 0:
+            _update_status(upload_id, "error", "All topic reels failed. Please try again later.")
+            return
 
         # Step 4: Mark as done immediately, defer embedding + summary
         _update_progress(upload_id, 95, "done")
@@ -466,6 +438,7 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
         # Deferred: doc summary + embedding in background
         def _deferred_tasks():
             try:
+                # Generate doc summary (deferred from before reel loop)
                 _update_progress(upload_id, 96, "summarizing")
                 doc_summary = generate_doc_summary(full_text)
                 if doc_summary:
@@ -503,14 +476,6 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
                 log.error("Failed to update error status for upload %s", upload_id)
 
     finally:
-        # Clear filepath in DB and delete temp file — pipeline completed (success or error)
-        try:
-            conn = get_db()
-            conn.execute("UPDATE uploads SET filepath = NULL WHERE id = ?", (upload_id,))
-            conn.commit()
-            conn.close()
-        except Exception:
-            pass
         try:
             os.unlink(filepath)
         except OSError:
@@ -535,20 +500,6 @@ def _notify_reel_ready(upload_id: int, reel_id: int):
         )
     except Exception:
         log.debug("WS reel_ready failed for upload %s reel %s", upload_id, reel_id)
-
-
-def _notify_video_ready(upload_id: int, reel_id: int, video_path: str):
-    """Push a video_ready event so the frontend can switch from image card to video player."""
-    loop = _event_loop
-    if loop is None or loop.is_closed():
-        return
-    try:
-        asyncio.run_coroutine_threadsafe(
-            manager.broadcast_video_ready(upload_id, reel_id, video_path),
-            loop,
-        )
-    except Exception:
-        log.debug("WS video_ready failed for upload %s reel %s", upload_id, reel_id)
 
 
 def _notify_flashcard_ready(upload_id: int, fc_id: int, fc: dict):
@@ -652,14 +603,6 @@ def _save_flashcard(upload_id: int, fc: dict) -> int:
 
 
 def _save_doc_summary(upload_id: int, summary: str):
-    import re
-    # Strip markdown headers/formatting that the LLM sometimes adds
-    summary = re.sub(r'^#{1,6}\s+.*\n?', '', summary, flags=re.MULTILINE).strip()
-    summary = re.sub(r'\*{1,2}([^*]+)\*{1,2}', r'\1', summary)  # strip bold/italic
-    # Remove "Summary:" or "Summary\n" prefix the LLM echoes from the prompt
-    summary = re.sub(r'^summary\s*:?\s*\n*', '', summary, flags=re.IGNORECASE).strip()
-    # Collapse 3+ newlines to 2
-    summary = re.sub(r'\n{3,}', '\n\n', summary)
     conn = get_db()
     conn.execute("UPDATE uploads SET doc_summary = ? WHERE id = ?", (summary, upload_id))
     conn.commit()
