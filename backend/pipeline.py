@@ -298,7 +298,8 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
         _update_progress(upload_id, 20, "extracting")
 
         # Decide number of reels based on document length
-        # ~1 reel per 2.5 pages: 10 pages → 4, 100 pages → 40, 700 pages → 100
+        # ~1 reel per 2.5 pages: 10 pages → 4, 100 pages → 40, 250 pages → 100
+        # Batched extraction (max 10/call) handles large counts safely
         num_topics = min(max(3, int(len(pages) * 0.4)), 100)
 
         try:

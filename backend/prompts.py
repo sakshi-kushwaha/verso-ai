@@ -277,15 +277,16 @@ Relevant text about "{topic}":
 
 JSON:"""
 
-DOC_SUMMARY_PROMPT = """You are a study assistant. Read the document text below and write a short summary.
+DOC_SUMMARY_PROMPT = """You are a study assistant. Read the document text below and write a precise, thorough summary that fully explains the topic.
 
 Rules:
-1. Write exactly 3-5 sentences. No more, no less.
-2. Cover the main topic and key takeaways only.
+1. Cover all the major topics, concepts, and key details from the document.
+2. Be as detailed as needed — use as many sentences as required to explain the topic fully.
 3. Write in plain prose — no bullet points, no headers, no numbered lists.
 4. Write at a level a student can understand.
-5. Do NOT start with "this document" or "this text". Start directly with the subject.
-6. Return ONLY the summary text. No preamble, no labels.
+5. Use natural phrasing — no abbreviations, no parentheses, no special characters.
+6. Do NOT start with "this document" or "this text". Start directly with the subject.
+7. Return ONLY the summary text. No preamble, no labels.
 
 Document text:
 {text}

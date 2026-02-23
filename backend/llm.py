@@ -144,7 +144,8 @@ def classification_llm_call(prompt: str, timeout: float = CLASSIFICATION_TIMEOUT
 
 
 def reel_llm_call(prompt: str, timeout: float = REEL_LLM_TIMEOUT, system: str = None,
-                   num_predict: int = 600, json_mode: bool = True) -> str:
+                   num_predict: int = 600, json_mode: bool = True,
+                   num_ctx: int = 4096) -> str:
     """LLM call using the reel model. JSON mode on by default."""
     payload = {
         "model": REEL_MODEL,
@@ -152,7 +153,7 @@ def reel_llm_call(prompt: str, timeout: float = REEL_LLM_TIMEOUT, system: str = 
         "stream": False,
         "options": {
             "temperature": 0.3,
-            "num_ctx": 4096,
+            "num_ctx": num_ctx,
             "num_predict": num_predict,
             "repeat_penalty": 1.1,
         },
@@ -267,7 +268,7 @@ def generate_doc_summary(full_text: str) -> str | None:
     """
     prompt = DOC_SUMMARY_PROMPT.format(text=full_text[:6000])
     try:
-        result = reel_llm_call(prompt, timeout=120.0, num_predict=300, json_mode=False)
+        result = reel_llm_call(prompt, timeout=180.0, num_predict=600, json_mode=False)
         summary = result.strip()
         if summary and len(summary) > 50 and len(summary) < 3000:
             return summary
@@ -393,61 +394,93 @@ def extract_topics(full_text: str, num_topics: int = 5) -> list[dict]:
     """Extract key topics from document text using LLM.
 
     Returns list of {"topic": "...", "keywords": "..."} dicts.
-    Retries once if the LLM returns significantly fewer topics than requested.
+    For large documents, batches extraction into multiple LLM calls
+    since the 1.5b model struggles with 20+ topics in one shot.
     """
-    sampled = _sample_document(full_text, max_chars=6000)
+    # Cap per-call topics — small models can't reliably produce 20+ in valid JSON
+    MAX_PER_CALL = 10
 
-    def _do_extract(n: int, sample_text: str) -> list[dict]:
-        prompt = TOPIC_EXTRACTION_PROMPT.format(
-            text=sample_text,
-            num_topics=n,
-        )
-        # Scale num_predict with topic count (each topic needs ~30 tokens)
-        predict = max(400, n * 50)
-        # Scale timeout: at ~4 tok/s on CPU, 5000 tokens needs ~20 min
-        timeout = max(120.0, predict / 3.0)
-        try:
-            result = reel_llm_call(prompt, timeout=timeout, num_predict=predict)
-        except (OllamaUnavailableError, httpx.TimeoutException):
-            log.warning("Topic extraction failed — LLM unavailable (timeout=%.0fs, predict=%d)", timeout, predict)
-            return []
+    if num_topics <= MAX_PER_CALL:
+        return _extract_topics_single(full_text, num_topics)
 
-        parsed = None
-        try:
-            parsed = json.loads(result)
-        except json.JSONDecodeError:
-            match = re.search(r"\{[\s\S]*\}", result)
-            if match:
-                try:
-                    parsed = json.loads(match.group())
-                except json.JSONDecodeError:
-                    pass
+    # Batch: split into multiple extraction calls with different text samples
+    all_topics = []
+    seen_names = set()
+    remaining = num_topics
+    batch_num = 0
 
-        if not parsed or "topics" not in parsed:
-            log.warning("Topic extraction returned invalid JSON")
-            return []
+    while remaining > 0 and batch_num < 5:
+        batch_size = min(MAX_PER_CALL, remaining)
+        # Each batch samples a different region of the document
+        offset_frac = batch_num / max(1, (num_topics // MAX_PER_CALL))
+        sample = _sample_document_region(full_text, max_chars=8000, offset_frac=offset_frac)
 
-        topics = []
-        for t in parsed["topics"]:
-            if isinstance(t, dict) and "topic" in t:
-                topics.append({
-                    "topic": str(t["topic"])[:100],
-                    "keywords": str(t.get("keywords", "")),
-                })
-        return topics[:n]
+        batch_topics = _extract_topics_single(sample, batch_size)
 
-    topics = _do_extract(num_topics, sampled)
+        for t in batch_topics:
+            name_lower = t["topic"].lower()
+            if name_lower not in seen_names:
+                seen_names.add(name_lower)
+                all_topics.append(t)
+                remaining -= 1
 
-    # If we got significantly fewer topics than requested, retry with a larger sample
-    if num_topics > 5 and len(topics) < num_topics * 0.5:
-        log.warning("Got only %d/%d topics, retrying with larger sample", len(topics), num_topics)
-        bigger_sample = _sample_document(full_text, max_chars=10000)
-        retry_topics = _do_extract(num_topics, bigger_sample)
-        if len(retry_topics) > len(topics):
-            topics = retry_topics
+        batch_num += 1
+        if not batch_topics:
+            break  # LLM isn't producing results, stop
 
-    log.info("Extracted %d topics from document (requested %d)", len(topics), num_topics)
-    return topics
+    log.info("Extracted %d topics in %d batches (requested %d)", len(all_topics), batch_num, num_topics)
+    return all_topics
+
+
+def _sample_document_region(full_text: str, max_chars: int = 8000, offset_frac: float = 0.0) -> str:
+    """Sample a region of the document based on offset_frac (0.0 = start, 1.0 = end)."""
+    if len(full_text) <= max_chars:
+        return full_text
+    start = int((len(full_text) - max_chars) * min(offset_frac, 1.0))
+    return full_text[start:start + max_chars]
+
+
+def _extract_topics_single(text: str, num_topics: int) -> list[dict]:
+    """Extract topics in a single LLM call (max ~10 topics)."""
+    sampled = _sample_document(text, max_chars=8000)
+
+    prompt = TOPIC_EXTRACTION_PROMPT.format(
+        text=sampled,
+        num_topics=num_topics,
+    )
+    predict = max(400, num_topics * 50)
+    timeout = max(120.0, predict / 3.0)
+    # Context window: ~2000 tokens for 8000 chars of text + prompt + output
+    ctx = 4096 if num_topics <= 5 else 8192
+    try:
+        result = reel_llm_call(prompt, timeout=timeout, num_predict=predict, num_ctx=ctx)
+    except (OllamaUnavailableError, httpx.TimeoutException):
+        log.warning("Topic extraction failed — LLM unavailable (timeout=%.0fs, predict=%d)", timeout, predict)
+        return []
+
+    parsed = None
+    try:
+        parsed = json.loads(result)
+    except json.JSONDecodeError:
+        match = re.search(r"\{[\s\S]*\}", result)
+        if match:
+            try:
+                parsed = json.loads(match.group())
+            except json.JSONDecodeError:
+                pass
+
+    if not parsed or "topics" not in parsed:
+        log.warning("Topic extraction returned invalid JSON")
+        return []
+
+    topics = []
+    for t in parsed["topics"]:
+        if isinstance(t, dict) and "topic" in t:
+            topics.append({
+                "topic": str(t["topic"])[:100],
+                "keywords": str(t.get("keywords", "")),
+            })
+    return topics[:num_topics]
 
 
 def gather_topic_content(topic: dict, full_text: str, max_chars: int = 3000) -> str:
