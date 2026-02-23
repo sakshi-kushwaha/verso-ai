@@ -64,6 +64,9 @@ def pick_segments_for_reel(title: str, summary: str, narration: str, keywords: s
         # last resort: flatten any available clips
         for _, items in catalog.items():
             base.extend(items)
+    if not base:
+        # No catalog available — return empty so pipeline falls back to single-clip
+        return []
     # Build keyword set from content
     text = " ".join([title or "", summary or "", narration or "", keywords or ""]).lower()
     toks = set(_tokenize(text))
@@ -107,9 +110,18 @@ def pick_segments_for_reel(title: str, summary: str, narration: str, keywords: s
                 chosen.append(c)
             if len(chosen) >= max(2, n_segments):
                 break
+    # As a last resort, allow repeats (ignore avoid) to guarantee at least 2
+    if len(chosen) < 2:
+        for c in base:
+            if c not in chosen:
+                chosen.append(c)
+            if len(chosen) >= max(2, n_segments):
+                break
+    if not chosen:
+        return []
 
     # Assign durations roughly evenly (>=2s each) and normalize to total_duration
-    base_dur = max(2.0, total_duration / len(chosen))
+    base_dur = max(2.0, total_duration / max(1, len(chosen)))
     durations = [base_dur for _ in chosen]
     s = sum(durations)
     if s > 0:
