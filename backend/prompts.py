@@ -264,7 +264,7 @@ RULES:
    - Narration MUST be 40-60 words long (~15-20 seconds when spoken). Never shorter than 40 words.
    - End with a memorable takeaway or a reflective thought — not a dry fact.
    - No bullet points, no special symbols, no abbreviations, no parentheses.
-8. Pick exactly {num_segments} different clips from the available list for "segments".
+8. Pick exactly {num_segments} different clips from the available list for "segments". Prefer clips listed near the TOP of the list — they are prioritized for variety. Each reel should use different clips.
 9. Each segment "duration" is in seconds. Durations MUST sum to exactly {total_duration}.
 10. Each duration must be at least 2 seconds.
 11. "overlay" is short text shown on screen (max 8 words per segment).

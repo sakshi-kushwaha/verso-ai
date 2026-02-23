@@ -326,6 +326,7 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
         reels_failed = 0
         ollama_down = False
         pending_futures = []
+        clip_usage: dict[str, int] = {}  # track clip usage across reels for variety
 
         for i, topic in enumerate(topics):
             # Check total pipeline timeout
@@ -351,11 +352,19 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
             log.info("Topic %d/%d: %r (%d chars)", i + 1, len(topics), topic["topic"], len(topic_text))
 
             # Single merged LLM call: generates reel content + picks clips
+            # Sort clips so least-used appear first — guides LLM toward variety
+            if available_clips:
+                sorted_clips = sorted(
+                    available_clips,
+                    key=lambda c: (clip_usage.get(c["file"], 0), random.random()),
+                )
+            else:
+                sorted_clips = []
             try:
-                if available_clips and len(available_clips) >= 2:
+                if sorted_clips and len(sorted_clips) >= 2:
                     result = generate_topic_reel_with_clips(
                         topic["topic"], topic_text, doc_type, prefs,
-                        category=subject_category, clips=available_clips,
+                        category=subject_category, clips=sorted_clips,
                     )
                 else:
                     result = generate_topic_reel(topic["topic"], topic_text, doc_type, prefs, category=subject_category)
@@ -377,6 +386,47 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
                 log.warning("All reels for topic %r were garbage (title='Summary'), skipping", topic["topic"])
                 reels_failed += 1
                 continue
+
+            # Deduplicate clips: swap over-used clips with least-used alternatives
+            if sorted_clips:
+                all_clip_files = [c["file"] for c in sorted_clips]
+                for reel in topic_reels:
+                    segments = reel.get("segments")
+                    if not segments:
+                        continue
+                    max_use = max(1, len(all_clip_files) // max(len(topics), 1))
+                    reel_clip_files = set()
+                    for seg in segments:
+                        clip_file = seg.get("clip", "")
+                        if not clip_file:
+                            continue
+                        reel_clip_files.add(clip_file)
+                        if clip_usage.get(clip_file, 0) >= max_use:
+                            # Find least-used clip not already in this reel
+                            candidates = [
+                                f for f in all_clip_files
+                                if f not in reel_clip_files and clip_usage.get(f, 0) < max_use
+                            ]
+                            if candidates:
+                                replacement = min(candidates, key=lambda f: clip_usage.get(f, 0))
+                                log.info("Clip dedup: swapping %s (used %d) → %s (used %d) for topic %r",
+                                         clip_file, clip_usage.get(clip_file, 0),
+                                         replacement, clip_usage.get(replacement, 0),
+                                         topic["topic"])
+                                reel_clip_files.discard(clip_file)
+                                reel_clip_files.add(replacement)
+                                seg["clip"] = replacement
+
+            # Update clip usage tracking
+            for reel in topic_reels:
+                for seg in reel.get("segments") or []:
+                    clip_file = seg.get("clip", "")
+                    if clip_file:
+                        clip_usage[clip_file] = clip_usage.get(clip_file, 0) + 1
+            if clip_usage:
+                log.info("Clip usage after topic %d: %s", i + 1,
+                         {k: v for k, v in sorted(clip_usage.items(), key=lambda x: -x[1])[:5]})
+
             bg_paths = assign_images(topic_reels, subject_category)
             saved_reels = []
             for reel, bg_image in zip(topic_reels, bg_paths):
