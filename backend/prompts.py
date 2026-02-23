@@ -84,7 +84,7 @@ RULES:
    - Write as if explaining to a curious friend, NOT reading from a textbook.
    - Use contractions: "don't", "isn't", "you're", "it's", "here's".
    - Mix short punchy sentences (5-8 words) with longer explanations (12-18 words).
-   - Start at least one sentence with "Here's the thing", "Think about it", "Now", or "So".
+   - NEVER start with the same phrase twice. Vary your opening — use questions, bold claims, "Imagine...", "Picture this...", "You know what's wild?", "Most people don't realize...", "So here's something cool...", "Think about this...", "Ever wonder...".
    - Use "..." for natural pauses and "—" for pivots.
    - NEVER use passive voice in the first sentence. Start with something engaging.
    - Narration MUST be 40-60 words long (~15-20 seconds when spoken). Never shorter than 40 words.
@@ -145,7 +145,7 @@ FLASHCARD_DIFFICULTY_INSTRUCTIONS = {
 
 REEL_FEW_SHOT = """Example:
 Input: "Photosynthesis is the process by which plants convert light energy into chemical energy. Chlorophyll in the leaves absorbs sunlight. The plant uses CO2 from air and water from soil to produce glucose and oxygen."
-Output: {{"reels":[{{"title":"How Plants Make Food","summary":"Photosynthesis converts light energy into chemical energy using chlorophyll. Plants absorb CO2 and water to produce glucose and oxygen, powering life on Earth.","narration":"Here's the thing about plants — they're basically solar-powered food factories. Chlorophyll in their leaves grabs sunlight... then the plant pulls in carbon dioxide from the air and water from the soil. Mix those together with light energy, and you get glucose for food and oxygen for us to breathe. Without this one reaction, life as we know it simply wouldn't exist.","one_liner":"Remove one leaf reaction and all complex life on Earth collapses.","category":"Biology","keywords":"photosynthesis, chlorophyll, glucose, oxygen"}}],"flashcards":[{{"question":"What are the inputs and outputs of photosynthesis?","answer":"Inputs: light energy, CO2, and water. Outputs: glucose and oxygen."}}]}}"""
+Output: {{"reels":[{{"title":"How Plants Make Food","summary":"Photosynthesis converts light energy into chemical energy using chlorophyll. Plants absorb CO2 and water to produce glucose and oxygen, powering life on Earth.","narration":"You know what's wild? Plants are basically solar-powered food factories. Chlorophyll in their leaves grabs sunlight... then the plant pulls in carbon dioxide from the air and water from the soil. Mix those together with light energy, and you get glucose for food — and oxygen for us to breathe. Without this one reaction, life as we know it simply wouldn't exist.","one_liner":"Remove one leaf reaction and all complex life on Earth collapses.","category":"Biology","keywords":"photosynthesis, chlorophyll, glucose, oxygen"}}],"flashcards":[{{"question":"What are the inputs and outputs of photosynthesis?","answer":"Inputs: light energy, CO2, and water. Outputs: glucose and oxygen."}}]}}"""
 
 # ---------------------------------------------------------------------------
 # System prompt for reel model (critical rules get highest attention here)
@@ -155,11 +155,12 @@ REEL_SYSTEM_PROMPT = """You are Verso, a learning content creator who teaches th
 You are NOT a textbook. You explain like a friend.
 
 CRITICAL RULES YOU MUST FOLLOW:
-1. You MUST use at least 3 contractions (don't, isn't, you're, it's, here's) in every narration.
+1. You MUST use at least 3 contractions (don't, isn't, you're, it's, can't, won't, they're) in every narration.
 2. You MUST use "..." at least once and "—" at least once in every narration.
 3. You must NEVER use these phrases: "is defined as", "refers to the process", "plays a crucial role", "it is important to note", "furthermore", "moreover".
-4. Narration MUST be 40-60 words. Count carefully.
-5. Always output valid JSON with "reels" and "flashcards" arrays."""
+4. NEVER start every narration the same way. Vary your openings — use questions, surprising facts, "Imagine...", "Picture this...", "Most people don't realize...", or jump straight into the topic.
+5. Narration MUST be 40-60 words. Count carefully.
+6. Always output valid JSON with "reels" and "flashcards" arrays."""
 
 # ---------------------------------------------------------------------------
 # Main reel generation prompt
@@ -258,7 +259,7 @@ RULES:
    - Write as if explaining to a curious friend, NOT reading from a textbook.
    - Use contractions: "don't", "isn't", "you're", "it's", "here's".
    - Mix short punchy sentences (5-8 words) with longer explanations (12-18 words).
-   - Start at least one sentence with "Here's the thing", "Think about it", "Now", or "So".
+   - NEVER start with the same phrase twice. Vary your opening — use questions, bold claims, "Imagine...", "Picture this...", "You know what's wild?", "Most people don't realize...", "So here's something cool...", "Think about this...", "Ever wonder...".
    - Use "..." for natural pauses and "—" for pivots.
    - NEVER use passive voice in the first sentence. Start with something engaging.
    - Narration MUST be 40-60 words long (~15-20 seconds when spoken). Never shorter than 40 words.
@@ -316,7 +317,7 @@ RULES:
    – Write as if explaining to a curious friend, NOT reading from a textbook.
    – Use contractions: "don't", "isn't", "you're", "it's", "here's".
    – Mix short punchy sentences (5-8 words) with longer explanations (12-18 words).
-   – Start at least one sentence with "Here's the thing", "Think about", "Now", or "So".
+   – NEVER start with the same phrase twice. Vary your opening — use questions, bold claims, "Imagine...", "Picture this...", "You know what's wild?", "Most people don't realize...", "So here's something cool...", "Think about this...", "Ever wonder...".
    – Use "..." for natural pauses and "—" for pivots. Example: "Water isn't just H2O... it's the molecule that — quite literally — makes life possible."
    – NEVER use passive voice in the first sentence. Start with something that grabs attention.
    – Narration MUST be 40-60 words long (~15-20 seconds when spoken).
