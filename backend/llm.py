@@ -144,8 +144,8 @@ def classification_llm_call(prompt: str, timeout: float = CLASSIFICATION_TIMEOUT
 
 
 def reel_llm_call(prompt: str, timeout: float = REEL_LLM_TIMEOUT, system: str = None,
-                   num_predict: int = 600, json_mode: bool = True,
-                   num_ctx: int = 4096) -> str:
+                   num_predict: int = 400, json_mode: bool = True,
+                   num_ctx: int = 2048) -> str:
     """LLM call using the reel model. JSON mode on by default."""
     payload = {
         "model": REEL_MODEL,
@@ -271,9 +271,9 @@ def generate_doc_summary(full_text: str) -> str | None:
     Uses LLM_MODEL (qwen2.5:3b) in plain text mode — no JSON formatting.
     Returns the summary string, or None if generation fails.
     """
-    prompt = DOC_SUMMARY_PROMPT.format(text=full_text[:6000])
+    prompt = DOC_SUMMARY_PROMPT.format(text=full_text[:4000])
     try:
-        result = reel_llm_call(prompt, timeout=180.0, num_predict=600, json_mode=False)
+        result = reel_llm_call(prompt, timeout=180.0, num_predict=600, json_mode=False, num_ctx=4096)
         summary = result.strip()
         # Strip any markdown the model may have added (TTS reads these aloud)
         summary = re.sub(r'\*+', '', summary)        # **bold** / *italic*
@@ -602,11 +602,12 @@ def generate_topic_reel(topic: str, topic_text: str, doc_type: str, prefs: dict,
     """Generate a single reel + flashcards for one topic.
 
     Returns parsed dict with "reels" and "flashcards" arrays.
+    Optimized for CPU: uses 2048 context, 400 tokens max, shorter text.
     """
     few_shot = get_gold_few_shot(category)
     prompt = TOPIC_REEL_PROMPT.format(
         topic=topic,
-        text=topic_text[:3000],
+        text=topic_text[:1500],
         doc_type=doc_type,
         doc_type_instruction=DOC_TYPE_INSTRUCTIONS.get(doc_type, DOC_TYPE_INSTRUCTIONS["general"]),
         style_instruction=REEL_STYLE_INSTRUCTIONS.get(prefs.get("learning_style", "mixed"), REEL_STYLE_INSTRUCTIONS["mixed"]),
@@ -616,14 +617,13 @@ def generate_topic_reel(topic: str, topic_text: str, doc_type: str, prefs: dict,
         few_shot=few_shot,
     )
 
-    max_parse_attempts = 3
+    max_parse_attempts = 2
     for attempt in range(max_parse_attempts):
-        result = reel_llm_call(prompt)
+        result = reel_llm_call(prompt, num_predict=400, num_ctx=2048)
         parsed = parse_llm_json(result)
         if parsed["reels"] and parsed["reels"][0].get("title") == "Summary" and len(parsed["reels"]) == 1:
             if attempt < max_parse_attempts - 1:
                 log.warning("Topic reel returned unparseable JSON (attempt %d/%d), retrying", attempt + 1, max_parse_attempts)
-                time.sleep(min(2 ** attempt, 10))
                 continue
         return parsed
     return parsed

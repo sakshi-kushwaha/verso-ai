@@ -14,7 +14,6 @@ from llm import (
     generate_doc_summary,
     generate_reels, generate_reel_script,
     extract_topics, gather_topic_content, generate_topic_reel,
-    generate_topic_reel_with_clips, generate_batch_topic_reels_with_clips,
     OllamaUnavailableError,
 )
 from bg_images import assign_images, _resolve_category
@@ -353,8 +352,9 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
         _update_progress(upload_id, 20, "extracting")
 
         # Decide number of reels based on document length
-        # ~1 reel per 2 pages: 10 pages → 5, 26 pages → 13, 50 pages → 25
-        num_topics = min(max(3, int(len(pages) * 0.5)), 100)
+        # ~1 reel per 3 pages: 10 pages → 3, 26 pages → 8, 50 pages → 16
+        # Each reel takes ~2-3 min on CPU, so keep count practical
+        num_topics = min(max(3, int(len(pages) * 0.3)), 30)
 
         try:
             topics = extract_topics(full_text, num_topics=num_topics)
@@ -372,95 +372,56 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
         log.info("Upload %s: extracted %d topics — %s",
                  upload_id, len(topics), ", ".join(t["topic"] for t in topics))
 
-        # Pre-fetch clips for the subject category (used by merged LLM call)
-        cat = _resolve_category(subject_category, subject_category)
-        available_clips = get_clips_for_category(cat)
-
         reels_completed = 0
         reels_failed = 0
         ollama_down = False
         pending_futures = []
-        clip_usage: dict[str, int] = {}  # track clip usage across reels for variety
 
-        # Process topics in batches of BATCH_SIZE for fewer LLM calls
-        TOPIC_BATCH_SIZE = 3
-        topic_batches = [topics[i:i + TOPIC_BATCH_SIZE] for i in range(0, len(topics), TOPIC_BATCH_SIZE)]
-
-        for batch_idx, batch in enumerate(topic_batches):
+        for i, topic in enumerate(topics):
             # Check total pipeline timeout
             elapsed = time.monotonic() - pipeline_start
             if elapsed > PIPELINE_TIMEOUT:
-                log.warning("Pipeline timeout after %.0fs at batch %d/%d for upload %s",
-                            elapsed, batch_idx + 1, len(topic_batches), upload_id)
+                log.warning("Pipeline timeout after %.0fs at topic %d/%d for upload %s",
+                            elapsed, i + 1, len(topics), upload_id)
                 break
 
-            batch_progress = 20 + int(((batch_idx + 1) / len(topic_batches)) * 50)
-            _update_progress(upload_id, batch_progress, "generating")
+            topic_progress = 20 + int(((i + 1) / len(topics)) * 50)
+            _update_progress(upload_id, topic_progress, "generating")
 
-            # Gather content for all topics in this batch
-            batch_texts = []
-            for topic in batch:
-                topic_text = gather_topic_content(topic, full_text)
-                batch_texts.append(topic_text)
-            log.info("Batch %d/%d: topics %s",
-                     batch_idx + 1, len(topic_batches),
-                     ", ".join(t["topic"] for t in batch))
+            # Gather relevant content for this topic (keep short for fast LLM)
+            topic_text = gather_topic_content(topic, full_text, max_chars=1500)
+            log.info("Topic %d/%d: %r (%d chars)", i + 1, len(topics), topic["topic"], len(topic_text))
 
-            # Sort clips so least-used appear first
-            if available_clips:
-                sorted_clips = sorted(
-                    available_clips,
-                    key=lambda c: (clip_usage.get(c["file"], 0), random.random()),
-                )
-            else:
-                sorted_clips = []
-
-            # Single LLM call for the entire batch
+            # Use generate_topic_reel (no clip list in prompt = much faster on CPU)
+            # Video clips are picked programmatically in _try_compose_video
             try:
-                if sorted_clips and len(sorted_clips) >= 2:
-                    result = generate_batch_topic_reels_with_clips(
-                        batch, batch_texts, doc_type, prefs,
-                        category=subject_category, clips=sorted_clips,
-                    )
-                else:
-                    # Fallback: process one at a time without clips
-                    result = {"reels": [], "flashcards": []}
-                    for topic, topic_text in zip(batch, batch_texts):
-                        r = generate_topic_reel(topic["topic"], topic_text, doc_type, prefs, category=subject_category)
-                        result["reels"].extend(r.get("reels", []))
-                        result["flashcards"].extend(r.get("flashcards", []))
+                result = generate_topic_reel(
+                    topic["topic"], topic_text, doc_type, prefs,
+                    category=subject_category,
+                )
             except OllamaUnavailableError:
-                log.error("Ollama went down at batch %d for upload %s", batch_idx + 1, upload_id)
+                log.error("Ollama went down at topic %d/%d for upload %s", i + 1, len(topics), upload_id)
                 ollama_down = True
                 break
             except httpx.TimeoutException:
-                log.warning("Ollama timed out on batch %d for upload %s, skipping", batch_idx + 1, upload_id)
-                reels_failed += len(batch)
+                log.warning("Ollama timed out on topic %r for upload %s, skipping", topic["topic"], upload_id)
+                reels_failed += 1
                 continue
             except Exception:
-                log.exception("Error generating batch %d for upload %s", batch_idx + 1, upload_id)
-                reels_failed += len(batch)
+                log.exception("Error generating reel for topic %r, upload %s", topic["topic"], upload_id)
+                reels_failed += 1
                 continue
 
             topic_reels = [r for r in result.get("reels", []) if r.get("title") != "Summary"]
             if not topic_reels:
-                log.warning("Batch %d returned no valid reels, skipping", batch_idx + 1)
-                reels_failed += len(batch)
+                log.warning("Topic %r returned no valid reels, skipping", topic["topic"])
+                reels_failed += 1
                 continue
 
-            # Update clip usage tracking
-            for reel in topic_reels:
-                for seg in reel.get("segments") or []:
-                    clip_file = seg.get("clip", "")
-                    if clip_file:
-                        clip_usage[clip_file] = clip_usage.get(clip_file, 0) + 1
-
-            # Save reels and flashcards, notify frontend
-            combined_text = "\n\n".join(batch_texts)
             bg_paths = assign_images(topic_reels, subject_category)
             saved_reels = []
             for reel, bg_image in zip(topic_reels, bg_paths):
-                reel_id = _save_reel(upload_id, reel, batch_idx + 1, bg_image, source_text=combined_text[:5000])
+                reel_id = _save_reel(upload_id, reel, i + 1, bg_image, source_text=topic_text[:5000])
                 saved_reels.append((reel_id, reel))
                 _notify_reel_ready(upload_id, reel_id)
 
@@ -469,11 +430,10 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
                 _notify_flashcard_ready(upload_id, fc_id, fc)
 
             # Submit video composition to thread pool (overlaps with next LLM call)
-            _update_progress(upload_id, batch_progress + 2, "composing")
+            _update_progress(upload_id, topic_progress + 2, "composing")
             for reel_id, reel in saved_reels:
-                segments = reel.get("segments")
                 fut = _video_executor.submit(
-                    _compose_video_only, upload_id, reel_id, reel, subject_category, segments,
+                    _compose_video_only, upload_id, reel_id, reel, subject_category, None,
                 )
                 pending_futures.append(fut)
 
