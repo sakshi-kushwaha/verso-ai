@@ -382,12 +382,14 @@ function BookSummary({ bookId, initialSummary }) {
       </div>
 
       <div className="relative">
-        <p
-          className="text-sm text-text-secondary leading-relaxed overflow-hidden transition-[max-height] duration-300 ease-in-out"
-          style={{ maxHeight: expanded ? '500px' : '4.5em' }}
+        <div
+          className="text-sm text-text-secondary leading-relaxed overflow-hidden transition-[max-height] duration-300 ease-in-out space-y-2"
+          style={{ maxHeight: expanded ? '2000px' : '4.5em' }}
         >
-          {summary}
-        </p>
+          {summary.split('\n').filter(Boolean).map((para, i) => (
+            <p key={i}>{para}</p>
+          ))}
+        </div>
         {!expanded && (
           <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-surface to-transparent pointer-events-none" />
         )}

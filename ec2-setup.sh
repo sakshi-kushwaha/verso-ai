@@ -77,7 +77,7 @@ if [ "$DEPLOY_MODE" = false ]; then
     mkdir -p /etc/systemd/system/ollama.service.d
     cat > /etc/systemd/system/ollama.service.d/override.conf << 'EOF'
 [Service]
-Environment="OLLAMA_NUM_PARALLEL=1"
+Environment="OLLAMA_NUM_PARALLEL=2"
 Environment="OLLAMA_HOST=0.0.0.0:11434"
 EOF
     systemctl daemon-reload
