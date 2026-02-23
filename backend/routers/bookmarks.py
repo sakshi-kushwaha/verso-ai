@@ -56,6 +56,7 @@ def list_bookmarks(user: dict = Depends(get_current_user)):
     conn = get_db()
     rows = conn.execute(
         """SELECT b.id, b.reel_id, b.flashcard_id, b.created_at,
+                  r.upload_id AS reel_upload_id,
                   r.title AS reel_title, r.summary AS reel_summary, r.category AS reel_category,
                   r.keywords AS reel_keywords, r.page_ref AS reel_page_ref,
                   f.question AS fc_question, f.answer AS fc_answer

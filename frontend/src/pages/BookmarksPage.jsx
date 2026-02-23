@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import useStore from '../store/useStore'
 import Tag from '../components/Tag'
 import MobileBackButton from '../components/MobileBackButton'
@@ -8,6 +9,7 @@ import { Spinner, EmptyState } from '../components/StateScreens'
 const ACCENTS = ['#3B82F6', '#06B6D4', '#F472B6', '#F59E0B', '#10B981', '#8B5CF6']
 
 export default function BookmarksPage() {
+  const navigate = useNavigate()
   const { bookmarkItems, loadBookmarks, toggleBookmark } = useStore()
   const [loading, setLoading] = useState(true)
 
@@ -43,16 +45,17 @@ export default function BookmarksPage() {
           {reelBookmarks.map((b, i) => (
             <div
               key={b.id}
-              className="bg-surface rounded-xl p-5 border border-border fade-up"
+              className="bg-surface rounded-xl p-5 border border-border fade-up cursor-pointer hover:border-primary/30 transition-colors"
               style={{
                 animationDelay: `${i * 0.08}s`,
                 borderLeft: `3px solid ${ACCENTS[i % ACCENTS.length]}`,
               }}
+              onClick={() => navigate('/', { state: { uploadId: b.reel_upload_id, scrollToReelId: b.reel_id } })}
             >
               <div className="flex items-start justify-between mb-2">
                 <Tag color={ACCENTS[i % ACCENTS.length]}>{b.reel_category || 'General'}</Tag>
                 <button
-                  onClick={() => toggleBookmark(b.reel_id)}
+                  onClick={(e) => { e.stopPropagation(); toggleBookmark(b.reel_id) }}
                   className="text-accent hover:opacity-70 cursor-pointer"
                 >
                   <BookmarkFill />
