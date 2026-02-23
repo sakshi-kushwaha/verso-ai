@@ -29,7 +29,7 @@ from prompts import (
 
 log = logging.getLogger(__name__)
 
-MAX_RETRIES = 3
+MAX_RETRIES = 1
 
 
 class OllamaUnavailableError(Exception):
@@ -461,8 +461,8 @@ def _extract_topics_single(text: str, num_topics: int) -> list[dict]:
         text=sampled,
         num_topics=num_topics,
     )
-    predict = max(400, num_topics * 50)
-    timeout = max(200.0, predict * 1.0)
+    predict = min(600, max(300, num_topics * 40))
+    timeout = min(300.0, max(120.0, predict * 0.8))
     # 4096 context is enough for ~5000 chars text + prompt + output
     ctx = 4096
     try:
