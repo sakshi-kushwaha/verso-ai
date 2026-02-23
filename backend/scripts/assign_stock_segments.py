@@ -14,9 +14,17 @@ import random
 from typing import List, Dict, Set, DefaultDict
 from collections import defaultdict
 import os
+import sys
 
-# Support running as `python -m scripts.assign_stock_segments` (cwd=backend)
-# and as `python -m backend.scripts.assign_stock_segments` (cwd=repo root)
+# Ensure imports work when running the file directly:
+#   cd backend && python scripts/assign_stock_segments.py
+#   cd backend && python -m scripts.assign_stock_segments
+#   cd repo-root && python -m backend.scripts.assign_stock_segments
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
+# Support multiple invocation styles via dual import paths
 try:
     from database import get_db, init_db  # type: ignore
     from video import load_video_catalog, get_clips_for_category  # type: ignore
