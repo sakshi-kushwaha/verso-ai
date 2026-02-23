@@ -43,6 +43,36 @@ def process_upload(upload_id: int, filepath: str, user_id: int = 1):
     thread.start()
 
 
+def _sanitize_narration(text: str | None) -> str:
+    """Strip markdown and noisy punctuation so TTS doesn't read symbols like ### or ***.
+
+    - Removes code blocks/inline code, images, and converts links to their text
+    - Strips headings (#), lists (-, *, +), and blockquotes (>) markers
+    - Removes emphasis markers (*, _, ~) and extra hashes
+    - Collapses whitespace
+    """
+    if not text:
+        return ""
+    import re
+    t = str(text)
+    # Remove fenced code blocks and inline code
+    t = re.sub(r"```[\s\S]*?```", "", t)
+    t = re.sub(r"`[^`]*`", "", t)
+    # Remove images; keep alt text if present (already displayed elsewhere)
+    t = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", t)
+    # Convert links [text](url) → text
+    t = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", t)
+    # Strip heading/list/blockquote markers at line starts
+    t = re.sub(r"^\s*[#>\-*\+]\s+", "", t, flags=re.MULTILINE)
+    # Remove stray multiple hashes anywhere
+    t = re.sub(r"#{2,}", " ", t)
+    # Remove emphasis markers
+    t = re.sub(r"[*_~]{1,3}", "", t)
+    # Collapse whitespace
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
+
 def resume_orphaned_uploads():
     """Resume uploads stuck in 'processing' after a server restart.
 
@@ -147,11 +177,8 @@ def _try_compose_video(reel_id: int, reel: dict, subject_category: str):
 
     # Generate TTS from narration — voice rotates by reel_id for variety
     tts_path = None
-    narration = reel.get("narration", reel.get("summary", ""))
+    narration = _sanitize_narration(reel.get("narration", reel.get("summary", "")))
     if narration:
-        # Strip markdown formatting so TTS doesn't read "asterisk" etc.
-        import re
-        narration = re.sub(r'\*+', '', narration).strip()
         try:
             tts_path = generate_audio(narration, reel_index=reel_id)
         except Exception:
@@ -242,7 +269,7 @@ def _try_compose_video_with_segments(reel_id: int, reel: dict, subject_category:
 
     # Generate TTS
     tts_path = None
-    narration = reel.get("narration", reel.get("summary", ""))
+    narration = _sanitize_narration(reel.get("narration", reel.get("summary", "")))
     if narration:
         try:
             tts_path = generate_audio(narration, reel_index=reel_id)
