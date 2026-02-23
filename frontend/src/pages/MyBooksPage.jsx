@@ -422,12 +422,25 @@ function FlashcardItem({ fc, index }) {
         style={{
           transformStyle: 'preserve-3d',
           transform: flipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
-          minHeight: '160px',
         }}
       >
+        {/* Invisible sizers — stacked via grid so container fits the taller face */}
+        <div className="invisible grid [&>*]:col-start-1 [&>*]:row-start-1">
+          <div className="p-4 sm:p-5">
+            <div className="mb-3"><span className="text-xs">Q</span></div>
+            <p className="text-sm leading-relaxed">{fc.question}</p>
+            <div className="mt-3"><span className="text-xs">Tap</span></div>
+          </div>
+          <div className="p-4 sm:p-5">
+            <div className="mb-3"><span className="text-xs">A</span></div>
+            <p className="text-sm leading-relaxed">{fc.answer}</p>
+            <div className="mt-3"><span className="text-xs">Tap</span></div>
+          </div>
+        </div>
+
         {/* Front — Question */}
         <div
-          className={`absolute inset-0 rounded-xl border ${borderColor} p-4 sm:p-5 bg-gradient-to-br ${gradient}`}
+          className={`absolute inset-0 rounded-xl border ${borderColor} p-4 sm:p-5 bg-gradient-to-br ${gradient} overflow-auto`}
           style={{ backfaceVisibility: 'hidden' }}
         >
           <div className="flex items-center justify-between mb-3">
@@ -443,7 +456,7 @@ function FlashcardItem({ fc, index }) {
 
         {/* Back — Answer */}
         <div
-          className={`absolute inset-0 rounded-xl border ${borderColor} p-4 sm:p-5 bg-gradient-to-br ${gradient}`}
+          className={`absolute inset-0 rounded-xl border ${borderColor} p-4 sm:p-5 bg-gradient-to-br ${gradient} overflow-auto`}
           style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
         >
           <div className="flex items-center justify-between mb-3">

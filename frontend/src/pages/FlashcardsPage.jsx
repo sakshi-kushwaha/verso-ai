@@ -66,12 +66,24 @@ export default function FlashcardsPage() {
           style={{
             transformStyle: 'preserve-3d',
             transform: flipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
-            minHeight: '280px',
           }}
         >
+          {/* Invisible sizers — stacked via grid so container fits the taller face */}
+          <div className="invisible grid [&>*]:col-start-1 [&>*]:row-start-1 min-h-[280px]">
+            <div className="p-8">
+              <Tag className="mb-4">Question</Tag>
+              <p className="text-lg font-semibold font-display leading-snug mb-6">{card.question}</p>
+              <span className="text-xs">Tap to reveal</span>
+            </div>
+            <div className="p-8">
+              <Tag className="mb-4">Answer</Tag>
+              <p className="text-sm leading-relaxed">{card.answer}</p>
+            </div>
+          </div>
+
           {/* Front */}
           <div
-            className="absolute inset-0 rounded-2xl bg-surface border border-border p-8 flex flex-col items-center justify-center text-center"
+            className="absolute inset-0 rounded-2xl bg-surface border border-border p-8 flex flex-col items-center justify-center text-center overflow-auto"
             style={{ backfaceVisibility: 'hidden' }}
           >
             <Tag className="mb-4">Question</Tag>
@@ -85,7 +97,7 @@ export default function FlashcardsPage() {
 
           {/* Back */}
           <div
-            className="absolute inset-0 rounded-2xl p-8 flex flex-col items-center justify-center text-center"
+            className="absolute inset-0 rounded-2xl p-8 flex flex-col items-center justify-center text-center overflow-auto"
             style={{
               backfaceVisibility: 'hidden',
               transform: 'rotateY(180deg)',

@@ -748,11 +748,16 @@ export default function FeedPage() {
       bookNavState.current = null
       setInitialLoading(true)
       setTab('my-docs')
-      getFeed(1, 50, nav.uploadId)
+      getFeed(1, 200, nav.uploadId)
         .then(data => {
           if (data.reels?.length) {
-            setReels(data.reels.map(mapReel))
-            const idx = nav.startReelIndex || 0
+            const mapped = data.reels.map(mapReel)
+            setReels(mapped)
+            let idx = nav.startReelIndex || 0
+            if (nav.scrollToReelId) {
+              const found = mapped.findIndex(r => r.id === nav.scrollToReelId)
+              if (found >= 0) idx = found
+            }
             setInitialSlide(idx)
             setActiveIndex(idx)
           } else {
