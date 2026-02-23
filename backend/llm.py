@@ -270,7 +270,14 @@ def generate_doc_summary(full_text: str) -> str | None:
     try:
         result = reel_llm_call(prompt, timeout=180.0, num_predict=600, json_mode=False)
         summary = result.strip()
-        if summary and len(summary) > 50 and len(summary) < 3000:
+        # Strip any markdown the model may have added (TTS reads these aloud)
+        summary = re.sub(r'\*+', '', summary)        # **bold** / *italic*
+        summary = re.sub(r'^#{1,6}\s+', '', summary, flags=re.MULTILINE)  # ### headers
+        summary = re.sub(r'^[-•]\s+', '', summary, flags=re.MULTILINE)    # - bullet points
+        summary = re.sub(r'^\d+\.\s+', '', summary, flags=re.MULTILINE)   # 1. numbered lists
+        summary = re.sub(r'\n{3,}', '\n\n', summary)  # collapse excess blank lines
+        summary = summary.strip()
+        if summary and len(summary) > 50 and len(summary) < 5000:
             return summary
         log.warning("Doc summary output looks malformed (%d chars), discarding", len(summary) if summary else 0)
         return None

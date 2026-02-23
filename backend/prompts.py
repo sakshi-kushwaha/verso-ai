@@ -282,11 +282,12 @@ DOC_SUMMARY_PROMPT = """You are a study assistant. Read the document text below 
 Rules:
 1. Cover all the major topics, concepts, and key details from the document.
 2. Be as detailed as needed — use as many sentences as required to explain the topic fully.
-3. Write in plain prose — no bullet points, no headers, no numbered lists.
-4. Write at a level a student can understand.
-5. Use natural phrasing — no abbreviations, no parentheses, no special characters.
-6. Do NOT start with "this document" or "this text". Start directly with the subject.
-7. Return ONLY the summary text. No preamble, no labels.
+3. Write ONLY in flowing paragraphs of plain text. Separate paragraphs with a blank line.
+4. NEVER use markdown, bullet points, dashes, asterisks, headers, numbered lists, or any formatting. Only plain sentences in paragraphs.
+5. Write at a level a student can understand.
+6. Use natural phrasing — no abbreviations, no parentheses, no special characters.
+7. Do NOT start with "this document" or "this text". Start directly with the subject.
+8. Return ONLY the summary text. No preamble, no labels.
 
 Document text:
 {text}
