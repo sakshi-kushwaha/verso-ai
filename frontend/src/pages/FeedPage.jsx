@@ -29,6 +29,22 @@ function wrapCanvasText(ctx, text, x, y, maxW, lineH) {
   return y + lineH
 }
 
+function measureWrappedText(ctx, text, maxW, lineH) {
+  const words = text.split(' ')
+  let line = ''
+  let height = lineH
+  for (const word of words) {
+    const test = line + (line ? ' ' : '') + word
+    if (ctx.measureText(test).width > maxW && line) {
+      line = word
+      height += lineH
+    } else {
+      line = test
+    }
+  }
+  return height
+}
+
 async function downloadBite(reel, isGradient = false, onProgress = null) {
   const safeName = reel.title.replace(/[^a-zA-Z0-9 ]/g, '').trim() || 'bite'
 
@@ -116,10 +132,22 @@ async function downloadBite(reel, isGradient = false, onProgress = null) {
     ctx.fillStyle = grad
     ctx.fillRect(0, 0, W, H)
 
+    // Measure total content height to vertically center
+    const maxTextW = W - margin * 2
+    ctx.font = 'bold 52px sans-serif'
+    const titleH = measureWrappedText(ctx, reel.title, maxTextW, 64)
+    const sepH = 20 + 2 + 32 // gap + line + gap
+    ctx.font = '32px sans-serif'
+    const bodyH = measureWrappedText(ctx, reel.body, maxTextW, 44)
+    const kwGap = 40
+    const kwLineH = 30
+    const totalH = titleH + sepH + bodyH + kwGap + kwLineH
+    let y = Math.max(100, (H - totalH) / 2)
+
     // Title
     ctx.font = 'bold 52px sans-serif'
     ctx.fillStyle = '#FFFFFF'
-    let y = wrapCanvasText(ctx, reel.title, margin, 160, W - margin * 2, 64)
+    y = wrapCanvasText(ctx, reel.title, margin, y, maxTextW, 64)
 
     // Short separator (matches GradientPostCard)
     y += 20
@@ -134,14 +162,14 @@ async function downloadBite(reel, isGradient = false, onProgress = null) {
     // Body
     ctx.font = '32px sans-serif'
     ctx.fillStyle = 'rgba(255,255,255,0.75)'
-    y = wrapCanvasText(ctx, reel.body, margin, y, W - margin * 2, 44)
+    y = wrapCanvasText(ctx, reel.body, margin, y, maxTextW, 44)
 
     // Keywords as hashtags
     y += 40
     ctx.font = '26px sans-serif'
     ctx.fillStyle = 'rgba(255,255,255,0.5)'
     const kwText = reel.keywords.map((kw) => '#' + kw.replace(/\s+/g, '')).join('  ')
-    ctx.fillText(kwText, margin, y)
+    wrapCanvasText(ctx, kwText, margin, y, maxTextW, 34)
 
     onProgress?.(100)
     c.toBlob((blob) => {
