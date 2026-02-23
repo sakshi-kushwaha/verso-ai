@@ -17,14 +17,26 @@ ALLOWED_EXTENSIONS = {".pdf", ".docx"}
 
 
 def _expire_stale_uploads(user_id: int):
-    """Auto-mark uploads stuck in 'processing' for too long as failed."""
+    """Auto-mark uploads stuck in 'processing' for too long as failed or partial."""
     cutoff = (datetime.now(timezone.utc) - timedelta(minutes=STALE_UPLOAD_MINUTES)).strftime("%Y-%m-%d %H:%M:%S")
     conn = get_db()
-    conn.execute(
-        "UPDATE uploads SET status = 'error', error_message = 'Processing timed out. Please try uploading again.' "
-        "WHERE user_id = ? AND status = 'processing' AND created_at < ?",
+    stale = conn.execute(
+        "SELECT id FROM uploads WHERE user_id = ? AND status = 'processing' AND created_at < ?",
         (user_id, cutoff),
-    )
+    ).fetchall()
+    for row in stale:
+        uid = row["id"]
+        reel_count = conn.execute("SELECT COUNT(*) FROM reels WHERE upload_id = ?", (uid,)).fetchone()[0]
+        if reel_count > 0:
+            conn.execute(
+                "UPDATE uploads SET status = 'partial', error_message = ? WHERE id = ?",
+                (f"Generated {reel_count} reels before timeout. Partial reels are available.", uid),
+            )
+        else:
+            conn.execute(
+                "UPDATE uploads SET status = 'error', error_message = 'Processing timed out. Please try uploading again.' WHERE id = ?",
+                (uid,),
+            )
     conn.commit()
     conn.close()
 
@@ -61,8 +73,8 @@ async def upload_document(file: UploadFile = File(...), user: dict = Depends(get
 
     conn = get_db()
     cursor = conn.execute(
-        "INSERT INTO uploads (user_id, filename, status) VALUES (?, ?, 'processing')",
-        (user["id"], file.filename),
+        "INSERT INTO uploads (user_id, filename, status, filepath) VALUES (?, ?, 'processing', ?)",
+        (user["id"], file.filename, temp_path),
     )
     upload_id = cursor.lastrowid
     conn.commit()
@@ -172,6 +184,45 @@ def get_or_generate_summary(upload_id: int, user: dict = Depends(get_current_use
     conn.close()
 
     return {"summary": summary, "generated": True}
+
+
+@router.delete("/upload/{upload_id}")
+def delete_upload(upload_id: int, user: dict = Depends(get_current_user)):
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id FROM uploads WHERE id = ? AND user_id = ?", (upload_id, user["id"])
+    ).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "Upload not found")
+
+    # Get reel IDs for bookmark + video cleanup
+    reel_ids = [r["id"] for r in conn.execute(
+        "SELECT id FROM reels WHERE upload_id = ?", (upload_id,)
+    ).fetchall()]
+
+    # Delete related data (order matters for foreign key references)
+    if reel_ids:
+        placeholders = ",".join("?" * len(reel_ids))
+        conn.execute(f"DELETE FROM bookmarks WHERE reel_id IN ({placeholders})", reel_ids)
+    conn.execute("DELETE FROM bookmarks WHERE flashcard_id IN (SELECT id FROM flashcards WHERE upload_id = ?)", (upload_id,))
+    conn.execute("DELETE FROM flashcards WHERE upload_id = ?", (upload_id,))
+    conn.execute("DELETE FROM reels WHERE upload_id = ?", (upload_id,))
+    conn.execute("DELETE FROM uploads WHERE id = ?", (upload_id,))
+    conn.commit()
+    conn.close()
+
+    # Clean up cached video files
+    from config import VIDEO_CACHE_DIR
+    for reel_id in reel_ids:
+        video_file = VIDEO_CACHE_DIR / f"reel_{reel_id}.mp4"
+        if video_file.exists():
+            try:
+                video_file.unlink()
+            except OSError:
+                pass
+
+    return {"message": "Document deleted"}
 
 
 @router.websocket("/ws/upload/{upload_id}")

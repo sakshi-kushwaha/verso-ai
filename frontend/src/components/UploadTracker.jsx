@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { getUploadStatus, getUploads } from '../api'
+import api, { getUploadStatus, getUploads } from '../api'
 import { getWsBaseUrl, getAuthToken } from '../api/ws'
 import useStore from '../store/useStore'
 import { mapReel } from '../utils/reelMapper'
@@ -60,6 +60,12 @@ export default function UploadTracker() {
   useEffect(() => {
     if (!bgUpload || bgUpload.status === 'done') return
 
+    // If already in terminal state, auto-clear
+    if (bgUpload.status === 'error' || bgUpload.status === 'partial') {
+      setTimeout(() => clearBgUpload(), 4000)
+      return
+    }
+
     const uploadId = bgUpload.id
 
     const handleUpdate = (progress, stage, status) => {
@@ -79,6 +85,15 @@ export default function UploadTracker() {
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
     }
 
+    // Immediately check current status — catches cases where pipeline died between polls
+    getUploadStatus(uploadId)
+      .then((s) => {
+        if (s.status === 'error' || s.status === 'partial' || s.status === 'done') {
+          handleUpdate(s.progress ?? 0, s.stage || 'uploading', s.status)
+        }
+      })
+      .catch(() => {})
+
     // Try WebSocket first
     const token = getAuthToken()
     if (token && !wsRef.current && !pollRef.current) {
@@ -94,6 +109,9 @@ export default function UploadTracker() {
             } else if (msg.type === 'reel_ready' && msg.reel) {
               const mapped = mapReel(msg.reel)
               useStore.getState().appendReels([mapped])
+            } else if (msg.type === 'video_ready' && msg.reel_id) {
+              const baseURL = api.defaults.baseURL || ''
+              useStore.getState().updateReelVideo(msg.reel_id, `${baseURL}/video/${msg.reel_id}`)
             }
           } catch {}
         }
@@ -113,7 +131,7 @@ export default function UploadTracker() {
     }
 
     return cleanup
-  }, [bgUpload?.id])
+  }, [bgUpload?.id, bgUpload?.status])
 
   const startPolling = (uploadId, handleUpdate) => {
     pollRef.current = setInterval(async () => {

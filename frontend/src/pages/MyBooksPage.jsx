@@ -1,16 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getUploads, getUploadStatus, getFeed, getFlashcards, getDocSummary, getSummaryAudio } from '../api'
+import { getUploads, getUploadStatus, getFeed, getFlashcards, getDocSummary, getSummaryAudio, deleteUpload } from '../api'
 import api from '../api'
 import Button from '../components/Button'
-import { File, Upload, ArrowL, ArrowR, Cards, Chat, Volume, Pause, Play, Grid, Sparkle } from '../components/Icons'
+import { File, Upload, ArrowL, ArrowR, Cards, Chat, Volume, Pause, Play, Grid, Sparkle, Trash } from '../components/Icons'
 import { Spinner, ErrorState, EmptyState } from '../components/StateScreens'
 import { STAGE_LABELS } from '../components/UploadTracker'
 import { getWsBaseUrl, getAuthToken } from '../api/ws'
 
 const ACCENTS = ['#3B82F6', '#06B6D4', '#F472B6', '#F59E0B', '#10B981', '#8B5CF6']
 
-function useUploadWs(uploadId, { onProgress, onReelReady, onFlashcardReady, onDone }) {
+function useUploadWs(uploadId, { onProgress, onReelReady, onFlashcardReady, onVideoReady, onDone }) {
   const wsRef = useRef(null)
   const pollRef = useRef(null)
 
@@ -35,6 +35,8 @@ function useUploadWs(uploadId, { onProgress, onReelReady, onFlashcardReady, onDo
           onReelReady?.(msg.reel)
         } else if (msg.type === 'flashcard_ready' && msg.flashcard) {
           onFlashcardReady?.(msg.flashcard)
+        } else if (msg.type === 'video_ready' && msg.reel_id) {
+          onVideoReady?.(msg.reel_id, msg.video_path)
         }
       } catch {}
     }
@@ -146,8 +148,9 @@ function ProcessingCard({ book, onDone, onClick }) {
   )
 }
 
-function BookCard({ book, onClick }) {
+function BookCard({ book, onClick, onDelete }) {
   const navigate = useNavigate()
+  const [confirming, setConfirming] = useState(false)
   const statusColors = {
     done: 'bg-success/10 text-success',
     error: 'bg-danger/10 text-danger',
@@ -159,6 +162,45 @@ function BookCard({ book, onClick }) {
     partial: 'Partial',
   }
   const statusLabel = statusLabels[book.status] || book.status
+
+  const handleTrashClick = (e) => {
+    e.stopPropagation()
+    setConfirming(true)
+  }
+
+  const handleConfirmDelete = (e) => {
+    e.stopPropagation()
+    setConfirming(false)
+    onDelete?.(book.id)
+  }
+
+  const handleCancelDelete = (e) => {
+    e.stopPropagation()
+    setConfirming(false)
+  }
+
+  if (confirming) {
+    return (
+      <div className="bg-surface rounded-xl border border-danger/30 p-4">
+        <p className="text-sm font-medium mb-1">Delete "{book.filename}"?</p>
+        <p className="text-xs text-text-muted mb-3">This will remove all bites, flashcards, and chat history for this document.</p>
+        <div className="flex gap-2">
+          <button
+            onClick={handleConfirmDelete}
+            className="px-4 py-1.5 rounded-lg bg-danger text-white text-xs font-medium hover:bg-danger/90 transition-colors cursor-pointer"
+          >
+            Delete
+          </button>
+          <button
+            onClick={handleCancelDelete}
+            className="px-4 py-1.5 rounded-lg bg-surface-alt text-text-muted text-xs font-medium hover:bg-border transition-colors cursor-pointer"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div
@@ -180,6 +222,13 @@ function BookCard({ book, onClick }) {
             )}
           </div>
         </div>
+        <button
+          onClick={handleTrashClick}
+          className="shrink-0 p-1.5 rounded-lg transition-colors cursor-pointer text-text-muted hover:text-danger hover:bg-danger/10"
+          title="Delete document"
+        >
+          <Trash />
+        </button>
       </div>
 
       {book.status === 'error' && (
@@ -503,6 +552,13 @@ function BookDetail({ book, onBack }) {
   useUploadWs(isProcessing ? book.id : null, {
     onReelReady: (reel) => setReels((prev) => [...prev, reel]),
     onFlashcardReady: (fc) => setFlashcards((prev) => [...prev, fc]),
+    onVideoReady: (reelId, videoPath) => {
+      if (videoPath) {
+        setReels((prev) => prev.map((r) =>
+          r.id === reelId ? { ...r, video_path: videoPath } : r
+        ))
+      }
+    },
     onDone: (s) => setStatus(s),
   })
 
@@ -673,6 +729,16 @@ export default function MyBooksPage() {
     getUploads().then(setBooks).catch(() => {})
   }
 
+  const handleDeleteBook = async (id) => {
+    try {
+      await deleteUpload(id)
+      setBooks((prev) => prev.filter((b) => b.id !== id))
+      if (selectedBook?.id === id) setSelectedBook(null)
+    } catch {
+      // silently fail — user can retry
+    }
+  }
+
   useEffect(() => {
     loadBooks()
   }, [])
@@ -739,7 +805,7 @@ export default function MyBooksPage() {
             book.status === 'processing' ? (
               <ProcessingCard key={book.id} book={book} onDone={refreshBooks} onClick={() => setSelectedBook(book)} />
             ) : (
-              <BookCard key={book.id} book={book} onClick={() => setSelectedBook(book)} />
+              <BookCard key={book.id} book={book} onClick={() => setSelectedBook(book)} onDelete={handleDeleteBook} />
             )
           )}
         </div>

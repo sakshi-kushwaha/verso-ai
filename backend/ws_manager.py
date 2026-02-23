@@ -68,6 +68,24 @@ class ConnectionManager:
             except Exception:
                 log.debug("Failed to send reel_ready for upload %s", upload_id)
 
+    async def broadcast_video_ready(self, upload_id: int, reel_id: int, video_path: str):
+        """Push a video_ready event so the frontend can switch from image card to video."""
+        async with self._lock:
+            clients = list(self._subs.get(upload_id, []))
+
+        msg = json.dumps({
+            "type": "video_ready",
+            "upload_id": upload_id,
+            "reel_id": reel_id,
+            "video_path": video_path,
+        })
+
+        for ws in clients:
+            try:
+                await ws.send_text(msg)
+            except Exception:
+                log.debug("Failed to send video_ready for upload %s reel %s", upload_id, reel_id)
+
     async def broadcast_flashcard_ready(self, upload_id: int, flashcard: dict):
         """Push a flashcard_ready event so the frontend can display it immediately."""
         async with self._lock:

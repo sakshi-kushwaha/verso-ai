@@ -39,6 +39,8 @@ async def lifespan(app: FastAPI):
     init_db()
     # Store the running event loop so background threads can schedule async broadcasts
     pipeline._event_loop = asyncio.get_running_loop()
+    # Resume any uploads that were interrupted by a server restart/reload
+    pipeline.resume_orphaned_uploads()
     yield
 
 

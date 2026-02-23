@@ -43,6 +43,57 @@ def process_upload(upload_id: int, filepath: str, user_id: int = 1):
     thread.start()
 
 
+def resume_orphaned_uploads():
+    """Resume uploads stuck in 'processing' after a server restart.
+
+    Called once during server startup. For each orphaned upload:
+    - If the temp file still exists → restart the pipeline from scratch
+    - If reels already exist → mark as partial
+    - Otherwise → mark as error
+    """
+    conn = get_db()
+    orphans = conn.execute(
+        "SELECT id, filepath, user_id FROM uploads WHERE status = 'processing'"
+    ).fetchall()
+    if not orphans:
+        conn.close()
+        return
+
+    for row in orphans:
+        uid, filepath, user_id = row["id"], row["filepath"], row["user_id"]
+        reel_count = conn.execute("SELECT COUNT(*) FROM reels WHERE upload_id = ?", (uid,)).fetchone()[0]
+
+        if filepath and os.path.exists(filepath):
+            # Temp file exists — restart pipeline from scratch
+            log.info("Resuming orphaned upload %s from scratch (file: %s)", uid, filepath)
+            # Reset progress so frontend sees it restart
+            conn.execute(
+                "UPDATE uploads SET progress = 0, stage = 'uploading', error_message = NULL WHERE id = ?",
+                (uid,),
+            )
+            # Clean up any partial reels/flashcards from the interrupted run
+            conn.execute("DELETE FROM flashcards WHERE upload_id = ?", (uid,))
+            conn.execute("DELETE FROM reels WHERE upload_id = ?", (uid,))
+            conn.commit()
+            process_upload(uid, filepath, user_id or 1)
+        elif reel_count > 0:
+            log.info("Orphaned upload %s has %d reels, marking as partial", uid, reel_count)
+            conn.execute(
+                "UPDATE uploads SET status = 'partial', error_message = ? WHERE id = ?",
+                (f"Generated {reel_count} reels before interruption. Partial reels are available.", uid),
+            )
+            conn.commit()
+        else:
+            log.info("Orphaned upload %s has no file or reels, marking as error", uid)
+            conn.execute(
+                "UPDATE uploads SET status = 'error', error_message = 'Processing was interrupted. Please re-upload.' WHERE id = ?",
+                (uid,),
+            )
+            conn.commit()
+
+    conn.close()
+
+
 def _get_user_prefs(user_id: int) -> dict:
     """Fetch user preferences for personalized reel generation."""
     conn = get_db()
@@ -163,11 +214,20 @@ def _compose_video_only(upload_id: int, reel_id: int, reel: dict, subject_catego
 
     Reel-ready notification is sent earlier (right after DB save) so the
     frontend can display reels in real-time before video compositing finishes.
+    After video is composed, a video_ready event is sent so the frontend
+    can switch from the image card to the video player.
     """
     if segments:
         _try_compose_video_with_segments(reel_id, reel, subject_category, segments)
     else:
         _try_compose_video(reel_id, reel, subject_category)
+
+    # Notify frontend that video is now available
+    conn = get_db()
+    row = conn.execute("SELECT video_path FROM reels WHERE id = ?", (reel_id,)).fetchone()
+    conn.close()
+    if row and row["video_path"]:
+        _notify_video_ready(upload_id, reel_id, row["video_path"])
 
 
 # Keep old name as alias for backward compatibility
@@ -326,6 +386,7 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
         reels_failed = 0
         ollama_down = False
         pending_futures = []
+        clip_usage: dict[str, int] = {}  # track clip usage across reels for variety
 
         for i, topic in enumerate(topics):
             # Check total pipeline timeout
@@ -351,11 +412,19 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
             log.info("Topic %d/%d: %r (%d chars)", i + 1, len(topics), topic["topic"], len(topic_text))
 
             # Single merged LLM call: generates reel content + picks clips
+            # Sort clips so least-used appear first — guides LLM toward variety
+            if available_clips:
+                sorted_clips = sorted(
+                    available_clips,
+                    key=lambda c: (clip_usage.get(c["file"], 0), random.random()),
+                )
+            else:
+                sorted_clips = []
             try:
-                if available_clips and len(available_clips) >= 2:
+                if sorted_clips and len(sorted_clips) >= 2:
                     result = generate_topic_reel_with_clips(
                         topic["topic"], topic_text, doc_type, prefs,
-                        category=subject_category, clips=available_clips,
+                        category=subject_category, clips=sorted_clips,
                     )
                 else:
                     result = generate_topic_reel(topic["topic"], topic_text, doc_type, prefs, category=subject_category)
@@ -377,6 +446,47 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
                 log.warning("All reels for topic %r were garbage (title='Summary'), skipping", topic["topic"])
                 reels_failed += 1
                 continue
+
+            # Deduplicate clips: swap over-used clips with least-used alternatives
+            if sorted_clips:
+                all_clip_files = [c["file"] for c in sorted_clips]
+                for reel in topic_reels:
+                    segments = reel.get("segments")
+                    if not segments:
+                        continue
+                    max_use = max(1, len(all_clip_files) // max(len(topics), 1))
+                    reel_clip_files = set()
+                    for seg in segments:
+                        clip_file = seg.get("clip", "")
+                        if not clip_file:
+                            continue
+                        reel_clip_files.add(clip_file)
+                        if clip_usage.get(clip_file, 0) >= max_use:
+                            # Find least-used clip not already in this reel
+                            candidates = [
+                                f for f in all_clip_files
+                                if f not in reel_clip_files and clip_usage.get(f, 0) < max_use
+                            ]
+                            if candidates:
+                                replacement = min(candidates, key=lambda f: clip_usage.get(f, 0))
+                                log.info("Clip dedup: swapping %s (used %d) → %s (used %d) for topic %r",
+                                         clip_file, clip_usage.get(clip_file, 0),
+                                         replacement, clip_usage.get(replacement, 0),
+                                         topic["topic"])
+                                reel_clip_files.discard(clip_file)
+                                reel_clip_files.add(replacement)
+                                seg["clip"] = replacement
+
+            # Update clip usage tracking
+            for reel in topic_reels:
+                for seg in reel.get("segments") or []:
+                    clip_file = seg.get("clip", "")
+                    if clip_file:
+                        clip_usage[clip_file] = clip_usage.get(clip_file, 0) + 1
+            if clip_usage:
+                log.info("Clip usage after topic %d: %s", i + 1,
+                         {k: v for k, v in sorted(clip_usage.items(), key=lambda x: -x[1])[:5]})
+
             bg_paths = assign_images(topic_reels, subject_category)
             saved_reels = []
             for reel, bg_image in zip(topic_reels, bg_paths):
@@ -476,6 +586,14 @@ def _run_pipeline(upload_id: int, filepath: str, user_id: int = 1):
                 log.error("Failed to update error status for upload %s", upload_id)
 
     finally:
+        # Clear filepath in DB and delete temp file — pipeline completed (success or error)
+        try:
+            conn = get_db()
+            conn.execute("UPDATE uploads SET filepath = NULL WHERE id = ?", (upload_id,))
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
         try:
             os.unlink(filepath)
         except OSError:
@@ -500,6 +618,20 @@ def _notify_reel_ready(upload_id: int, reel_id: int):
         )
     except Exception:
         log.debug("WS reel_ready failed for upload %s reel %s", upload_id, reel_id)
+
+
+def _notify_video_ready(upload_id: int, reel_id: int, video_path: str):
+    """Push a video_ready event so the frontend can switch from image card to video player."""
+    loop = _event_loop
+    if loop is None or loop.is_closed():
+        return
+    try:
+        asyncio.run_coroutine_threadsafe(
+            manager.broadcast_video_ready(upload_id, reel_id, video_path),
+            loop,
+        )
+    except Exception:
+        log.debug("WS video_ready failed for upload %s reel %s", upload_id, reel_id)
 
 
 def _notify_flashcard_ready(upload_id: int, fc_id: int, fc: dict):
@@ -603,6 +735,10 @@ def _save_flashcard(upload_id: int, fc: dict) -> int:
 
 
 def _save_doc_summary(upload_id: int, summary: str):
+    import re
+    # Strip markdown headers/formatting that the LLM sometimes adds
+    summary = re.sub(r'^#{1,6}\s+.*\n?', '', summary, flags=re.MULTILINE).strip()
+    summary = re.sub(r'\*{1,2}([^*]+)\*{1,2}', r'\1', summary)  # strip bold/italic
     conn = get_db()
     conn.execute("UPDATE uploads SET doc_summary = ? WHERE id = ?", (summary, upload_id))
     conn.commit()
