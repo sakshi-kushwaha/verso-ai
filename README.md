@@ -47,3 +47,5 @@ cd frontend
 npm install
 npm run dev
 ```
+
+### Pushed final version 01 on 21 April 2026
